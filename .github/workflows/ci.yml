@@ -186,7 +186,7 @@ jobs:
       WORKFLOW_ENABLED: "false"
       WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
@@ -240,7 +240,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build production candidate image
