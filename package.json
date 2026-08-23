@@ -80,7 +80,7 @@
     "prisma": "^7.9.1",
     "puppeteer-core": "24.43.1",
     "tailwindcss": "^4",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "ignoreScripts": [
     "sharp",
