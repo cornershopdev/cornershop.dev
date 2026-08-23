@@ -159,7 +159,11 @@ traditional mail client.
 
 `OUTREACH_INBOUND_FORWARD_TO` optionally sends a read copy of each matched
 inbound message to one operator mailbox. Leave it unset or blank to keep
-forwarding disabled; no outbox row or provider call is created in that mode.
+forwarding disabled; no outbox row or provider call is created for a new inbound
+message in that mode. The dispatcher still reconciles an already-persisted due
+row if the setting is later removed: it makes no provider call, records the row
+as `EXHAUSTED`, and commits a content-free operator alert in the same
+transaction so a pending or ambiguous copy cannot remain stranded silently.
 When enabled, store exactly one bare email address as the optional encrypted SSM
 parameter `/shipshit/production/cornershopdev/OUTREACH_INBOUND_FORWARD_TO`.
 Lists, display-name syntax, malformed addresses, message participants, and any
@@ -175,6 +179,16 @@ provider retry reuses the row's stable Resend idempotency key. The worker makes
 at most three attempts, retrying after one and five minutes while the key is
 inside the provider idempotency window. A terminal row is retained as
 `EXHAUSTED` and creates a content-free operator alert for reconciliation.
+
+Each provider request carries the immutable forwarding-row identifier as a
+Resend tag. Signed `sent`, `delivered`, `failed`, `suppressed`, `bounced`, and
+`complained` receipts are stored in a dedicated append-only provider-event
+ledger keyed by the Svix event ID. `deliveryStatus` is deliberately separate
+from the forwarding outbox `status`: provider acceptance completes the outbox,
+while a later delivery failure advances only the receipt snapshot and enqueues
+a durable, content-free alert. Exact webhook retries are no-ops, older events
+cannot regress the snapshot, and a tagged row that is not visible yet returns a
+retryable response instead of acknowledging and losing the receipt.
 
 Read copies contain a bounded site name, slug, original sender/subject, and a
 bounded plain-text message body. Raw inbound HTML is never rendered. The copy is

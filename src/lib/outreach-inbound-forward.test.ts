@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+  setSystemTime,
+} from "bun:test";
 import type { BoundedResendEmail } from "@/lib/resend";
 
 mock.module("server-only", () => ({}));
@@ -13,6 +21,17 @@ type ForwardRow = Record<string, unknown> & {
   deliveryLeaseToken: string | null;
   firstProviderAttemptAt: Date | null;
   targetAddress: string | null;
+  providerMessageId: string | null;
+  deliveryStatus:
+    | "PENDING"
+    | "SENT"
+    | "DELIVERED"
+    | "BOUNCED"
+    | "COMPLAINED"
+    | "SUPPRESSED"
+    | "FAILED";
+  providerEventAt: Date | null;
+  deliveredAt: Date | null;
   createdAt: Date;
 };
 
@@ -23,9 +42,12 @@ const alerts: Array<Record<string, unknown>> = [];
 let transactionDepth = 0;
 let nextForwardId = 1;
 let failNextSentFinalize = false;
+let failNextProviderIdentityBind = false;
+let failNextOperatorAlert = false;
 let failNextFailurePersist = false;
 let stealLeaseBeforeFailurePersist = false;
 let finalizeElsewhereBeforeExhaust = false;
+let beforeProviderReturn: (() => void | Promise<void>) | null = null;
 let providerResult: {
   data: { id: string } | null;
   error: {
@@ -39,15 +61,22 @@ const providerSend = mock(
   async (email: BoundedResendEmail, idempotencyKey: string) => {
     void email;
     void idempotencyKey;
+    await beforeProviderReturn?.();
     return providerResult;
   },
 );
 
 const fakeDb = {
   $transaction: async (callback: (transaction: object) => unknown) => {
+    const forwardSnapshot = structuredClone(forwards);
+    const alertSnapshot = structuredClone(alerts);
     transactionDepth += 1;
     try {
       return await callback(fakeDb);
+    } catch (error) {
+      forwards.splice(0, forwards.length, ...forwardSnapshot);
+      alerts.splice(0, alerts.length, ...alertSnapshot);
+      throw error;
     } finally {
       transactionDepth -= 1;
     }
@@ -72,6 +101,10 @@ const fakeDb = {
         deliveryLeaseToken: null,
         firstProviderAttemptAt: null,
         targetAddress: null,
+        providerMessageId: null,
+        deliveryStatus: "PENDING",
+        providerEventAt: null,
+        deliveredAt: null,
         createdAt: now,
         outreachMessageId: input.where.outreachMessageId,
         ...input.create,
@@ -86,6 +119,16 @@ const fakeDb = {
       if (failNextSentFinalize && input.data.status === "SENT") {
         failNextSentFinalize = false;
         throw new Error("fixture database finalize failure");
+      }
+      if (
+        failNextProviderIdentityBind &&
+        input.data.status === "SENT" &&
+        typeof input.data.providerMessageId === "string"
+      ) {
+        failNextProviderIdentityBind = false;
+        throw Object.assign(new Error("fixture unique provider conflict"), {
+          code: "P2002",
+        });
       }
       if (
         failNextFailurePersist &&
@@ -139,6 +182,9 @@ const fakeDb = {
         outreachMessage: messages.get(forward.outreachMessageId),
       };
     },
+    findUnique: async (input: { where: Record<string, unknown> }) =>
+      forwards.find((candidate) => matchesWhere(candidate, input.where)) ??
+      null,
   },
   site: {
     findUniqueOrThrow: async (input: { where: { id: string } }) => {
@@ -156,10 +202,23 @@ mock.module("@/lib/resend", () => ({
 }));
 mock.module("@/lib/operator-alert-queue", () => ({
   enqueueOperatorAlert: async (
-    _db: unknown,
+    database: unknown,
     input: Record<string, unknown>,
   ) => {
-    void _db;
+    const operatorAlert = (
+      database as {
+        operatorAlert?: {
+          upsert?: (input: { create: Record<string, unknown> }) => unknown;
+        };
+      }
+    ).operatorAlert;
+    if (operatorAlert?.upsert) {
+      return operatorAlert.upsert({ create: input });
+    }
+    if (failNextOperatorAlert) {
+      failNextOperatorAlert = false;
+      throw new Error("fixture operator alert persistence failure");
+    }
     alerts.push({ ...input, createdInsideTransaction: transactionDepth > 0 });
     return { id: "alert_1", occurrenceCount: 1, status: "PENDING" };
   },
@@ -189,9 +248,12 @@ describe("inbound read-copy outbox", () => {
     transactionDepth = 0;
     nextForwardId = 1;
     failNextSentFinalize = false;
+    failNextProviderIdentityBind = false;
+    failNextOperatorAlert = false;
     failNextFailurePersist = false;
     stealLeaseBeforeFailurePersist = false;
     finalizeElsewhereBeforeExhaust = false;
+    beforeProviderReturn = null;
     providerSend.mockClear();
     providerResult = {
       data: { id: "resend_forward_1" },
@@ -204,6 +266,10 @@ describe("inbound read-copy outbox", () => {
       subject: "Re: your preview",
       textBody: "Looks great — can we talk?",
     });
+  });
+
+  afterEach(() => {
+    setSystemTime();
   });
 
   it("creates no intent when forwarding is absent and one stable intent when enabled", async () => {
@@ -285,6 +351,9 @@ describe("inbound read-copy outbox", () => {
       subject: expect.stringContaining("Chez Léa / chez-lea"),
       text: expect.stringContaining("Looks great — can we talk?"),
       tags: [{ name: "category", value: "outreach_inbound_forward" }, {
+        name: "outreach_inbound_forward_id",
+        value: "forward_1",
+      }, {
         name: "outreach_message_id",
         value: "inbound_1",
       }],
@@ -514,8 +583,357 @@ describe("inbound read-copy outbox", () => {
       status: "PENDING",
       attempts: 1,
       targetAddress: "operator@example.test",
-      lastFailureCode: "configuration_invalid",
+      lastFailureCode: "configuration_target_changed",
     });
+  });
+
+  it("bounds target drift by the provider idempotency window", async () => {
+    const startedAt = new Date("2026-08-23T10:00:00.000Z");
+    setSystemTime(startedAt);
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    providerResult = {
+      data: null,
+      error: {
+        message: "unknown acceptance",
+        statusCode: 500,
+        name: "internal_server_error",
+      },
+    };
+    await dispatchDueOutreachInboundForwards(5, configuredEnvironment);
+
+    setSystemTime(new Date("2026-08-24T08:59:00.000Z"));
+    forwards[0]!.nextAttemptAt = new Date(0);
+    const blocked = await dispatchDueOutreachInboundForwards(5, {
+      ...configuredEnvironment,
+      OUTREACH_INBOUND_FORWARD_TO: "new-operator@example.test",
+    });
+    expect(blocked["configuration-invalid"]).toBe(1);
+    expect(forwards[0]).toMatchObject({
+      status: "PENDING",
+      attempts: 1,
+      targetAddress: "operator@example.test",
+      lastFailureCode: "configuration_target_changed",
+    });
+    expect(alerts).toHaveLength(0);
+    expect(providerSend).toHaveBeenCalledTimes(1);
+
+    setSystemTime(new Date("2026-08-24T09:00:00.001Z"));
+    forwards[0]!.nextAttemptAt = new Date(0);
+    const exhausted = await dispatchDueOutreachInboundForwards(5, {
+      ...configuredEnvironment,
+      OUTREACH_INBOUND_FORWARD_TO: "new-operator@example.test",
+    });
+    expect(exhausted.exhausted).toBe(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      lastFailureCode: "idempotency_window_expired",
+    });
+    expect(alerts).toHaveLength(1);
+    expect(providerSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("terminalizes a permanent participant conflict without calling the provider", async () => {
+    setSystemTime(new Date("2026-08-23T10:00:00.000Z"));
+    messages.get("inbound_1")!.fromAddress = "operator@example.test";
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      {
+        ...inboundInput(),
+        fromAddress: "operator@example.test",
+      },
+      configuredEnvironment,
+    );
+
+    const outcomes = await dispatchDueOutreachInboundForwards(
+      5,
+      configuredEnvironment,
+    );
+
+    expect(outcomes["configuration-invalid"]).toBe(1);
+    expect(providerSend).not.toHaveBeenCalled();
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      attempts: 0,
+      lastFailureCode: "configuration_invalid",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(1);
+  });
+
+  it("reconciles a pending ambiguous row when forwarding config is removed", async () => {
+    setSystemTime(new Date("2026-08-23T10:00:00.000Z"));
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    providerResult = {
+      data: null,
+      error: {
+        message: "unknown acceptance with private mailbox body",
+        statusCode: 500,
+        name: "internal_server_error",
+      },
+    };
+    await dispatchDueOutreachInboundForwards(5, configuredEnvironment);
+    const sourceBefore = structuredClone(messages.get("inbound_1"));
+
+    setSystemTime(new Date("2026-08-23T10:01:00.000Z"));
+    forwards[0]!.nextAttemptAt = new Date(0);
+    const outcomes = await dispatchDueOutreachInboundForwards(5, {
+      EMAIL_FROM: configuredEnvironment.EMAIL_FROM,
+      EMAIL_REPLY_TO: configuredEnvironment.EMAIL_REPLY_TO,
+    });
+
+    expect(outcomes["configuration-invalid"]).toBe(1);
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      attempts: 1,
+      lastFailureCode: "configuration_missing",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(1);
+    expect(messages.get("inbound_1")).toEqual(sourceBefore);
+    expect(JSON.stringify(alerts[0])).not.toContain("private mailbox body");
+    expect(JSON.stringify(alerts[0])).not.toContain("operator@example.test");
+  });
+
+  it("reconciles an event-first provider receipt without downgrading it", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    beforeProviderReturn = () => {
+      Object.assign(forwards[0]!, {
+        deliveryStatus: "DELIVERED",
+        providerMessageId: "resend_forward_1",
+        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
+        deliveredAt: new Date("2026-08-23T10:01:00.000Z"),
+      });
+    };
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("sent");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "DELIVERED",
+      providerMessageId: "resend_forward_1",
+      deliveredAt: new Date("2026-08-23T10:01:00.000Z"),
+    });
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("alerts when an event-first provider id conflicts with the send response", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    beforeProviderReturn = () => {
+      Object.assign(forwards[0]!, {
+        deliveryStatus: "BOUNCED",
+        providerMessageId: "resend_forward_event",
+        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
+      });
+    };
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("exhausted");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      deliveryStatus: "BOUNCED",
+      providerMessageId: "resend_forward_event",
+      lastFailureCode: "provider_identity_conflict",
+    });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      context: {
+        forwardId: "forward_1",
+        outreachMessageId: "inbound_1",
+        failureCode: "provider_identity_conflict",
+      },
+    });
+  });
+
+  it("retries only the durable alert boundary after an identity-alert failure", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    beforeProviderReturn = () => {
+      Object.assign(forwards[0]!, {
+        deliveryStatus: "BOUNCED",
+        providerMessageId: "resend_forward_event",
+        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
+      });
+    };
+    failNextOperatorAlert = true;
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("pending");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "PENDING",
+      providerMessageId: "resend_forward_event",
+      lastFailureCode: "provider_identity_conflict",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(0);
+
+    beforeProviderReturn = null;
+    forwards[0]!.nextAttemptAt = new Date(0);
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("exhausted");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      providerMessageId: "resend_forward_event",
+      lastFailureCode: "provider_identity_conflict",
+    });
+    expect(alerts).toHaveLength(1);
+  });
+
+  it("reconciles a SENT identity marker after alert persistence recovers", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    beforeProviderReturn = () => {
+      Object.assign(forwards[0]!, {
+        status: "SENT",
+        providerMessageId: "resend_forward_event",
+        lastFailureCode: null,
+      });
+    };
+    failNextOperatorAlert = true;
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("pending");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "SENT",
+      providerMessageId: "resend_forward_event",
+      lastFailureCode: "provider_identity_conflict",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(0);
+
+    beforeProviderReturn = null;
+    forwards[0]!.nextAttemptAt = new Date(0);
+    const outcomes = await dispatchDueOutreachInboundForwards(
+      5,
+      configuredEnvironment,
+    );
+    expect(outcomes.exhausted).toBe(1);
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "SENT",
+      providerMessageId: "resend_forward_event",
+      lastFailureCode: null,
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(1);
+  });
+
+  it("terminalizes a unique provider-id bind conflict without resending", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    failNextProviderIdentityBind = true;
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("exhausted");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      providerMessageId: null,
+      lastFailureCode: "provider_identity_conflict",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(1);
+  });
+
+  it("retries only the alert boundary after a unique provider-id bind conflict", async () => {
+    await enqueueOutreachInboundForward(
+      enqueueDb,
+      inboundInput(),
+      configuredEnvironment,
+    );
+    failNextProviderIdentityBind = true;
+    failNextOperatorAlert = true;
+
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("pending");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "PENDING",
+      providerMessageId: null,
+      lastFailureCode: "provider_identity_conflict",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(alerts).toHaveLength(0);
+
+    forwards[0]!.nextAttemptAt = new Date(0);
+    expect(
+      await deliverOutreachInboundForward(
+        forwards[0]!.id,
+        configuredEnvironment,
+      ),
+    ).toBe("exhausted");
+    expect(providerSend).toHaveBeenCalledTimes(1);
+    expect(forwards[0]).toMatchObject({
+      status: "EXHAUSTED",
+      providerMessageId: null,
+      lastFailureCode: "provider_identity_conflict",
+    });
+    expect(alerts).toHaveLength(1);
   });
 
   it("does not persist failure state after a successor takes the lease", async () => {
@@ -737,12 +1155,17 @@ function matchesWhere(
         matchesWhere(forward, clause),
       );
     }
+    if (key === "NOT") {
+      return !matchesWhere(forward, expected as Record<string, unknown>);
+    }
     const actual = forward[key];
     if (expected && typeof expected === "object" && !(expected instanceof Date)) {
       const comparison = expected as {
         lt?: number | Date;
         lte?: number | Date;
+        not?: unknown;
       };
+      if (comparison.not !== undefined) return actual !== comparison.not;
       if (comparison.lt !== undefined) {
         return comparison.lt instanceof Date
           ? actual instanceof Date && actual < comparison.lt

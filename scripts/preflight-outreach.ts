@@ -125,6 +125,7 @@ async function checkDatabase(databaseUrl: string): Promise<{
            to_regclass('"OutreachDispatch"') IS NOT NULL
            AND to_regclass('"OutreachProviderEvent"') IS NOT NULL
            AND to_regclass('"OutreachInboundForward"') IS NOT NULL
+           AND to_regclass('"OutreachForwardProviderEvent"') IS NOT NULL
            AND to_regclass('"OperatorAuditEvent"') IS NOT NULL
            AND to_regclass('"OperatorSetting"') IS NOT NULL
            AND to_regclass('"OutreachMessage_idempotencyKey_key"') IS NOT NULL
@@ -133,7 +134,10 @@ async function checkDatabase(databaseUrl: string): Promise<{
            AND to_regclass('"ClaimInvitation_outreachKey_key"') IS NOT NULL
            AND to_regclass('"OutreachInboundForward_outreachMessageId_key"') IS NOT NULL
            AND to_regclass('"OutreachInboundForward_idempotencyKey_key"') IS NOT NULL
+           AND to_regclass('"OutreachInboundForward_providerMessageId_key"') IS NOT NULL
            AND to_regclass('"OutreachInboundForward_status_nextAttemptAt_idx"') IS NOT NULL
+           AND to_regclass('"OutreachForwardProviderEvent_forwardId_occurredAt_idx"') IS NOT NULL
+           AND to_regclass('"OutreachForwardEvent_providerMessageId_occurredAt_idx"') IS NOT NULL
            AND EXISTS (
              SELECT 1 FROM information_schema.columns
              WHERE table_schema = current_schema()
@@ -187,10 +191,20 @@ async function checkDatabase(databaseUrl: string): Promise<{
                  'id', 'outreachMessageId', 'idempotencyKey', 'targetAddress',
                  'senderAddress', 'siteName', 'siteSlug', 'status', 'attempts',
                  'nextAttemptAt', 'deliveryLeaseUntil', 'deliveryLeaseToken',
-                 'firstProviderAttemptAt', 'sentAt', 'providerMessageId',
-                 'lastFailureCode', 'createdAt', 'updatedAt'
+                 'firstProviderAttemptAt', 'sentAt', 'deliveredAt',
+                 'providerMessageId', 'providerEventAt', 'lastFailureCode',
+                 'deliveryStatus', 'deliveryFailureCode', 'createdAt', 'updatedAt'
                )
-           ) = 18
+           ) = 22
+           AND (
+             SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = current_schema()
+               AND table_name = 'OutreachForwardProviderEvent'
+               AND column_name IN (
+                 'id', 'forwardId', 'providerMessageId', 'eventType',
+                 'deliveryStatus', 'occurredAt', 'createdAt'
+               )
+           ) = 7
            AND EXISTS (
              SELECT 1 FROM information_schema.columns
              WHERE table_schema = current_schema()
@@ -210,6 +224,11 @@ async function checkDatabase(databaseUrl: string): Promise<{
            AND EXISTS (
              SELECT 1 FROM pg_constraint
              WHERE conname = 'OutreachInboundForward_outreachMessageId_fkey'
+               AND contype = 'f'
+           )
+           AND EXISTS (
+             SELECT 1 FROM pg_constraint
+             WHERE conname = 'OutreachForwardProviderEvent_forwardId_fkey'
                AND contype = 'f'
            )
          ) AS "schemaReady"`,

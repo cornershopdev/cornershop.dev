@@ -155,6 +155,16 @@ enum OutreachInboundForwardStatus {
   EXHAUSTED
 }
 
+enum OutreachInboundForwardDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  SUPPRESSED
+  FAILED
+}
+
 enum AuthLinkDestination {
   ADMIN
   WORKSPACE
@@ -742,27 +752,46 @@ model OutreachMessage {
 }
 
 model OutreachInboundForward {
-  id                     String                       @id @default(cuid())
-  outreachMessageId      String                       @unique
-  outreachMessage        OutreachMessage              @relation(fields: [outreachMessageId], references: [id], onDelete: Cascade)
-  idempotencyKey         String                       @unique
+  id                     String                               @id @default(cuid())
+  outreachMessageId      String                               @unique
+  outreachMessage        OutreachMessage                      @relation(fields: [outreachMessageId], references: [id], onDelete: Cascade)
+  idempotencyKey         String                               @unique
   targetAddress          String?
   senderAddress          String
   siteName               String
   siteSlug               String
-  status                 OutreachInboundForwardStatus @default(PENDING)
-  attempts               Int                          @default(0)
-  nextAttemptAt          DateTime                     @default(now())
+  status                 OutreachInboundForwardStatus         @default(PENDING)
+  deliveryStatus         OutreachInboundForwardDeliveryStatus @default(PENDING)
+  attempts               Int                                  @default(0)
+  nextAttemptAt          DateTime                             @default(now())
   deliveryLeaseUntil     DateTime?
   deliveryLeaseToken     String?
   firstProviderAttemptAt DateTime?
   sentAt                 DateTime?
-  providerMessageId      String?
+  deliveredAt            DateTime?
+  providerMessageId      String?                              @unique
+  providerEventAt        DateTime?
   lastFailureCode        String?
-  createdAt              DateTime                     @default(now())
-  updatedAt              DateTime                     @updatedAt
+  deliveryFailureCode    String?
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+  providerEvents         OutreachForwardProviderEvent[]
 
   @@index([status, nextAttemptAt])
+}
+
+model OutreachForwardProviderEvent {
+  id                String                               @id
+  forwardId         String
+  forward           OutreachInboundForward               @relation(fields: [forwardId], references: [id], onDelete: Cascade)
+  providerMessageId String
+  eventType         String
+  deliveryStatus    OutreachInboundForwardDeliveryStatus
+  occurredAt        DateTime
+  createdAt         DateTime                             @default(now())
+
+  @@index([forwardId, occurredAt])
+  @@index([providerMessageId, occurredAt], map: "OutreachForwardEvent_providerMessageId_occurredAt_idx")
 }
 
 model OutreachDispatch {

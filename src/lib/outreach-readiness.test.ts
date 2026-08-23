@@ -378,8 +378,16 @@ describe("production outreach deployment", () => {
       `to_regclass('"OutreachInboundForward"')`,
       `to_regclass('"OutreachInboundForward_outreachMessageId_key"')`,
       `to_regclass('"OutreachInboundForward_idempotencyKey_key"')`,
+      `to_regclass('"OutreachInboundForward_providerMessageId_key"')`,
+      `to_regclass('"OutreachForwardProviderEvent"')`,
+      `to_regclass('"OutreachForwardProviderEvent_forwardId_occurredAt_idx"')`,
+      `to_regclass('"OutreachForwardEvent_providerMessageId_occurredAt_idx"')`,
       "OutreachInboundForward_outreachMessageId_fkey",
+      "OutreachForwardProviderEvent_forwardId_fkey",
       "firstProviderAttemptAt",
+      "deliveryStatus",
+      "providerEventAt",
+      "deliveryFailureCode",
     ]) {
       expect(preflight).toContain(contract);
     }

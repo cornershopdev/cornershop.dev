@@ -123,6 +123,7 @@ export function emptyInboundForwardOutcomes(): Record<
 }
 
 export function buildInboundForwardEmail(input: {
+  inboundForwardId: string;
   senderAddress: string;
   targetAddress: string;
   siteName: string;
@@ -166,6 +167,10 @@ export function buildInboundForwardEmail(input: {
     ].join("\n"),
     tags: [
       { name: "category", value: "outreach_inbound_forward" },
+      {
+        name: "outreach_inbound_forward_id",
+        value: input.inboundForwardId,
+      },
       { name: "outreach_message_id", value: input.outreachMessageId },
     ],
   };

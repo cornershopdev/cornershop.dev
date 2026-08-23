@@ -65,6 +65,7 @@ describe("inbound read-copy forwarding policy", () => {
 
   it("builds a bounded plain-text read copy with lead context", () => {
     const email = buildInboundForwardEmail({
+      inboundForwardId: "forward_1",
       senderAddress: "Cornershopdev <vincent@send.cornershop.dev>",
       targetAddress: "operator@example.test",
       siteName: `Chez\nLéa ${"x".repeat(150)}`,
@@ -90,6 +91,7 @@ describe("inbound read-copy forwarding policy", () => {
     expect(email.text).not.toContain("\u0000");
     expect(email.tags).toEqual([
       { name: "category", value: "outreach_inbound_forward" },
+      { name: "outreach_inbound_forward_id", value: "forward_1" },
       { name: "outreach_message_id", value: "inbound_1" },
     ]);
     expect(email).not.toHaveProperty("html");
