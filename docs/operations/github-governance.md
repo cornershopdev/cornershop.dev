@@ -53,7 +53,7 @@ The repository uses GitHub-native controls without a custom CodeQL workflow:
 
 - dependency graph and Dependabot alerts;
 - Dependabot security updates;
-- weekly Dependabot version checks for the Bun/npm, Docker, and GitHub Actions
+- weekly Dependabot version checks for the Bun, Docker, and GitHub Actions
   ecosystems from `.github/dependabot.yml`;
 - secret scanning and push protection;
 - CodeQL default setup for Actions and JavaScript/TypeScript, using the default
@@ -63,6 +63,66 @@ Default CodeQL setup owns its generated workflow. Do not add a competing CodeQL
 workflow unless default setup becomes unavailable and a separately reviewed
 advanced configuration is required. Never retrieve or paste security alerts as
 governance evidence; record only feature enablement and scan/run status.
+
+### Dependency update and audit policy
+
+Routine version maintenance is deliberately bounded. Dependabot checks the Bun,
+Docker, and GitHub Actions ecosystems weekly. Within each ecosystem, one wildcard
+allow rule admits only SemVer patch and minor version updates, one group combines
+those routine updates, and `open-pull-requests-limit: 1` permits at most one open
+version-update pull request. The group explicitly applies only to version
+updates. GitHub documents that `allow.update-types` and the open pull-request
+limit do not suppress or consume supported security-update pull requests, so no
+wildcard major-ignore rule is needed. See GitHub's
+[Dependabot options reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
+
+GitHub's current
+[Dependabot ecosystem matrix](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories)
+supports version updates for the text `bun.lock` format from Bun 1.1.39 onward,
+but does not support Bun security-update pull requests. The root entry therefore
+uses `package-ecosystem: bun`, while `.github/workflows/dependency-audit.yml`
+provides the missing lockfile-native vulnerability detection. It runs for
+relevant dependency and workflow changes on pull requests and `main` pushes,
+daily at 04:17 UTC, and on manual dispatch. The job installs Bun 1.3.14, validates
+that `package.json` and `bun.lock` agree with a frozen install while lifecycle
+scripts are disabled, then runs the exact unfiltered audit with Bash pipefail.
+Any reported vulnerability or registry request failure fails the job, while the
+raw JSON is still retained as a workflow artifact.
+
+Per the [Bun audit documentation](https://bun.sh/docs/pm/cli/audit), `bun audit`
+reads the package list from `bun.lock` and sends its package names and versions
+to npm's advisory endpoint; packages assigned to another scoped registry are
+sent to that registry instead and can be skipped if it has no advisory endpoint.
+This repository's audit is an intentional disclosure of its public
+package/version graph to npm. The workflow supplies no source, secrets, customer
+data, private-registry credentials, registry configuration, or writable token,
+and none may be added to make an audit pass. This workflow does not submit a
+dependency graph to GitHub; complete Bun dependency submission is tracked
+separately in #153.
+
+When the audit fails:
+
+1. Download the `bun-audit-json` artifact and identify each advisory, affected
+   locked version, and smallest direct dependency that can carry a fix.
+2. Open a focused remediation pull request that updates the manifest and
+   `bun.lock` together. Do not filter by severity, ignore an advisory, swallow
+   the audit exit status, enable install scripts, or add registry credentials.
+3. Re-run the unfiltered audit, focused tests, the full test suite, lint,
+   typecheck, and the production build. Merge eligibility still depends on the
+   exact-head required checks.
+4. If no compatible safe release exists, record the advisory and blocked
+   dependency chain in a dedicated issue, choose an explicit replacement,
+   override, or major migration, and keep the audit red until the reviewed risk
+   is actually removed.
+
+SemVer-major maintenance is always a named migration, never routine automation.
+Create a dedicated issue and branch for one dependency or base image, review its
+release and migration guidance, update every coupled manifest/lock/runtime pin,
+and provide compatibility, rollback, audit, full-test, typecheck, and build
+evidence in one ready pull request. A reviewed Actions major follows the same
+path. Do not add `version-update:semver-major` to the wildcard allow rule; if a
+temporary Dependabot exception is justified, it must name exactly one dependency
+and be removed when that scoped migration closes.
 
 Dependabot version updates begin after `.github/dependabot.yml` reaches the
 default branch. Security alerts and security updates are repository settings and
