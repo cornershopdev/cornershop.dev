@@ -1,6 +1,6 @@
 FROM oven/bun:1.3.14-alpine AS bun-source
 
-FROM node:24.19.0-alpine3.24 AS node-toolchain
+FROM node:26.7.0-alpine3.24 AS node-toolchain
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 
 # Next builds and serves on the pinned Node LTS. Bun remains available for
