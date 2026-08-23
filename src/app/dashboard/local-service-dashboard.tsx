@@ -15,6 +15,7 @@ import { Brand } from "@/components/brand";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -421,8 +422,16 @@ export function LocalServiceDashboard({
                   }
                 />
               </Field>
-              <Field label="Insurance posture">
+              <div>
+                <Label
+                  id="insurance-posture-label"
+                  htmlFor="insurance-posture"
+                  className="mb-2 block"
+                >
+                  Insurance posture
+                </Label>
                 <select
+                  id="insurance-posture"
                   className="h-8 w-full rounded-lg border bg-background px-2.5 text-sm"
                   value={draft.attributes.insuranceStatus}
                   onChange={(event) =>
@@ -436,7 +445,12 @@ export function LocalServiceDashboard({
                   <option>insured</option>
                   <option>not-insured</option>
                 </select>
+                <span id="insurance-posture-detail" className="sr-only">
+                  detail
+                </span>
                 <Input
+                  id="insurance-posture-evidence"
+                  aria-labelledby="insurance-posture-label insurance-posture-detail"
                   className="mt-2"
                   value={draft.attributes.insuranceDetail}
                   placeholder="Evidence-backed detail"
@@ -446,7 +460,7 @@ export function LocalServiceDashboard({
                     })
                   }
                 />
-              </Field>
+              </div>
               <Field
                 label="Credentials — name | issuer | reference"
                 className="md:col-span-2"
@@ -601,9 +615,30 @@ export function LocalServiceDashboard({
                         <option>quote</option>
                       </select>
                     </Field>
-                    <Field label="Price / unit">
+                    <div>
+                      <Label
+                        id={`service-price-unit-${sectionIndex}-${itemIndex}-label`}
+                        htmlFor={`service-price-unit-${sectionIndex}-${itemIndex}-price`}
+                        className="mb-2 block"
+                      >
+                        Price / unit
+                      </Label>
                       <div className="grid grid-cols-2 gap-2">
+                        <span
+                          id={`service-price-unit-${sectionIndex}-${itemIndex}-price-label`}
+                          className="sr-only"
+                        >
+                          price
+                        </span>
+                        <span
+                          id={`service-price-unit-${sectionIndex}-${itemIndex}-unit-label`}
+                          className="sr-only"
+                        >
+                          unit
+                        </span>
                         <Input
+                          id={`service-price-unit-${sectionIndex}-${itemIndex}-price`}
+                          aria-labelledby={`service-price-unit-${sectionIndex}-${itemIndex}-label service-price-unit-${sectionIndex}-${itemIndex}-price-label`}
                           type="number"
                           min="0"
                           value={item.price ?? ""}
@@ -620,6 +655,8 @@ export function LocalServiceDashboard({
                           }
                         />
                         <Input
+                          id={`service-price-unit-${sectionIndex}-${itemIndex}-unit`}
+                          aria-labelledby={`service-price-unit-${sectionIndex}-${itemIndex}-label service-price-unit-${sectionIndex}-${itemIndex}-unit-label`}
                           value={item.attributes.priceUnit}
                           placeholder="per hour"
                           onChange={(event) =>
@@ -631,7 +668,7 @@ export function LocalServiceDashboard({
                           }
                         />
                       </div>
-                    </Field>
+                    </div>
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -911,23 +948,6 @@ function EditorSection({
       </div>
       {children}
     </section>
-  );
-}
-
-function Field({
-  label,
-  className,
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      <Label className="mb-2 block">{label}</Label>
-      {children}
-    </div>
   );
 }
 

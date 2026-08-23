@@ -109,7 +109,8 @@ describe("food-retail bilingual dashboard editing", () => {
     expect(html).toContain("temporarily reuse the canonical source wording");
     expect(html).toContain('aria-label="fr category 3 name"');
     expect(html).toContain('aria-label="fr product 1 name"');
-    expect(html).toContain('aria-label="fr link 2 label"');
+    expect(html).toContain(">Link 2 label</label>");
+    expect(html).not.toContain('aria-label="fr link 2 label"');
     expect(html).not.toContain('aria-label="fr product 1 allergen');
     expect(html).toContain("Sourced allergen terms remain unchanged: gluten");
     expect(html).toContain("Mark reviewed");
