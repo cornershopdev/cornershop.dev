@@ -70,6 +70,15 @@ if [[ "$node_executable" != "$expected_node_executable" ]]; then
     "$expected_node_executable" "$node_executable" >&2
   exit 1
 fi
+if ! docker exec "$container" test -f /app/scripts/dispatch-inbound-forwards.ts; then
+  echo "Expected the inbound read-copy dispatcher in the candidate image" >&2
+  exit 1
+fi
+if ! docker exec --env OUTREACH_INBOUND_FORWARD_TO= "$container" \
+  bun run operator:dispatch-inbound-forwards >/dev/null; then
+  echo "Expected the disabled inbound read-copy dispatcher to start safely" >&2
+  exit 1
+fi
 
 assert_status() {
   local path="$1"

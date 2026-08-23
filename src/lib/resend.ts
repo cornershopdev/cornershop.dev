@@ -43,7 +43,11 @@ export async function sendBoundedResendEmail(
   idempotencyKey: string,
 ): Promise<{
   data: { id: string } | null;
-  error: { message: string; statusCode: number | null } | null;
+  error: {
+    message: string;
+    statusCode: number | null;
+    name: string | null;
+  } | null;
 }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
@@ -73,6 +77,7 @@ export async function sendBoundedResendEmail(
     const payload = (await response.json().catch(() => null)) as {
       id?: unknown;
       message?: unknown;
+      name?: unknown;
     } | null;
     if (response.ok && typeof payload?.id === "string") {
       return { data: { id: payload.id }, error: null };
@@ -85,6 +90,7 @@ export async function sendBoundedResendEmail(
             ? payload.message
             : "Resend rejected the request.",
         statusCode: response.status,
+        name: typeof payload?.name === "string" ? payload.name : null,
       },
     };
   } finally {

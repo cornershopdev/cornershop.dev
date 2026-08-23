@@ -62,6 +62,10 @@ RUN bun build scripts/dispatch-operator-alerts.ts \
   --target=bun \
   --packages=external \
   --outfile=.operator-scripts/dispatch-operator-alerts.ts
+RUN bun build scripts/dispatch-inbound-forwards.ts \
+  --target=bun \
+  --packages=external \
+  --outfile=.operator-scripts/dispatch-inbound-forwards.ts
 RUN bun build scripts/monitor-public-site.ts \
   --target=bun \
   --packages=external \
