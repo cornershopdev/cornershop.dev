@@ -51,8 +51,16 @@ jobs:
         run: bun test src/lib/site-contact-migration.postgres.test.tsx
       - run: bun run workflow:migrate
       - run: bun run test
-      # Own process: bun mock.module("@/lib/db") is process-global, so the
-      # publication suite cannot share the unit-test run.
+      # Own processes: bun mock.module("@/lib/db") is process-global, so the
+      # PostgreSQL suites cannot share the unit-test run.
+      - name: Postgres analytics suite
+        env:
+          ANALYTICS_POSTGRES_TEST: "1"
+        run: bun test src/lib/analytics.postgres.test.ts
+      - name: Postgres article generation suite
+        env:
+          ARTICLES_POSTGRES_TEST: "1"
+        run: bun test src/lib/articles/generation.postgres.test.ts
       - name: Postgres publication suite
         env:
           SITE_PUBLICATION_POSTGRES_TEST: "1"
