@@ -14,13 +14,17 @@ export type SiteFacts = {
   address: string | null;
   phone: string | null;
   businessHours: Array<{ days: string; hours: string }>;
-  catalogItemNames: string[];
+  catalogItems: Array<{
+    name: string;
+    price: number | null;
+    currency: string;
+  }>;
   integrationLabels: string[];
 };
 
 export function availableFacts(facts: SiteFacts): Set<ArticleFactKey> {
   const available = new Set<ArticleFactKey>();
-  if (facts.catalogItemNames.length > 0) available.add("catalogItems");
+  if (facts.catalogItems.length > 0) available.add("catalogItems");
   if (facts.address?.trim()) available.add("address");
   if (
     facts.businessHours.some(

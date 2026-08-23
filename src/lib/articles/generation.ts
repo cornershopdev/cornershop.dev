@@ -42,19 +42,33 @@ function getModel() {
   });
 }
 
-const articleBatchOutputSchema = z.object({
-  articles: z.array(
-    z.object({
-      topicKey: z.string(),
-      slug: z.string(),
-      title: z.string(),
-      excerpt: z.string(),
-      bodyMarkdown: z.string(),
-    }),
-  ),
+export const articleBatchOutputSchema = z.object({
+  articles: z
+    .array(
+      z.object({
+        topicKey: z.string(),
+        slug: z.string(),
+        title: z.string(),
+        excerpt: z.string(),
+        bodyMarkdown: z.string(),
+        catalogClaims: z
+          .array(
+            z.object({
+              name: z.string().min(1).max(120),
+              price: z.number().finite().nonnegative().max(99_999_999.99).nullable(),
+              currency: z
+                .string()
+                .regex(/^[A-Z]{3}$/)
+                .nullable(),
+            }),
+          )
+          .max(32),
+      }),
+    )
+    .max(8),
 });
 
-function buildPrompt(input: {
+export function buildArticleBatchPrompt(input: {
   facts: SiteFacts;
   topics: Array<{ key: string; title: string }>;
 }): string {
@@ -70,12 +84,16 @@ function buildPrompt(input: {
         .map((entry) => `${entry.days} ${entry.hours}`)
         .join("; ") || "none published"
     }`,
-    `- Catalog items: ${facts.catalogItemNames.join(", ") || "none listed"}`,
+    `- Catalog items (canonical name, price, currency): ${
+      facts.catalogItems.length ? JSON.stringify(facts.catalogItems) : "none listed"
+    }`,
     `- Booking/ordering options: ${facts.integrationLabels.join(", ") || "none"}`,
     "",
     "Rules:",
     "- Never invent awards, rankings, certifications, prices, staff names, suppliers, reviews, or statistics.",
     "- Every catalog item mentioned by name must appear in the list above.",
+    "- catalogClaims must enumerate every catalog item named in title, excerpt, or bodyMarkdown.",
+    "- A catalogClaims price/currency pair must be copied exactly from that same catalog item; use null/null when no price is stated in the article.",
     `- Write in ${facts.locale === "fr" ? "French" : "English"} for a local audience.`,
     "- Body is GitHub-flavoured markdown with at most two headings and no images.",
     "- slug must be kebab-case ASCII.",
@@ -84,7 +102,7 @@ function buildPrompt(input: {
     "Write exactly one article per requested topic:",
     ...topics.map((topic) => `- [${topic.key}] ${topic.title}`),
     "",
-    "Return JSON: {\"articles\":[{topicKey,slug,title,excerpt,bodyMarkdown}]}",
+    'Return JSON: {"articles":[{topicKey,slug,title,excerpt,bodyMarkdown,catalogClaims:[{name,price,currency}]}]}',
   ];
   return lines.join("\n");
 }
@@ -93,7 +111,7 @@ export async function generateBatchDrafts(input: {
   facts: SiteFacts;
   count: number;
   recentTopicKeys: string[];
-}): Promise<GeneratedArticleDraft[]> {
+}): Promise<GeneratedBatchDrafts> {
   if (!articleGenerationConfigured()) {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
@@ -104,7 +122,14 @@ export async function generateBatchDrafts(input: {
     count: input.count,
     recentTopicKeys: input.recentTopicKeys,
   });
-  if (!selected.length) return [];
+  if (!selected.length) {
+    return {
+      status: "SKIPPED",
+      statusReason: "NO_SUPPORTABLE_TOPICS",
+      drafts: [],
+      rejectedCount: 0,
+    };
+  }
 
   const topics = selected.flatMap((topic) => {
     const plan = articleTopicPlanByKey(input.facts.vertical, topic.key);
@@ -120,69 +145,106 @@ export async function generateBatchDrafts(input: {
     }),
     maxRetries: 2,
     timeout: { totalMs: 55_000, stepMs: 45_000 },
-    prompt: buildPrompt({ facts: input.facts, topics }),
+    prompt: buildArticleBatchPrompt({ facts: input.facts, topics }),
   });
 
   const allowed = new Set(topics.map((topic) => topic.key));
-  return output.articles
+  const drafts = output.articles
     .slice(0, topics.length)
-    .filter(
-      (draft): draft is GeneratedArticleDraft =>
-        typeof draft.topicKey === "string" && allowed.has(draft.topicKey),
-    );
+    .filter((draft) => allowed.has(draft.topicKey));
+  return {
+    status: "GENERATED",
+    drafts,
+    rejectedCount: output.articles.length - drafts.length,
+  };
 }
+
+export type GeneratedBatchDrafts =
+  | {
+      status: "SKIPPED";
+      statusReason: "NO_SUPPORTABLE_TOPICS";
+      drafts: [];
+      rejectedCount: 0;
+    }
+  | {
+      status: "GENERATED";
+      drafts: GeneratedArticleDraft[];
+      rejectedCount: number;
+    };
 
 export type PersistedBatch = {
   batchId: string;
   producedCount: number;
+  rejectedCount: number;
 };
 
 /**
- * Persists guardrail-passing drafts as DRAFT articles under a new batch row.
- * Rejected drafts shrink the batch silently — they are recorded on the batch
- * row via producedCount < requestedCount so the operator sees the shortfall.
+ * Persists guardrail-passing drafts as DRAFT articles under the batch row that
+ * admission reserved before generation. Rejected drafts shrink the batch and
+ * are counted independently from the immutable requestedCount.
  */
 export async function persistArticleBatch(input: {
+  batchId: string;
   siteId: string;
-  requestedBy: string;
   facts: SiteFacts;
   drafts: GeneratedArticleDraft[];
+  rejectedCount?: number;
   model?: string | null;
 }): Promise<PersistedBatch> {
   const db = getDb();
   const accepted = input.drafts.filter(
     (draft) => !checkArticleDraft(draft, input.facts).length,
   );
-
-  const existingSlugs = new Set(
-    (
-      await db.article.findMany({
-        where: { siteId: input.siteId },
-        select: { slug: true },
-      })
-    ).map((row) => row.slug),
-  );
+  const rejectedCount =
+    Math.max(0, input.rejectedCount ?? 0) +
+    (input.drafts.length - accepted.length);
 
   return db.$transaction(async (transaction) => {
-    const batch = await transaction.articleBatch.create({
-      data: {
-        siteId: input.siteId,
-        requestedCount: input.drafts.length,
-        producedCount: accepted.length,
-        model: input.model ?? null,
-        requestedBy: input.requestedBy,
-        completedAt: new Date(),
+    const existingBatch = await transaction.articleBatch.findUnique({
+      where: { id: input.batchId },
+      select: {
+        siteId: true,
+        status: true,
+        acceptedCount: true,
+        rejectedCount: true,
       },
-      select: { id: true },
     });
-    let produced = 0;
+    if (!existingBatch || existingBatch.siteId !== input.siteId) {
+      throw new Error("Article batch reservation was not found");
+    }
+    if (
+      existingBatch.status === "SUCCEEDED" ||
+      existingBatch.status === "REJECTED"
+    ) {
+      return {
+        batchId: input.batchId,
+        producedCount: existingBatch.acceptedCount,
+        rejectedCount: existingBatch.rejectedCount,
+      };
+    }
+    if (
+      existingBatch.status !== "QUEUED" &&
+      existingBatch.status !== "RUNNING"
+    ) {
+      throw new Error("Article batch reservation is already terminal");
+    }
+
+    const existingSlugs = new Set(
+      (
+        await transaction.article.findMany({
+          where: { siteId: input.siteId },
+          select: { slug: true },
+        })
+      ).map((row) => row.slug),
+    );
+    let producedCount = 0;
     for (const draft of accepted) {
       const slug = dedupeSlug(draft.slug, existingSlugs);
       existingSlugs.add(slug);
       await transaction.article.create({
         data: {
           siteId: input.siteId,
-          batchId: batch.id,
+          batchId: input.batchId,
           slug,
           locale: input.facts.locale,
           title: draft.title.trim(),
@@ -194,18 +256,83 @@ export async function persistArticleBatch(input: {
             articleTopicPlanByKey(input.facts.vertical, draft.topicKey)?.title ??
             draft.topicKey,
           generatedByModel: input.model ?? null,
-          sourceBatchId: batch.id,
+          sourceBatchId: input.batchId,
         },
         select: { id: true },
       });
-      produced += 1;
+      producedCount += 1;
     }
-    await transaction.articleBatch.update({
-      where: { id: batch.id },
-      data: { producedCount: produced },
+
+    const status = producedCount > 0 ? "SUCCEEDED" : "REJECTED";
+    const completed = await transaction.articleBatch.updateMany({
+      where: {
+        id: input.batchId,
+        siteId: input.siteId,
+        status: { in: ["QUEUED", "RUNNING"] },
+      },
+      data: {
+        acceptedCount: producedCount,
+        rejectedCount,
+        status,
+        statusReason: status === "REJECTED" ? "ALL_DRAFTS_REJECTED" : null,
+        model: input.model ?? null,
+        completedAt: new Date(),
+      },
     });
-    return { batchId: batch.id, producedCount: produced };
+    if (completed.count !== 1) {
+      throw new Error("Article batch terminal transition was lost");
+    }
+    return { batchId: input.batchId, producedCount, rejectedCount };
   });
+}
+
+export async function beginArticleBatch(batchId: string): Promise<{
+  siteId: string;
+  requestedCount: number;
+} | null> {
+  const db = getDb();
+  await db.articleBatch.updateMany({
+    where: { id: batchId, status: "QUEUED" },
+    data: { status: "RUNNING", startedAt: new Date() },
+  });
+  const existing = await db.articleBatch.findUnique({
+    where: { id: batchId },
+    select: { siteId: true, requestedCount: true, status: true },
+  });
+  if (!existing || existing.status !== "RUNNING") return null;
+  return {
+    siteId: existing.siteId,
+    requestedCount: existing.requestedCount,
+  };
+}
+
+export async function closeArticleBatch(input: {
+  batchId: string;
+  status: "ZERO_OUTPUT" | "REJECTED" | "SKIPPED" | "FAILED";
+  statusReason: string;
+  rejectedCount?: number;
+  expectedStatuses?: Array<"QUEUED" | "RUNNING">;
+}): Promise<boolean> {
+  const db = getDb();
+  const completed = await db.articleBatch.updateMany({
+    where: {
+      id: input.batchId,
+      status: { in: input.expectedStatuses ?? ["QUEUED", "RUNNING"] },
+    },
+    data: {
+      acceptedCount: 0,
+      rejectedCount: Math.max(0, input.rejectedCount ?? 0),
+      status: input.status,
+      statusReason: input.statusReason,
+      completedAt: new Date(),
+    },
+  });
+  if (completed.count === 1) return true;
+  const existing = await db.articleBatch.findUnique({
+    where: { id: input.batchId },
+    select: { status: true },
+  });
+  return existing?.status === input.status;
 }
 
 /** Reads the fact slice + recent topics used for generation in one pass. */
@@ -239,7 +366,10 @@ export async function loadGenerationInputs(siteId: string): Promise<{
       where: { siteId },
       orderBy: { position: "asc" },
       select: {
-        items: { select: { name: true }, orderBy: { position: "asc" } },
+        items: {
+          select: { name: true, price: true, currency: true },
+          orderBy: { position: "asc" },
+        },
       },
     }),
     db.integration.findMany({
@@ -251,7 +381,12 @@ export async function loadGenerationInputs(siteId: string): Promise<{
     // so read batches first and expand from there — scanning articles by
     // recency would let a site with many old articles dilute the window.
     db.articleBatch.findMany({
-      where: { siteId, completedAt: { not: null } },
+      where: {
+        siteId,
+        status: "SUCCEEDED",
+        acceptedCount: { gt: 0 },
+        completedAt: { not: null },
+      },
       orderBy: { createdAt: "desc" },
       take: 2,
       select: {
@@ -286,8 +421,12 @@ export async function loadGenerationInputs(siteId: string): Promise<{
       address: site.address,
       phone: site.phone,
       businessHours,
-      catalogItemNames: sections.flatMap((section) =>
-        section.items.map((item) => item.name),
+      catalogItems: sections.flatMap((section) =>
+        section.items.map((item) => ({
+          name: item.name,
+          price: item.price === null ? null : Number(item.price),
+          currency: item.currency,
+        })),
       ),
       integrationLabels: integrations.map((integration) => integration.label),
     },
