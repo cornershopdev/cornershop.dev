@@ -126,7 +126,7 @@ jobs:
         run: |
           mkdir -p .artifacts
           bun -e 'const passed = process.env.JOURNEY_OUTCOME === "success"; await Bun.write(".artifacts/first-customer-evidence.json", JSON.stringify({ schemaVersion: 1, environment: "test", scope: "service-integration", outcome: passed ? "AUTOMATED_SERVICE_JOURNEY_VERIFIED" : "NOT_VERIFIED", browserJourneyVerified: false, realPaymentVerified: false, realCustomerAcceptanceVerified: false, productionAccepted: false, commitSha: process.env.COMMIT_SHA, generatedAt: new Date().toISOString() }, null, 2))'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: first-customer-automated-evidence
@@ -186,7 +186,7 @@ jobs:
       WORKFLOW_ENABLED: "false"
       WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
@@ -211,7 +211,7 @@ jobs:
         run: |
           mkdir -p .artifacts
           bun -e 'const passed = process.env.JOURNEY_OUTCOME === "success"; await Bun.write(".artifacts/first-customer-browser-evidence.json", JSON.stringify({ schemaVersion: 1, environment: "test", scope: "browser-http-provider-double", outcome: passed ? "AUTOMATED_BROWSER_JOURNEY_VERIFIED" : "NOT_VERIFIED", browserJourneyVerified: passed, realPaymentVerified: false, realCustomerAcceptanceVerified: false, productionAccepted: false, commitSha: process.env.COMMIT_SHA, generatedAt: new Date().toISOString() }, null, 2))'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: first-customer-browser-evidence
@@ -240,7 +240,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build production candidate image
