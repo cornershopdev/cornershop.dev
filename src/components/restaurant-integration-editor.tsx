@@ -17,8 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { RestaurantDraft } from "@/lib/restaurant";
 import {
@@ -237,10 +237,7 @@ export function RestaurantIntegrationEditor({
                 {canonical ? (
                   <>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field
-                        label="Link type"
-                        htmlFor={`integration-type-${integrationIndex}`}
-                      >
+                      <Field label="Link type">
                         <select
                           id={`integration-type-${integrationIndex}`}
                           className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
@@ -261,10 +258,7 @@ export function RestaurantIntegrationEditor({
                           ))}
                         </select>
                       </Field>
-                      <Field
-                        label="Customer-facing label"
-                        htmlFor={`integration-label-${integrationIndex}`}
-                      >
+                      <Field label="Customer-facing label">
                         <Input
                           id={`integration-label-${integrationIndex}`}
                           value={integration.label}
@@ -279,10 +273,7 @@ export function RestaurantIntegrationEditor({
                       </Field>
                     </div>
                     <div className="mt-4 grid gap-4 md:grid-cols-[1fr_180px]">
-                      <Field
-                        label="HTTPS destination"
-                        htmlFor={`integration-url-${integrationIndex}`}
-                      >
+                      <Field label="HTTPS destination">
                         <Input
                           id={`integration-url-${integrationIndex}`}
                           type="url"
@@ -298,11 +289,14 @@ export function RestaurantIntegrationEditor({
                           }
                         />
                       </Field>
-                      <Field label="Provider identity">
+                      <div className="grid gap-2">
+                        <p className="text-sm leading-none font-medium">
+                          Provider identity
+                        </p>
                         <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
                           {integration.provider ?? "Independent link"}
                         </div>
-                      </Field>
+                      </div>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <Button
@@ -369,10 +363,7 @@ export function RestaurantIntegrationEditor({
                     </div>
                   </>
                 ) : (
-                  <Field
-                    label="Localized customer-facing label"
-                    htmlFor={`translated-integration-${integrationIndex}`}
-                  >
+                  <Field label="Localized customer-facing label">
                     <Input
                       id={`translated-integration-${integrationIndex}`}
                       value={
@@ -465,23 +456,6 @@ export function RestaurantIntegrationEditor({
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
     </div>
   );
 }

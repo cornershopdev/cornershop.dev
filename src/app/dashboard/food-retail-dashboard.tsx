@@ -17,6 +17,7 @@ import { Brand } from "@/components/brand";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -982,7 +983,6 @@ export function FoodRetailDashboard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Eyebrow">
                     <Input
-                      aria-label={`${translation.locale} eyebrow`}
                       value={translation.eyebrow}
                       onChange={(event) =>
                         changeTranslation(translation.locale, (next) => {
@@ -993,7 +993,6 @@ export function FoodRetailDashboard({
                   </Field>
                   <Field label="Pickup details">
                     <Input
-                      aria-label={`${translation.locale} pickup details`}
                       value={translation.attributes.pickupDetails}
                       onChange={(event) =>
                         changeTranslation(translation.locale, (next) => {
@@ -1004,7 +1003,6 @@ export function FoodRetailDashboard({
                   </Field>
                   <Field label="Description" className="sm:col-span-2">
                     <Textarea
-                      aria-label={`${translation.locale} description`}
                       value={translation.description}
                       onChange={(event) =>
                         changeTranslation(translation.locale, (next) => {
@@ -1138,7 +1136,6 @@ export function FoodRetailDashboard({
                           label={`Link ${integrationIndex + 1} label`}
                         >
                           <Input
-                            aria-label={`${translation.locale} link ${integrationIndex + 1} label`}
                             value={label}
                             onChange={(event) =>
                               changeTranslation(translation.locale, (next) => {
@@ -1167,23 +1164,6 @@ export function FoodRetailDashboard({
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  className,
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      <Label className="mb-2">{label}</Label>
-      {children}
     </div>
   );
 }
