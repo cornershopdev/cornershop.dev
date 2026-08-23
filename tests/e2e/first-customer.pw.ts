@@ -93,7 +93,7 @@ test("claim, paid webhook, sign-in, workspace selection, private save, atomic pu
     siteId: e2e.targetId,
   });
   await expect(
-    page.getByRole("heading", { name: `Good afternoon, ${e2e.targetName}.` }),
+    page.getByRole("heading", { name: `Welcome to ${e2e.targetName}.` }),
   ).toBeVisible();
 
   const replay = await request.post("/api/checkout", {
