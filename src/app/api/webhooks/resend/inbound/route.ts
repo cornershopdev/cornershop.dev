@@ -85,10 +85,10 @@ export async function POST(request: Request) {
       created: result.created,
       siteId: result.siteId,
     });
-  } catch (error) {
+  } catch {
     console.error("[resend-inbound-webhook] processing failed", {
       emailId: event.data.email_id,
-      error: error instanceof Error ? error.message : "unknown",
+      failure: "processing_failed",
     });
     await captureOperatorAlert({
       kind: "OUTREACH_SEND_FAILURE",

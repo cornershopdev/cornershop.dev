@@ -70,6 +70,7 @@ optional_parameters=(
   OPENROUTER_API_KEY
   OPENROUTER_IMAGE_MODEL
   OPENROUTER_TEXT_MODEL
+  OUTREACH_INBOUND_FORWARD_TO
   PHOTO_DISCOVERY_MAX_IMAGES
   PHOTO_ENHANCEMENT_BATCH_MAX_IMAGES
   PHOTO_ENHANCEMENT_CONCURRENCY
@@ -278,11 +279,15 @@ monitor_service="/etc/systemd/system/cornershopdev-public-health.service"
 monitor_timer="/etc/systemd/system/cornershopdev-public-health.timer"
 alert_service="/etc/systemd/system/cornershopdev-operator-alerts.service"
 alert_timer="/etc/systemd/system/cornershopdev-operator-alerts.timer"
+forward_service="/etc/systemd/system/cornershopdev-inbound-forwards.service"
+forward_timer="/etc/systemd/system/cornershopdev-inbound-forwards.timer"
 temporary_monitor_service="$(mktemp /etc/systemd/system/cornershopdev-public-health.service.XXXXXX)"
 temporary_monitor_timer="$(mktemp /etc/systemd/system/cornershopdev-public-health.timer.XXXXXX)"
 temporary_alert_service="$(mktemp /etc/systemd/system/cornershopdev-operator-alerts.service.XXXXXX)"
 temporary_alert_timer="$(mktemp /etc/systemd/system/cornershopdev-operator-alerts.timer.XXXXXX)"
-trap 'rm -f "$temporary_environment" "$artifact_file" "$bootstrap_file" "$caddy_fragment_file" "$host_launcher_file" "$temporary_monitor_service" "$temporary_monitor_timer" "$temporary_alert_service" "$temporary_alert_timer"' EXIT
+temporary_forward_service="$(mktemp /etc/systemd/system/cornershopdev-inbound-forwards.service.XXXXXX)"
+temporary_forward_timer="$(mktemp /etc/systemd/system/cornershopdev-inbound-forwards.timer.XXXXXX)"
+trap 'rm -f "$temporary_environment" "$artifact_file" "$bootstrap_file" "$caddy_fragment_file" "$host_launcher_file" "$temporary_monitor_service" "$temporary_monitor_timer" "$temporary_alert_service" "$temporary_alert_timer" "$temporary_forward_service" "$temporary_forward_timer"' EXIT
 
 {
   printf '%s\n' '[Unit]'
@@ -330,12 +335,38 @@ trap 'rm -f "$temporary_environment" "$artifact_file" "$bootstrap_file" "$caddy_
   printf '%s\n' 'WantedBy=timers.target'
 } >"$temporary_alert_timer"
 
+{
+  printf '%s\n' '[Unit]'
+  printf '%s\n' 'Description=Dispatch due Cornershopdev inbound read copies'
+  printf '%s\n' 'After=docker.service network-online.target'
+  printf '%s\n' 'Wants=network-online.target'
+  printf '\n%s\n' '[Service]'
+  printf '%s\n' 'Type=oneshot'
+  printf '%s\n' 'TimeoutStartSec=55s'
+  printf '%s\n' "ExecStart=/usr/bin/docker run --rm --network shipshit --memory 256m --cpus 0.25 --env-file ${environment_file} --entrypoint bun ${image_name} run operator:dispatch-inbound-forwards"
+} >"$temporary_forward_service"
+
+{
+  printf '%s\n' '[Unit]'
+  printf '%s\n' 'Description=Dispatch Cornershopdev inbound read copies every minute'
+  printf '\n%s\n' '[Timer]'
+  printf '%s\n' 'OnBootSec=1min'
+  printf '%s\n' 'OnUnitActiveSec=1min'
+  printf '%s\n' 'RandomizedDelaySec=15s'
+  printf '%s\n' 'Persistent=true'
+  printf '\n%s\n' '[Install]'
+  printf '%s\n' 'WantedBy=timers.target'
+} >"$temporary_forward_timer"
+
 install -m 644 "$temporary_monitor_service" "$monitor_service"
 install -m 644 "$temporary_monitor_timer" "$monitor_timer"
 install -m 644 "$temporary_alert_service" "$alert_service"
 install -m 644 "$temporary_alert_timer" "$alert_timer"
+install -m 644 "$temporary_forward_service" "$forward_service"
+install -m 644 "$temporary_forward_timer" "$forward_timer"
 systemctl daemon-reload
 systemctl enable --now cornershopdev-public-health.timer >/dev/null
 systemctl enable --now cornershopdev-operator-alerts.timer >/dev/null
+systemctl enable --now cornershopdev-inbound-forwards.timer >/dev/null
 
 echo "Cornershopdev deployment is healthy: ${image_name}"

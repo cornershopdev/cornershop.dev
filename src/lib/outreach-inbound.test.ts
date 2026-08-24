@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
 
 const alerts: Array<Record<string, unknown>> = [];
 const auditEvents: Array<Record<string, unknown>> = [];
 const messages: Array<Record<string, unknown>> = [];
+const forwards: Array<Record<string, unknown>> = [];
+let transactionDepth = 0;
+let hideExistingInboundOutsideTransaction = false;
 const sites = [
   {
     id: "site_1",
+    name: "Chez Léa",
     slug: "chez-lea",
     email: "bonjour@chez-lea.test",
     leadContactEmail: "owner@chez-lea.test",
@@ -59,19 +63,34 @@ mock.module("@/lib/db", () => ({
 const fakeDb = {
   $queryRaw: async () => [],
   $executeRaw: async () => 0,
-  $transaction: async (callback: (transaction: object) => unknown) =>
-    callback(fakeDb),
+  $transaction: async (callback: (transaction: object) => unknown) => {
+    transactionDepth += 1;
+    try {
+      return await callback(fakeDb);
+    } finally {
+      transactionDepth -= 1;
+    }
+  },
   outreachMessage: {
     findUnique: async (input: {
       where: { providerMessageId?: string; rfcMessageId?: string };
-    }) =>
-      messages.find(
+    }) => {
+      const found = messages.find(
         (message) =>
           (input.where.providerMessageId &&
             message.providerMessageId === input.where.providerMessageId) ||
           (input.where.rfcMessageId &&
             message.rfcMessageId === input.where.rfcMessageId),
-      ) ?? null,
+      ) ?? null;
+      if (
+        hideExistingInboundOutsideTransaction &&
+        transactionDepth === 0 &&
+        found?.direction === "INBOUND"
+      ) {
+        return null;
+      }
+      return found;
+    },
     findFirst: async (input: {
       where: {
         OR?: Array<Record<string, unknown>>;
@@ -114,6 +133,11 @@ const fakeDb = {
     },
   },
   site: {
+    findUniqueOrThrow: async (input: { where: { id: string } }) => {
+      const site = sites.find((candidate) => candidate.id === input.where.id);
+      if (!site) throw new Error("fixture site missing");
+      return site;
+    },
     findFirst: async (input: {
       where: {
         leadContactEmail?: string;
@@ -173,15 +197,56 @@ const fakeDb = {
       return input.data;
     },
   },
+  outreachInboundForward: {
+    upsert: async (input: {
+      where: { outreachMessageId: string };
+      create: Record<string, unknown>;
+    }) => {
+      const existing = forwards.find(
+        (forward) =>
+          forward.outreachMessageId === input.where.outreachMessageId,
+      );
+      if (existing) return existing;
+      const created = {
+        id: `forward_${forwards.length + 1}`,
+        attempts: 0,
+        targetAddress: null,
+        status: "PENDING",
+        createdInsideTransaction: transactionDepth > 0,
+        ...input.create,
+      };
+      forwards.push(created);
+      return created;
+    },
+    updateMany: async (input: {
+      where: { id: string; targetAddress?: null };
+      data: Record<string, unknown>;
+    }) => {
+      const forward = forwards.find(
+        (candidate) =>
+          candidate.id === input.where.id &&
+          (input.where.targetAddress !== null ||
+            candidate.targetAddress === null),
+      );
+      if (!forward) return { count: 0 };
+      Object.assign(forward, input.data);
+      return { count: 1 };
+    },
+  },
 };
 
 const { recordInboundOutreachMessage } = await import("@/lib/outreach-inbound");
+const previousForwardTarget = process.env.OUTREACH_INBOUND_FORWARD_TO;
 
 describe("inbound outreach mailbox", () => {
   beforeEach(() => {
     alerts.length = 0;
     auditEvents.length = 0;
     messages.length = 0;
+    forwards.length = 0;
+    transactionDepth = 0;
+    hideExistingInboundOutsideTransaction = false;
+    delete process.env.OUTREACH_INBOUND_FORWARD_TO;
     fetchReceived.mockClear();
     messages.push({
       id: "outreach_abc",
@@ -191,6 +256,14 @@ describe("inbound outreach mailbox", () => {
       providerMessageId: "resend_message_1",
       threadKey: "lead:site_1",
     });
+  });
+
+  afterAll(() => {
+    if (previousForwardTarget === undefined) {
+      delete process.env.OUTREACH_INBOUND_FORWARD_TO;
+    } else {
+      process.env.OUTREACH_INBOUND_FORWARD_TO = previousForwardTarget;
+    }
   });
 
   it("matches In-Reply-To, stores RECEIVED mail, and alerts the operator", async () => {
@@ -224,6 +297,62 @@ describe("inbound outreach mailbox", () => {
       "outreach.inbound.received",
     ]);
     expect(alerts[0]).toMatchObject({ kind: "OUTREACH_REPLY" });
+    expect(forwards).toHaveLength(0);
+  });
+
+  it("commits one forward intent atomically with the inbound mailbox row", async () => {
+    process.env.OUTREACH_INBOUND_FORWARD_TO = " Operator@Example.test ";
+
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_forward",
+      occurredAt: new Date("2026-08-19T09:00:00.000Z"),
+      metadata: {
+        emailId: "recv_1",
+        from: "owner@chez-lea.test",
+        to: ["vincent@restofront.com"],
+        subject: "Re: preview",
+        rfcMessageId: "<reply@chez-lea.test>",
+        receivedFor: ["vincent@restofront.com"],
+      },
+    });
+
+    expect(result).toMatchObject({ handled: true, created: true });
+    expect(forwards).toEqual([
+      expect.objectContaining({
+        outreachMessageId: "inbound_1",
+        idempotencyKey: "outreach-inbound-forward:inbound_1",
+        targetAddress: "operator@example.test",
+        siteName: "Chez Léa",
+        siteSlug: "chez-lea",
+        createdInsideTransaction: true,
+      }),
+    ]);
+  });
+
+  it("persists ingestion and a blocked intent when the configured target is unsafe", async () => {
+    process.env.OUTREACH_INBOUND_FORWARD_TO =
+      "vincent+loop@restofront.com";
+
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_unsafe_forward",
+      occurredAt: new Date("2026-08-19T09:00:00.000Z"),
+      metadata: {
+        emailId: "recv_1",
+        from: "owner@chez-lea.test",
+        to: ["vincent@restofront.com"],
+        subject: "Re: preview",
+        rfcMessageId: "<reply@chez-lea.test>",
+        receivedFor: ["vincent@restofront.com"],
+      },
+    });
+
+    expect(result).toMatchObject({ handled: true, created: true });
+    expect(messages.at(-1)).toMatchObject({ direction: "INBOUND" });
+    expect(forwards[0]).toMatchObject({
+      targetAddress: null,
+      lastFailureCode: "configuration_invalid",
+      createdInsideTransaction: true,
+    });
   });
 
   it("matches a headerless reply only by the private lead recipient", async () => {
@@ -298,10 +427,13 @@ describe("inbound outreach mailbox", () => {
   });
 
   it("is idempotent on the provider receiving id", async () => {
+    process.env.OUTREACH_INBOUND_FORWARD_TO = "operator@example.test";
     messages.push({
       id: "inbound_existing",
       siteId: "site_1",
       providerMessageId: "recv_1",
+      fromAddress: "owner@chez-lea.test",
+      toAddress: "vincent@restofront.com",
     });
     const result = await recordInboundOutreachMessage({
       eventId: "svix_1",
@@ -324,6 +456,50 @@ describe("inbound outreach mailbox", () => {
       messageId: "inbound_existing",
     });
     expect(fetchReceived).not.toHaveBeenCalled();
+    expect(forwards).toHaveLength(1);
+    expect(forwards[0]).toMatchObject({
+      outreachMessageId: "inbound_existing",
+      targetAddress: "operator@example.test",
+    });
+  });
+
+  it("repairs a missing intent when the duplicate appears inside the transaction", async () => {
+    process.env.OUTREACH_INBOUND_FORWARD_TO = "operator@example.test";
+    messages.push({
+      id: "inbound_racing",
+      siteId: "site_1",
+      direction: "INBOUND",
+      providerMessageId: "recv_1",
+      fromAddress: "owner@chez-lea.test",
+      toAddress: "vincent@restofront.com",
+    });
+    hideExistingInboundOutsideTransaction = true;
+
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_race",
+      occurredAt: new Date("2026-08-19T09:00:00.000Z"),
+      metadata: {
+        emailId: "recv_1",
+        from: "owner@chez-lea.test",
+        to: ["vincent@restofront.com"],
+        subject: "Re: preview",
+        rfcMessageId: "<reply@chez-lea.test>",
+        receivedFor: [],
+      },
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      created: false,
+      messageId: "inbound_racing",
+    });
+    expect(forwards).toEqual([
+      expect.objectContaining({
+        outreachMessageId: "inbound_racing",
+        targetAddress: "operator@example.test",
+        createdInsideTransaction: true,
+      }),
+    ]);
   });
 
   it("retries when Resend has not published the received body yet", async () => {

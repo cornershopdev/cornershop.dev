@@ -17,6 +17,7 @@ import { emailReplyTo } from "@/lib/email-identity";
 import { listOutreachVerticals } from "@/lib/lead-generation/registry";
 import type { VerticalId } from "@/lib/verticals/types";
 import { lockOutreachDelivery, lockOutreachSite } from "@/lib/outreach-lock";
+import { enqueueOutreachInboundForward } from "@/lib/outreach-inbound-forward";
 
 export type RecordInboundOutreachResult = {
   handled: boolean;
@@ -43,9 +44,15 @@ export async function recordInboundOutreachMessage(input: {
   const db = getDb();
   const existing = await db.outreachMessage.findUnique({
     where: { providerMessageId: input.metadata.emailId },
-    select: { id: true, siteId: true },
+    select: { id: true, siteId: true, fromAddress: true, toAddress: true },
   });
   if (existing) {
+    await enqueueOutreachInboundForward(db, {
+      outreachMessageId: existing.id,
+      siteId: existing.siteId,
+      fromAddress: existing.fromAddress,
+      toAddress: existing.toAddress,
+    });
     return {
       handled: true,
       created: false,
@@ -127,9 +134,22 @@ export async function recordInboundOutreachMessage(input: {
       await lockOutreachSite(tx, matched.siteId);
       const duplicate = await tx.outreachMessage.findUnique({
         where: { providerMessageId: input.metadata.emailId },
-        select: { id: true, siteId: true },
+        select: {
+          id: true,
+          siteId: true,
+          fromAddress: true,
+          toAddress: true,
+        },
       });
-      if (duplicate) return { created: false as const, message: duplicate };
+      if (duplicate) {
+        await enqueueOutreachInboundForward(tx, {
+          outreachMessageId: duplicate.id,
+          siteId: duplicate.siteId,
+          fromAddress: duplicate.fromAddress,
+          toAddress: duplicate.toAddress,
+        });
+        return { created: false as const, message: duplicate };
+      }
 
       const created = await tx.outreachMessage.create({
         data: {
@@ -167,6 +187,12 @@ export async function recordInboundOutreachMessage(input: {
           createdAt: receivedAt,
         },
       });
+      await enqueueOutreachInboundForward(tx, {
+        outreachMessageId: created.id,
+        siteId: matched.siteId,
+        fromAddress,
+        toAddress,
+      });
       return { created: true as const, message: created };
     });
     if (!persisted.created) {
@@ -200,9 +226,15 @@ export async function recordInboundOutreachMessage(input: {
   } catch (error) {
     const duplicate = await db.outreachMessage.findUnique({
       where: { providerMessageId: input.metadata.emailId },
-      select: { id: true, siteId: true },
+      select: { id: true, siteId: true, fromAddress: true, toAddress: true },
     });
     if (duplicate) {
+      await enqueueOutreachInboundForward(db, {
+        outreachMessageId: duplicate.id,
+        siteId: duplicate.siteId,
+        fromAddress: duplicate.fromAddress,
+        toAddress: duplicate.toAddress,
+      });
       return {
         handled: true,
         created: false,

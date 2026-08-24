@@ -27,6 +27,7 @@
     "operator:preflight-first-customer-migration": "bun scripts/preflight-first-customer-migration.ts",
     "leads:discover": "bun scripts/discover-leads.ts",
     "operator:dispatch-alerts": "bun scripts/dispatch-operator-alerts.ts",
+    "operator:dispatch-inbound-forwards": "bun scripts/dispatch-inbound-forwards.ts",
     "operator:monitor-public-site": "bun scripts/monitor-public-site.ts",
     "operator:preflight-outreach": "bun scripts/preflight-outreach.ts",
     "operator:preflight-platform-edge": "bun scripts/preflight-platform-edge.ts",
