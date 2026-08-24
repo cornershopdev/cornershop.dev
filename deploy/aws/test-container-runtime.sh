@@ -61,8 +61,8 @@ if [[ "$node_version" != "v24.19.0" ]]; then
   printf 'Expected Node v24.19.0, got %q\n' "$node_version" >&2
   exit 1
 fi
-if [[ "$bun_version" != "1.3.14" ]]; then
-  printf 'Expected Bun 1.3.14, got %q\n' "$bun_version" >&2
+if [[ "$bun_version" != "1.4.0" ]]; then
+  printf 'Expected Bun 1.4.0, got %q\n' "$bun_version" >&2
   exit 1
 fi
 if [[ "$node_executable" != "$expected_node_executable" ]]; then

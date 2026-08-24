@@ -487,7 +487,7 @@ production instance. See `production-release.md` for the complete state model
 and exact gates.
 
 The candidate image installs dependencies and runs migrations/operator commands
-with Bun 1.3.14, but both the Next.js production build and standalone web server
+with Bun 1.4.0, but both the Next.js production build and standalone web server
 run on the fully pinned Node.js 24.19.0 LTS Alpine image. CI starts the exact
 candidate image, confirms both runtime versions and the Node PID 1 executable,
 then exercises public, sign-in, Better Auth session, and unauthenticated
