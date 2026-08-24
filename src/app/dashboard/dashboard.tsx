@@ -17,7 +17,6 @@ import {
   Link2,
   LoaderCircle,
   Mail,
-  MoreHorizontal,
   Newspaper,
   Palette,
   RefreshCcw,
@@ -69,6 +68,7 @@ import {
   restaurantDraftSchema,
   type RestaurantDraft,
 } from "@/lib/restaurant";
+import { buildRestaurantDashboardOverview } from "@/lib/restaurant-dashboard-overview";
 import {
   applyRestaurantIntegrationMutation,
   validateRestaurantIntegrations,
@@ -227,8 +227,17 @@ export function Dashboard({
       ? `https://${domainSetup.hostname}`
       : platformUrl;
   const siteHref = isPublished ? liveUrl : ownerPreviewHref(draft.slug);
-  // Ordering integrations are the portable hook for optional owner apps
-  // (e.g. Servizo Pulse). Keep them generic so demos can leave the factory.
+  const overview = buildRestaurantDashboardOverview(draft);
+  const launchChecklist = [
+    { label: "Menu has items", complete: overview.menuComplete },
+    { label: "Booking link enabled", complete: overview.bookingComplete },
+    { label: "Owner account claimed", complete: !demo },
+    { label: "Site published", complete: isPublished },
+    {
+      label: "Custom domain connected",
+      complete: Boolean(domainSetup?.verified),
+    },
+  ];
   const connectedApps = draft.integrations.filter(
     (integration) =>
       integration.enabled !== false &&
@@ -889,10 +898,9 @@ export function Dashboard({
         <div className="flex items-center gap-5">
           <Brand {...brand} />
           <span className="hidden h-5 w-px bg-border sm:block" />
-          <button className="hidden items-center gap-2 text-sm font-medium sm:flex">
+          <span className="hidden max-w-56 truncate text-sm font-medium sm:block">
             {draft.name}
-            <MoreHorizontal className="size-4 text-muted-foreground" />
-          </button>
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <Badge
@@ -900,7 +908,7 @@ export function Dashboard({
             className="hidden rounded-full bg-emerald-500/10 text-emerald-700 sm:inline-flex"
           >
             <span className="size-1.5 rounded-full bg-emerald-500" />
-            Preview ready
+            Preview available
           </Badge>
           <Button
             render={
@@ -1038,20 +1046,15 @@ export function Dashboard({
             <TabsContent value="overview" className="mt-0">
               <PageHeading
                 eyebrow="Restaurant overview"
-                title={`Good afternoon, ${draft.name}.`}
-                copy={`Everything guests see, and everything ${brand.name} is watching.`}
+                title={`Welcome to ${draft.name}.`}
+                copy="Review your website content and publishing progress."
               />
               <div className="mt-8 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
                 <Card className="overflow-hidden py-0">
                   <div className="grid md:grid-cols-[1fr_230px]">
                     <div className="p-6">
                       <div className="flex items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className="bg-emerald-500/10 text-emerald-700"
-                        >
-                          <Check /> Preview healthy
-                        </Badge>
+                        <Badge variant="outline">Preview available</Badge>
                         <Badge variant="outline">Mobile-first</Badge>
                       </div>
                       <h2 className="font-display mt-6 text-4xl tracking-[-0.04em]">
@@ -1069,9 +1072,6 @@ export function Dashboard({
                         >
                           {isPublished ? "Open live site" : "Open preview"}{" "}
                           <ArrowUpRight />
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Edit homepage
                         </Button>
                         {connectedApps.map((app) => (
                           <Button
@@ -1115,26 +1115,28 @@ export function Dashboard({
                     <CardTitle className="text-sm">Launch checklist</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {[
-                      ["Menu imported", true],
-                      ["Booking link preserved", true],
-                      ["Owner account claimed", !demo],
-                      ["Site published", isPublished],
-                      ["Custom domain connected", Boolean(domainSetup?.verified)],
-                    ].map(([label, done]) => (
+                    {launchChecklist.map(({ label, complete }) => (
                       <div
-                        key={label as string}
+                        key={label}
                         className="flex items-center justify-between text-sm"
                       >
-                        <span>{label as string}</span>
-                        <span
-                          className={`grid size-5 place-items-center rounded-full ${
-                            done
-                              ? "bg-emerald-500/12 text-emerald-700"
-                              : "border text-muted-foreground"
-                          }`}
-                        >
-                          {done ? <Check className="size-3" /> : null}
+                        <span>{label}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="sr-only">
+                            {complete ? "Complete" : "Incomplete"}
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            className={`grid size-5 place-items-center rounded-full ${
+                              complete
+                                ? "bg-emerald-500/12 text-emerald-700"
+                                : "border text-muted-foreground"
+                            }`}
+                          >
+                            {complete ? (
+                              <Check aria-hidden="true" className="size-3" />
+                            ) : null}
+                          </span>
                         </span>
                       </div>
                     ))}
@@ -1142,8 +1144,20 @@ export function Dashboard({
                 </Card>
               </div>
               <div className="mt-5 grid gap-5 md:grid-cols-3">
-                <Metric label="Menu items" value={`${draft.menuSections.reduce((sum, section) => sum + section.items.length, 0)}`} detail={`${draft.menuSections.length} sections`} />
-                <Metric label="Preserved systems" value={`${draft.integrations.length}`} detail="No migrations required" />
+                <Metric
+                  label="Menu items"
+                  value={`${overview.menuItemCount}`}
+                  detail={`${overview.menuSectionCount} ${
+                    overview.menuSectionCount === 1 ? "section" : "sections"
+                  }`}
+                />
+                <Metric
+                  label="Enabled links"
+                  value={`${overview.enabledLinkCount}`}
+                  detail={`${
+                    overview.enabledLinkCount === 1 ? "Link" : "Links"
+                  } currently enabled`}
+                />
                 <Metric
                   label="Last source check"
                   value={sourceMonitoring.lastSuccessAt ? "Completed" : "Pending"}
@@ -1514,7 +1528,7 @@ export function Dashboard({
               <PageHeading
                 eyebrow="Go live"
                 title="Use your own domain (optional)."
-                copy="Your site is already live on a Restofront address. Connect a custom domain when you want guests to type your own name. Email and booking systems remain untouched."
+                copy="Connect a custom domain when you want guests to use your own address."
               />
               <Card className="mt-8">
                 <CardHeader>
