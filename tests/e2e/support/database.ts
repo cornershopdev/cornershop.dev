@@ -201,6 +201,64 @@ export async function cleanupFirstCustomerBrowserJourney() {
   await db.user.deleteMany({ where: { email: e2e.ownerEmail } });
 }
 
+async function seedCustomerDiscoveryArticle() {
+  const base = {
+    siteId: e2e.targetId,
+    locale: "en",
+    excerpt: "Seasonal notes from the first customer test kitchen.",
+    bodyMarkdown:
+      "## Around the table\n\nAn article used to verify customer-owned discovery output.",
+    topicKey: "seasonal-menu",
+    topicTitle: "Seasonal menu",
+  };
+  await getDb().article.createMany({
+    data: [
+      {
+        ...base,
+        slug: e2e.discoveryArticleSlug,
+        title: e2e.discoveryArticleTitle,
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-08-23T08:00:00.000Z"),
+        publishedBy: "browser-e2e",
+      },
+      {
+        ...base,
+        slug: "draft-must-stay-private",
+        title: "Draft must stay private",
+        status: "DRAFT",
+      },
+      {
+        ...base,
+        slug: "undated-must-stay-private",
+        title: "Undated must stay private",
+        status: "PUBLISHED",
+        publishedAt: null,
+      },
+    ],
+  });
+}
+
+async function activateCustomerDiscoveryDomain() {
+  const db = getDb();
+  await db.$transaction([
+    db.domain.create({
+      data: {
+        hostname: e2e.customHostname,
+        verificationToken: "first-customer-browser-domain-verification",
+        verified: true,
+        verifiedAt: new Date(),
+        tlsStatus: "READY",
+        tlsCheckedAt: new Date(),
+        siteId: e2e.targetId,
+      },
+    }),
+    db.site.update({
+      where: { id: e2e.targetId },
+      data: { status: "LIVE" },
+    }),
+  ]);
+}
+
 async function inspectFirstCustomerBrowserJourney() {
   const db = getDb();
   const [site, integrations] = await Promise.all([
@@ -249,8 +307,14 @@ try {
     await cleanupFirstCustomerBrowserJourney();
   } else if (command === "inspect") {
     console.log(JSON.stringify(await inspectFirstCustomerBrowserJourney()));
+  } else if (command === "seed-discovery") {
+    await seedCustomerDiscoveryArticle();
+  } else if (command === "activate-custom-domain") {
+    await activateCustomerDiscoveryDomain();
   } else {
-    throw new Error("Use seed, inspect, or cleanup.");
+    throw new Error(
+      "Use seed, inspect, cleanup, seed-discovery, or activate-custom-domain.",
+    );
   }
 } finally {
   await getDb()

@@ -21,6 +21,13 @@ export type PublishedArticle = {
   publishedAt: Date;
 };
 
+export type PublishedArticleSummary = Omit<PublishedArticle, "bodyMarkdown">;
+
+// Protocol ceiling for one sitemap file. Root sitemap construction reserves
+// its non-article entries before it slices; the dedicated blog sitemap may use
+// this complete budget.
+export const CUSTOMER_SITEMAP_ARTICLE_LIMIT = 50_000;
+
 export async function listPublishedArticles(input: {
   slug: string;
   versionId: string | null;
@@ -55,6 +62,46 @@ export async function listPublishedArticles(input: {
             title: row.title,
             excerpt: row.excerpt,
             bodyMarkdown: row.bodyMarkdown,
+            locale: row.locale,
+            publishedAt: row.publishedAt,
+          },
+        ]
+      : [],
+  );
+}
+
+/**
+ * Complete published-article projection for discovery surfaces.
+ *
+ * The reader used by the on-page blog and RSS is deliberately short. Sitemaps
+ * have a different contract: omitting article 101 makes older public content
+ * undiscoverable, so this projection uses the protocol limit and avoids loading
+ * article bodies that sitemap generation never consumes.
+ */
+export async function listPublishedArticlesForSitemap(input: {
+  slug: string;
+  versionId: string | null;
+}): Promise<PublishedArticleSummary[]> {
+  if (!input.versionId) return [];
+  const rows = await getDb().article.findMany({
+    where: publishedArticleWhere(input.slug),
+    orderBy: [{ publishedAt: "desc" }, { slug: "asc" }],
+    take: CUSTOMER_SITEMAP_ARTICLE_LIMIT,
+    select: {
+      slug: true,
+      title: true,
+      excerpt: true,
+      locale: true,
+      publishedAt: true,
+    },
+  });
+  return rows.flatMap((row) =>
+    row.publishedAt
+      ? [
+          {
+            slug: row.slug,
+            title: row.title,
+            excerpt: row.excerpt,
             locale: row.locale,
             publishedAt: row.publishedAt,
           },
@@ -104,4 +151,12 @@ export async function getPublishedArticle(input: {
  */
 export function articleCacheTagFor(slug: string): string {
   return `${previewCacheTagFor(slug)}:articles`;
+}
+
+function publishedArticleWhere(slug: string) {
+  return {
+    site: { slug },
+    status: "PUBLISHED" as const,
+    publishedAt: { not: null },
+  };
 }

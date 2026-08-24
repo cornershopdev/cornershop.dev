@@ -59,14 +59,14 @@ describe("customer host isolation", () => {
     expect(
       decideCustomerHostRoute({
         hostname: "example.com",
-        pathname: "/fr",
+        pathname: "/fr-ca",
         records,
       }),
     ).toEqual({
       kind: "page",
       slug: "chez-lea",
       versionId: "version_1",
-      locale: "fr",
+      locale: "fr-CA",
     });
     expect(
       decideCustomerHostRoute({
@@ -113,6 +113,13 @@ describe("customer host isolation", () => {
       "/api/sites/another/booking-requests",
       "/blog/a/b",
       "/blog/a/b/c",
+      "/robots.txt/extra",
+      "/sitemap.xml.bak",
+      "/foo/sitemap.xml",
+      "/blog/robots.txt",
+      "/blog/rss.xml/extra",
+      "/blog/sitemap.xml/extra",
+      "/preview/chez-lea/blog/rss.xml",
     ]) {
       expect(
         decideCustomerHostRoute({
@@ -150,6 +157,28 @@ describe("customer host isolation", () => {
       versionId: "version_1",
       articleSlug: "seasonal-menu-update",
     });
+  });
+
+  it("serves only the four literal customer discovery resources", () => {
+    const records = livePair();
+    for (const [pathname, kind] of [
+      ["/robots.txt", "robots"],
+      ["/sitemap.xml", "root_sitemap"],
+      ["/blog/sitemap.xml", "blog_sitemap"],
+      ["/blog/rss.xml", "rss"],
+    ] as const) {
+      expect(
+        decideCustomerHostRoute({
+          hostname: "example.com",
+          pathname,
+          records,
+        }),
+      ).toEqual({
+        kind,
+        slug: "chez-lea",
+        versionId: "version_1",
+      });
+    }
   });
 
   it("permanently canonicalizes a verified www alias", () => {
@@ -269,14 +298,14 @@ describe("platform subdomain isolation", () => {
     expect(
       decidePlatformSubdomainRoute({
         hostname: "chez-lea.restofront.com",
-        pathname: "/fr",
+        pathname: "/FR-ca",
         site: claimedSite(),
       }),
     ).toEqual({
       kind: "page",
       slug: "chez-lea",
       versionId: "version_1",
-      locale: "fr",
+      locale: "fr-CA",
     });
     expect(
       decidePlatformSubdomainRoute({
@@ -310,6 +339,13 @@ describe("platform subdomain isolation", () => {
       "/api/admin",
       "/api/domains",
       "/api/sites/another/booking-requests",
+      "/robots.txt/extra",
+      "/sitemap.xml.bak",
+      "/foo/sitemap.xml",
+      "/blog/robots.txt",
+      "/blog/rss.xml/extra",
+      "/blog/sitemap.xml/extra",
+      "/preview/chez-lea/blog/rss.xml",
     ]) {
       expect(
         decidePlatformSubdomainRoute({
@@ -318,6 +354,27 @@ describe("platform subdomain isolation", () => {
           site: claimedSite(),
         }),
       ).toEqual({ kind: "not_found" });
+    }
+  });
+
+  it("serves discovery resources on a published platform subdomain", () => {
+    for (const [pathname, kind] of [
+      ["/robots.txt", "robots"],
+      ["/sitemap.xml", "root_sitemap"],
+      ["/blog/sitemap.xml", "blog_sitemap"],
+      ["/blog/rss.xml", "rss"],
+    ] as const) {
+      expect(
+        decidePlatformSubdomainRoute({
+          hostname: "chez-lea.restofront.com",
+          pathname,
+          site: claimedSite(),
+        }),
+      ).toEqual({
+        kind,
+        slug: "chez-lea",
+        versionId: "version_1",
+      });
     }
   });
 

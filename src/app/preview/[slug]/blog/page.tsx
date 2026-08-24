@@ -8,17 +8,34 @@ import {
   listPublishedArticles,
   type PublishedArticle,
 } from "@/lib/articles/public-articles";
-import { liveSiteVersionId } from "@/lib/site-surface";
+import { buildCustomerBlogMetadata } from "@/lib/customer-article-discovery";
+import { getSiteLocales } from "@/lib/site-draft";
+import { liveSiteContext, liveSiteVersionId } from "@/lib/site-surface";
+import { getCachedPublishedSiteView } from "@/lib/sites";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateMetadata({}: PageProps): Promise<Metadata> {
-  return {
-    robots: { index: true, follow: true },
-    alternates: { canonical: "/blog" },
-  };
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const live = liveSiteContext(await headers());
+  if (!live || live.slug !== slug) {
+    return { robots: { index: false, follow: false } };
+  }
+  const site = await getCachedPublishedSiteView(slug, live.versionId);
+  if (!site) return { robots: { index: false, follow: false } };
+  return buildCustomerBlogMetadata({
+    origin: live.origin,
+    site: {
+      name: site.draft.name,
+      description: site.draft.description,
+      defaultLocale: site.draft.defaultLocale,
+      locales: getSiteLocales(site.draft),
+    },
+  });
 }
 
 export default async function BlogIndexPage({ params }: PageProps) {
@@ -29,12 +46,15 @@ export default async function BlogIndexPage({ params }: PageProps) {
   // articles are a published-site feature, so previews get nothing.
   if (!versionId) notFound();
 
-  const articles = await loadCachedArticles(slug, versionId);
-  if (!articles.length) notFound();
+  const [site, articles] = await Promise.all([
+    getCachedPublishedSiteView(slug, versionId),
+    loadCachedArticles(slug, versionId),
+  ]);
+  if (!site || !articles.length) notFound();
 
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-16">
-      <h1 className="text-3xl font-semibold">Blog</h1>
+      <h1 className="text-3xl font-semibold">{site.draft.name} Blog</h1>
       <ul className="mt-10 space-y-10">
         {articles.map((article) => (
           <li key={article.slug}>
