@@ -1,6 +1,9 @@
 import { headers } from "next/headers";
 import { listPublishedArticles } from "@/lib/articles/public-articles";
-import { liveSiteVersionId } from "@/lib/site-surface";
+import { buildCustomerRss } from "@/lib/customer-article-discovery";
+import { getSiteLocales } from "@/lib/site-draft";
+import { liveSiteContext } from "@/lib/site-surface";
+import { getCachedPublishedSiteView } from "@/lib/sites";
 
 /**
  * RSS 2.0 feed for a site's published articles. Like the blog sitemap, it
@@ -9,42 +12,45 @@ import { liveSiteVersionId } from "@/lib/site-surface";
  * route exists uniformly.
  */
 export async function GET(): Promise<Response> {
-  const requestHeaders = await headers();
-  const slug = requestHeaders.get("x-cornershop-live-site-slug");
-  const versionId = slug ? liveSiteVersionId(requestHeaders, slug) : null;
-  const articles =
-    slug && versionId
-      ? await listPublishedArticles({ slug, versionId, limit: 20 })
-      : [];
+  const live = liveSiteContext(await headers());
+  if (!live) return rssResponse(emptyRss());
 
-  const escape = (value: string) =>
-    value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+  const [site, articles] = await Promise.all([
+    getCachedPublishedSiteView(live.slug, live.versionId),
+    listPublishedArticles({
+      slug: live.slug,
+      versionId: live.versionId,
+      limit: 20,
+    }),
+  ]);
+  if (!site) return new Response("Not found", { status: 404 });
 
-  const items = articles
-    .map(
-      (article) =>
-        `    <item>\n` +
-        `      <title>${escape(article.title)}</title>\n` +
-        `      <description>${escape(article.excerpt)}</description>\n` +
-        `      <link>/blog/${escape(article.slug)}</link>\n` +
-        `      <guid isPermaLink="false">${escape(article.slug)}</guid>\n` +
-        `      <pubDate>${article.publishedAt.toUTCString()}</pubDate>\n` +
-        `    </item>`,
-    )
-    .join("\n");
+  return rssResponse(
+    buildCustomerRss({
+      origin: live.origin,
+      site: {
+        name: site.draft.name,
+        description: site.draft.description,
+        defaultLocale: site.draft.defaultLocale,
+        locales: getSiteLocales(site.draft),
+      },
+      articles,
+    }),
+  );
+}
 
-  const xml =
+function rssResponse(xml: string): Response {
+  return new Response(xml, {
+    headers: { "Content-Type": "application/rss+xml; charset=utf-8" },
+  });
+}
+
+function emptyRss(): string {
+  return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<rss version="2.0"><channel>\n` +
     `  <title>Blog</title>\n` +
     `  <description>Latest articles</description>\n` +
-    `${items ? `\n${items}\n` : ""}` +
-    `</channel></rss>\n`;
-
-  return new Response(xml, {
-    headers: { "Content-Type": "application/rss+xml; charset=utf-8" },
-  });
+    `</channel></rss>\n`
+  );
 }

@@ -1,7 +1,13 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { buildCustomerRobots } from "@/lib/customer-article-discovery";
+import { liveSiteContext } from "@/lib/site-surface";
 import { resolveRequestOrigin } from "@/lib/verticals/request-site";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
+  const live = liveSiteContext(await headers());
+  if (live) return buildCustomerRobots(live.origin);
+
   return {
     rules: [
       {

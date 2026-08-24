@@ -2,12 +2,35 @@ import { getDb } from "@/lib/db";
 import { integrationUrlDigest } from "@/lib/evidence-digests";
 import { Vertical } from "@/generated/prisma/enums";
 import { hashClaimInvitationToken } from "@/lib/claim-invitations";
-import { sampleSiteDraft } from "@/lib/restaurant";
+import {
+  sampleSiteDraft,
+  type RestaurantSiteDraft,
+} from "@/lib/restaurant";
 import { siteDraftScalarData } from "@/lib/site-persistence";
 import { sampleFoodRetailDraft } from "@/lib/verticals/food-retail/fixtures";
 import { e2e } from "./fixtures";
 
 const e2eHeroUrl = `https://assets.example/first-customer/${e2e.targetSlug}/hero.jpg`;
+const e2eFrenchTranslation: RestaurantSiteDraft["translations"][number] = {
+  locale: "fr",
+  status: "current",
+  attributes: { cuisine: sampleSiteDraft.attributes.cuisine },
+  eyebrow: "Cuisine italienne de saison · La Valette",
+  description:
+    "Une osteria de quartier avec des pâtes maison, du poisson grillé au charbon et de longs déjeuners.",
+  catalogSections: sampleSiteDraft.catalogSections.map((section) => ({
+    name: section.name,
+    description: section.description,
+    items: section.items.map((item) => ({
+      name: item.name,
+      description: item.description,
+      attributes: { dietaryLabels: item.attributes.dietaryLabels },
+    })),
+  })),
+  integrationLabels: sampleSiteDraft.integrations.map(
+    (integration) => integration.label,
+  ),
+};
 
 export async function seedFirstCustomerBrowserJourney() {
   await cleanupFirstCustomerBrowserJourney();
@@ -60,7 +83,7 @@ export async function seedFirstCustomerBrowserJourney() {
       heroImageProvenance: "OWNER",
       autoEnhanceImages: sampleSiteDraft.autoEnhanceImages,
       defaultLocale: sampleSiteDraft.defaultLocale,
-      translations: sampleSiteDraft.translations,
+      translations: [e2eFrenchTranslation],
       businessHours: sampleSiteDraft.businessHours,
       draftTheme: { id: "warm" },
       draftThemeVersion: "legacy-v1",
@@ -201,6 +224,64 @@ export async function cleanupFirstCustomerBrowserJourney() {
   await db.user.deleteMany({ where: { email: e2e.ownerEmail } });
 }
 
+async function seedCustomerDiscoveryArticle() {
+  const base = {
+    siteId: e2e.targetId,
+    locale: "en",
+    excerpt: "Seasonal notes from the first customer test kitchen.",
+    bodyMarkdown:
+      "## Around the table\n\nAn article used to verify customer-owned discovery output.",
+    topicKey: "seasonal-menu",
+    topicTitle: "Seasonal menu",
+  };
+  await getDb().article.createMany({
+    data: [
+      {
+        ...base,
+        slug: e2e.discoveryArticleSlug,
+        title: e2e.discoveryArticleTitle,
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-08-23T08:00:00.000Z"),
+        publishedBy: "browser-e2e",
+      },
+      {
+        ...base,
+        slug: "draft-must-stay-private",
+        title: "Draft must stay private",
+        status: "DRAFT",
+      },
+      {
+        ...base,
+        slug: "undated-must-stay-private",
+        title: "Undated must stay private",
+        status: "PUBLISHED",
+        publishedAt: null,
+      },
+    ],
+  });
+}
+
+async function activateCustomerDiscoveryDomain() {
+  const db = getDb();
+  await db.$transaction([
+    db.domain.create({
+      data: {
+        hostname: e2e.customHostname,
+        verificationToken: "first-customer-browser-domain-verification",
+        verified: true,
+        verifiedAt: new Date(),
+        tlsStatus: "READY",
+        tlsCheckedAt: new Date(),
+        siteId: e2e.targetId,
+      },
+    }),
+    db.site.update({
+      where: { id: e2e.targetId },
+      data: { status: "LIVE" },
+    }),
+  ]);
+}
+
 async function inspectFirstCustomerBrowserJourney() {
   const db = getDb();
   const [site, integrations] = await Promise.all([
@@ -249,8 +330,14 @@ try {
     await cleanupFirstCustomerBrowserJourney();
   } else if (command === "inspect") {
     console.log(JSON.stringify(await inspectFirstCustomerBrowserJourney()));
+  } else if (command === "seed-discovery") {
+    await seedCustomerDiscoveryArticle();
+  } else if (command === "activate-custom-domain") {
+    await activateCustomerDiscoveryDomain();
   } else {
-    throw new Error("Use seed, inspect, or cleanup.");
+    throw new Error(
+      "Use seed, inspect, cleanup, seed-discovery, or activate-custom-domain.",
+    );
   }
 } finally {
   await getDb()

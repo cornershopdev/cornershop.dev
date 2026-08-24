@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { NextRequest } from "next/server";
+import { clearDomainLookupCache } from "@/lib/domain-lookup-cache";
+import type { PublishedDomainRecord } from "@/lib/domain-routing";
+import {
+  LIVE_SITE_ORIGIN_HEADER,
+  LIVE_SITE_SLUG_HEADER,
+  LIVE_SITE_VERSION_HEADER,
+} from "@/lib/site-surface";
 
 type PlatformSiteRow = {
   id: string;
@@ -15,7 +22,7 @@ type PlatformSiteRow = {
 } | null;
 
 let platformSite: PlatformSiteRow = null;
-let customDomainRows: unknown[] = [];
+let customDomainRows: PublishedDomainRecord[] = [];
 
 mock.module("@/lib/db", () => ({
   getDb: () => ({
@@ -92,6 +99,7 @@ describe("platform-subdomain routing", () => {
   beforeEach(() => {
     platformSite = null;
     customDomainRows = [];
+    clearDomainLookupCache();
   });
 
   it("serves a claimed site at its platform subdomain without DNS action", async () => {
@@ -103,12 +111,16 @@ describe("platform-subdomain routing", () => {
     expect(response.headers.get("x-cornershop-site-version")).toBe(VERSION_ID);
   });
 
-  it("rewrites localized platform paths onto the preview locale route", async () => {
+  it("canonicalizes localized platform paths onto the preview locale route", async () => {
     platformSite = claimedSite();
 
-    const response = await proxy(request("/fr", `${SLUG}.restofront.com`));
+    const response = await proxy(
+      request("/fr-ca", `${SLUG}.restofront.com`),
+    );
 
-    expect(await rewriteDestination(response)).toBe(`/preview/${SLUG}/fr`);
+    expect(await rewriteDestination(response)).toBe(
+      `/preview/${SLUG}/fr-CA`,
+    );
   });
 
   it("marks the rewritten request with the serving slug and version", async () => {
@@ -137,6 +149,7 @@ describe("platform-subdomain routing", () => {
           "x-forwarded-host": `${SLUG}.restofront.com`,
           "x-cornershop-live-site-slug": "someone-elses-site",
           "x-cornershop-live-site-version": "sv_fake",
+          "x-cornershop-live-site-origin": "https://attacker.example",
         },
       }),
     );
@@ -145,6 +158,11 @@ describe("platform-subdomain routing", () => {
     expect(
       response.headers.get(
         "x-middleware-request-x-cornershop-live-site-slug",
+      ),
+    ).toBeNull();
+    expect(
+      response.headers.get(
+        "x-middleware-request-x-cornershop-live-site-origin",
       ),
     ).toBeNull();
   });
@@ -196,6 +214,31 @@ describe("platform-subdomain routing", () => {
     expect(booking.headers.get("x-middleware-next")).toBe("1");
   });
 
+  it("routes all discovery resources with a platform-origin attestation", async () => {
+    platformSite = claimedSite();
+    const hostname = `${SLUG}.restofront.com`;
+    for (const [pathname, destination] of [
+      ["/robots.txt", null],
+      ["/sitemap.xml", null],
+      ["/blog/sitemap.xml", `/preview/${SLUG}/blog/sitemap.xml`],
+      ["/blog/rss.xml", `/preview/${SLUG}/blog/rss.xml`],
+    ] as const) {
+      const response = await proxy(request(pathname, hostname));
+      expect(response.status).toBe(200);
+      expect(await rewriteDestination(response)).toBe(destination);
+      if (destination === null) {
+        expect(response.headers.get("x-middleware-next")).toBe("1");
+      }
+      expect(forwardedHeader(response, LIVE_SITE_SLUG_HEADER)).toBe(SLUG);
+      expect(forwardedHeader(response, LIVE_SITE_VERSION_HEADER)).toBe(
+        VERSION_ID,
+      );
+      expect(forwardedHeader(response, LIVE_SITE_ORIGIN_HEADER)).toBe(
+        `https://${hostname}`,
+      );
+    }
+  });
+
   it("301s to the canonical verified custom domain once it exists", async () => {
     platformSite = claimedSite({
       status: "LIVE",
@@ -232,3 +275,107 @@ describe("platform-subdomain routing", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("custom-domain discovery routing", () => {
+  const hostname = "lepetitmeunier.example";
+
+  beforeEach(() => {
+    platformSite = null;
+    customDomainRows = [liveCustomDomain(hostname)];
+    clearDomainLookupCache();
+  });
+
+  it("serves and attests all four discovery resources", async () => {
+    for (const [pathname, destination] of [
+      ["/robots.txt", null],
+      ["/sitemap.xml", null],
+      ["/blog/sitemap.xml", `/preview/${SLUG}/blog/sitemap.xml`],
+      ["/blog/rss.xml", `/preview/${SLUG}/blog/rss.xml`],
+    ] as const) {
+      const response = await proxy(request(pathname, hostname));
+      expect(response.status).toBe(200);
+      expect(await rewriteDestination(response)).toBe(destination);
+      expect(forwardedHeader(response, LIVE_SITE_SLUG_HEADER)).toBe(SLUG);
+      expect(forwardedHeader(response, LIVE_SITE_VERSION_HEADER)).toBe(
+        VERSION_ID,
+      );
+      expect(forwardedHeader(response, LIVE_SITE_ORIGIN_HEADER)).toBe(
+        `https://${hostname}`,
+      );
+    }
+  });
+
+  it("canonicalizes a regional locale on a custom domain", async () => {
+    const response = await proxy(request("/FR-ca", hostname));
+
+    expect(await rewriteDestination(response)).toBe(
+      `/preview/${SLUG}/fr-CA`,
+    );
+    expect(forwardedHeader(response, LIVE_SITE_ORIGIN_HEADER)).toBe(
+      `https://${hostname}`,
+    );
+  });
+
+  it("overwrites a spoofed origin only after custom-host attestation", async () => {
+    const response = await proxy(
+      new NextRequest("http://localhost/blog/rss.xml", {
+        headers: {
+          "x-forwarded-host": hostname,
+          [LIVE_SITE_SLUG_HEADER]: "attacker",
+          [LIVE_SITE_VERSION_HEADER]: "sv_attacker",
+          [LIVE_SITE_ORIGIN_HEADER]: "https://attacker.example",
+        },
+      }),
+    );
+
+    expect(forwardedHeader(response, LIVE_SITE_SLUG_HEADER)).toBe(SLUG);
+    expect(forwardedHeader(response, LIVE_SITE_VERSION_HEADER)).toBe(
+      VERSION_ID,
+    );
+    expect(forwardedHeader(response, LIVE_SITE_ORIGIN_HEADER)).toBe(
+      `https://${hostname}`,
+    );
+  });
+
+  it("keeps nested, spoofed, and unrelated discovery-like paths denied", async () => {
+    for (const pathname of [
+      "/robots.txt/extra",
+      "/sitemap.xml.bak",
+      "/foo/sitemap.xml",
+      "/blog/robots.txt",
+      "/blog/rss.xml/extra",
+      "/blog/sitemap.xml/extra",
+      `/preview/${SLUG}/blog/rss.xml`,
+      "/blog/article/nested",
+      "/dashboard",
+      "/api/auth/session",
+    ]) {
+      const response = await proxy(request(pathname, hostname));
+      expect(response.status).toBe(404);
+      expect(await rewriteDestination(response)).toBeNull();
+      expect(forwardedHeader(response, LIVE_SITE_ORIGIN_HEADER)).toBeNull();
+    }
+  });
+});
+
+function forwardedHeader(response: Response, name: string): string | null {
+  return response.headers.get(`x-middleware-request-${name}`);
+}
+
+function liveCustomDomain(hostname: string): PublishedDomainRecord {
+  return {
+    hostname,
+    verified: true,
+    site: {
+      id: "site_1",
+      slug: SLUG,
+      status: "LIVE",
+      publishedSiteVersionId: VERSION_ID,
+      publishedSiteVersion: {
+        id: VERSION_ID,
+        siteId: "site_1",
+        publishedAt: new Date("2026-08-01T00:00:00Z"),
+      },
+    },
+  };
+}

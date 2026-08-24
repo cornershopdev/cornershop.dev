@@ -277,6 +277,17 @@ test("claim, paid webhook, sign-in, workspace selection, private save, atomic pu
     "site.published",
   ]);
 
+  await assertFactoryMetadata(request);
+
+  mutateDatabase("seed-discovery");
+  await assertCustomerDiscovery(
+    request,
+    `${e2e.targetSlug}.restofront.com`,
+  );
+
+  mutateDatabase("activate-custom-domain");
+  await assertCustomerDiscovery(request, e2e.customHostname);
+
   expect(
     await page.evaluate(async () =>
       fetch("/api/auth/logout", { method: "POST" }).then(
@@ -287,6 +298,166 @@ test("claim, paid webhook, sign-in, workspace selection, private save, atomic pu
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/sign-in/);
 });
+
+async function assertFactoryMetadata(request: APIRequestContext) {
+  const response = await request.get("http://127.0.0.1:3100/", {
+    headers: { "User-Agent": "facebookexternalhit" },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(200);
+  const head = htmlHead(await response.text());
+  expect(head).toContain(
+    'rel="icon" href="/brand/cornershopdev/favicon-32.png"',
+  );
+  expect(head).toContain(
+    'rel="apple-touch-icon" href="/brand/cornershopdev/apple-touch-icon.png"',
+  );
+}
+
+async function assertCustomerDiscovery(
+  request: APIRequestContext,
+  hostname: string,
+) {
+  const origin = `https://${hostname}`;
+  const requestOptions = {
+    // An HTML-limited crawler makes Next resolve metadata into <head> instead
+    // of streaming it after the initial document.
+    headers: { Host: hostname, "User-Agent": "facebookexternalhit" },
+    maxRedirects: 0,
+  } as const;
+
+  const robots = await request.get(
+    "http://127.0.0.1:3100/robots.txt",
+    requestOptions,
+  );
+  expect(robots.status()).toBe(200);
+  expect(robots.headers()["content-type"]).toContain("text/plain");
+  const robotsText = await robots.text();
+  expect(robotsText).toContain(`Sitemap: ${origin}/sitemap.xml`);
+  expect(robotsText).toContain(`Sitemap: ${origin}/blog/sitemap.xml`);
+  expect(robotsText).not.toContain("cornershop.dev");
+  expect(robotsText).not.toMatch(/^Sitemap: .*\/preview\//m);
+
+  const rootSitemap = await request.get(
+    "http://127.0.0.1:3100/sitemap.xml",
+    requestOptions,
+  );
+  expect(rootSitemap.status()).toBe(200);
+  expect(rootSitemap.headers()["content-type"]).toContain("application/xml");
+  const rootSitemapXml = await rootSitemap.text();
+  for (const url of [
+    `${origin}/`,
+    `${origin}/fr`,
+    `${origin}/blog`,
+    `${origin}/blog/${e2e.discoveryArticleSlug}`,
+  ]) {
+    expect(rootSitemapXml).toContain(`<loc>${url}</loc>`);
+  }
+  assertCustomerOwnedOutput(rootSitemapXml);
+  assertExcludedArticles(rootSitemapXml);
+
+  const blogSitemap = await request.get(
+    "http://127.0.0.1:3100/blog/sitemap.xml",
+    requestOptions,
+  );
+  expect(blogSitemap.status()).toBe(200);
+  expect(blogSitemap.headers()["content-type"]).toContain("application/xml");
+  const blogSitemapXml = await blogSitemap.text();
+  expect(blogSitemapXml).toContain(
+    `<loc>${origin}/blog/${e2e.discoveryArticleSlug}</loc>`,
+  );
+  assertCustomerOwnedOutput(blogSitemapXml);
+  assertExcludedArticles(blogSitemapXml);
+
+  const rss = await request.get(
+    "http://127.0.0.1:3100/blog/rss.xml",
+    requestOptions,
+  );
+  expect(rss.status()).toBe(200);
+  expect(rss.headers()["content-type"]).toContain("application/rss+xml");
+  const rssXml = await rss.text();
+  expect(rssXml).toContain(`<title>${e2e.editedName} Blog</title>`);
+  expect(rssXml).toContain(
+    `<guid isPermaLink="true">${origin}/blog/${e2e.discoveryArticleSlug}</guid>`,
+  );
+  assertCustomerOwnedOutput(rssXml);
+  assertExcludedArticles(rssXml);
+
+  const blog = await request.get(
+    "http://127.0.0.1:3100/blog",
+    requestOptions,
+  );
+  expect(blog.status()).toBe(200);
+  const blogHtml = await blog.text();
+  const blogHead = htmlHead(blogHtml);
+  expect(blogHead).toContain(`<title>${e2e.editedName} Blog</title>`);
+  expect(blogHead).toContain(`content="${e2e.editedName}"`);
+  expect(blogHead).toContain(
+    `property="og:site_name" content="${e2e.editedName}"`,
+  );
+  expect(blogHead).toContain(`href="${origin}/blog"`);
+  expect(blogHead).toContain(`content="${origin}/blog"`);
+  expect(blogHead).not.toMatch(/<link rel="(?:icon|apple-touch-icon)"/);
+  assertCustomerOwnedOutput(blogHead);
+  assertExcludedArticles(blogHtml);
+
+  const article = await request.get(
+    `http://127.0.0.1:3100/blog/${e2e.discoveryArticleSlug}`,
+    requestOptions,
+  );
+  expect(article.status()).toBe(200);
+  const articleHead = htmlHead(await article.text());
+  expect(articleHead).toContain(
+    `<title>${e2e.discoveryArticleTitle} — ${e2e.editedName}</title>`,
+  );
+  expect(articleHead).toContain(
+    `href="${origin}/blog/${e2e.discoveryArticleSlug}"`,
+  );
+  expect(articleHead).toContain(
+    `property="og:site_name" content="${e2e.editedName}"`,
+  );
+  expect(articleHead).not.toMatch(/<link rel="(?:icon|apple-touch-icon)"/);
+  assertCustomerOwnedOutput(articleHead);
+
+  for (const excludedSlug of [
+    "draft-must-stay-private",
+    "undated-must-stay-private",
+  ]) {
+    const excluded = await request.get(
+      `http://127.0.0.1:3100/blog/${excludedSlug}`,
+      requestOptions,
+    );
+    expect(excluded.status()).toBe(404);
+  }
+}
+
+function htmlHead(document: string): string {
+  const head = document.match(/<head>([\s\S]*?)<\/head>/)?.[1];
+  if (!head) throw new Error("Customer response did not contain a head");
+  return head;
+}
+
+function assertCustomerOwnedOutput(value: string) {
+  expect(value).not.toContain("cornershop.dev");
+  expect(value).not.toContain("/preview/");
+  expect(value).not.toContain("/brand/cornershopdev/");
+}
+
+function assertExcludedArticles(value: string) {
+  expect(value).not.toContain("draft-must-stay-private");
+  expect(value).not.toContain("Draft must stay private");
+  expect(value).not.toContain("undated-must-stay-private");
+  expect(value).not.toContain("Undated must stay private");
+}
+
+function mutateDatabase(
+  command: "seed-discovery" | "activate-custom-domain",
+) {
+  execFileSync("bun", ["tests/e2e/support/database.ts", command], {
+    env: process.env,
+    stdio: "inherit",
+  });
+}
 
 function inspectDatabase(): {
   draftRevision: number;

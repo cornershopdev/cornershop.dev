@@ -4,6 +4,7 @@ import {
   type PlatformSubdomain,
 } from "@/lib/hostnames";
 import type { VerticalId } from "@/lib/verticals/types";
+import { canonicalSiteLocale } from "@/lib/site-surface";
 
 export type DomainHostnamePlan = {
   canonicalHostname: string;
@@ -48,6 +49,26 @@ export type CustomerHostDecision =
       slug: string;
       versionId: string;
       articleSlug: string | null;
+    }
+  | {
+      kind: "robots";
+      slug: string;
+      versionId: string;
+    }
+  | {
+      kind: "root_sitemap";
+      slug: string;
+      versionId: string;
+    }
+  | {
+      kind: "blog_sitemap";
+      slug: string;
+      versionId: string;
+    }
+  | {
+      kind: "rss";
+      slug: string;
+      versionId: string;
     }
   | {
       kind: "public_api";
@@ -158,6 +179,14 @@ export function decideCustomerHostRoute(input: {
 
   const versionId = exact.site.publishedSiteVersionId;
   if (!versionId) return { kind: "not_found" };
+  if (
+    surface.kind === "robots" ||
+    surface.kind === "root_sitemap" ||
+    surface.kind === "blog_sitemap" ||
+    surface.kind === "rss"
+  ) {
+    return { kind: surface.kind, slug: exact.site.slug, versionId };
+  }
   if (surface.kind === "public_api") {
     return {
       kind: "public_api",
@@ -222,6 +251,14 @@ export function decidePlatformSubdomainRoute(input: {
 
   const versionId = input.site.publishedSiteVersionId;
   if (!versionId) return { kind: "not_found" };
+  if (
+    surface.kind === "robots" ||
+    surface.kind === "root_sitemap" ||
+    surface.kind === "blog_sitemap" ||
+    surface.kind === "rss"
+  ) {
+    return { kind: surface.kind, slug: input.site.slug, versionId };
+  }
   if (surface.kind === "public_api") {
     return {
       kind: "public_api",
@@ -343,10 +380,21 @@ function customerSurface(
   | { kind: "public_api" }
   | { kind: "opengraph" }
   | { kind: "blog"; articleSlug?: string }
+  | { kind: "robots" }
+  | { kind: "root_sitemap" }
+  | { kind: "blog_sitemap" }
+  | { kind: "rss" }
   | { kind: "blocked" } {
   if (pathname === "/") return { kind: "page", locale: null };
-  const locale = pathname.match(/^\/([a-z]{2})\/?$/i)?.[1];
-  if (locale) return { kind: "page", locale: locale.toLowerCase() };
+  const localeSegment = pathname.match(/^\/([^/]+)\/?$/)?.[1];
+  const locale = canonicalSiteLocale(localeSegment ?? "");
+  if (locale) return { kind: "page", locale };
+  // Discovery resources are literal allowlist entries. Similar-looking files,
+  // nested paths, and internal preview routes stay closed by default.
+  if (pathname === "/robots.txt") return { kind: "robots" };
+  if (pathname === "/sitemap.xml") return { kind: "root_sitemap" };
+  if (pathname === "/blog/sitemap.xml") return { kind: "blog_sitemap" };
+  if (pathname === "/blog/rss.xml") return { kind: "rss" };
   // The site's blog index and article pages. Only the exact two shapes below
   // are public; anything deeper (`/blog/a/b`) stays blocked.
   const blogIndex = pathname.match(/^\/blog\/?$/i);
@@ -380,5 +428,8 @@ function isSiteOgImagePath(pathname: string, slug: string): boolean {
     file === "twitter-image.png";
   if (!isOgFile) return false;
   if (segments.length === 3) return true;
-  return segments.length === 4 && /^[a-z]{2}$/i.test(segments[2] ?? "");
+  return (
+    segments.length === 4 &&
+    canonicalSiteLocale(segments[2] ?? "") !== null
+  );
 }
