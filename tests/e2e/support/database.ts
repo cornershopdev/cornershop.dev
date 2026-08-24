@@ -2,12 +2,35 @@ import { getDb } from "@/lib/db";
 import { integrationUrlDigest } from "@/lib/evidence-digests";
 import { Vertical } from "@/generated/prisma/enums";
 import { hashClaimInvitationToken } from "@/lib/claim-invitations";
-import { sampleSiteDraft } from "@/lib/restaurant";
+import {
+  sampleSiteDraft,
+  type RestaurantSiteDraft,
+} from "@/lib/restaurant";
 import { siteDraftScalarData } from "@/lib/site-persistence";
 import { sampleFoodRetailDraft } from "@/lib/verticals/food-retail/fixtures";
 import { e2e } from "./fixtures";
 
 const e2eHeroUrl = `https://assets.example/first-customer/${e2e.targetSlug}/hero.jpg`;
+const e2eFrenchTranslation: RestaurantSiteDraft["translations"][number] = {
+  locale: "fr",
+  status: "current",
+  attributes: { cuisine: sampleSiteDraft.attributes.cuisine },
+  eyebrow: "Cuisine italienne de saison · La Valette",
+  description:
+    "Une osteria de quartier avec des pâtes maison, du poisson grillé au charbon et de longs déjeuners.",
+  catalogSections: sampleSiteDraft.catalogSections.map((section) => ({
+    name: section.name,
+    description: section.description,
+    items: section.items.map((item) => ({
+      name: item.name,
+      description: item.description,
+      attributes: { dietaryLabels: item.attributes.dietaryLabels },
+    })),
+  })),
+  integrationLabels: sampleSiteDraft.integrations.map(
+    (integration) => integration.label,
+  ),
+};
 
 export async function seedFirstCustomerBrowserJourney() {
   await cleanupFirstCustomerBrowserJourney();
@@ -60,7 +83,7 @@ export async function seedFirstCustomerBrowserJourney() {
       heroImageProvenance: "OWNER",
       autoEnhanceImages: sampleSiteDraft.autoEnhanceImages,
       defaultLocale: sampleSiteDraft.defaultLocale,
-      translations: sampleSiteDraft.translations,
+      translations: [e2eFrenchTranslation],
       businessHours: sampleSiteDraft.businessHours,
       draftTheme: { id: "warm" },
       draftThemeVersion: "legacy-v1",
