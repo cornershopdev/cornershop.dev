@@ -1,4 +1,5 @@
 import type { SiteDraftView } from "@/lib/site-draft";
+import { serializeJsonLd } from "@/lib/json-ld";
 import type { FoodShopType } from "@/lib/verticals/food-retail/schema";
 
 type FoodRetailBusinessType = "Bakery" | "GroceryStore" | "Store";
@@ -150,7 +151,7 @@ export function buildFoodRetailJsonLd(
 }
 
 export function serializeFoodRetailJsonLd(draft: SiteDraftView): string {
-  return JSON.stringify(buildFoodRetailJsonLd(draft)).replaceAll("<", "\\u003c");
+  return serializeJsonLd(buildFoodRetailJsonLd(draft));
 }
 
 function isFoodShopType(value: unknown): value is FoodShopType {

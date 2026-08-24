@@ -1,4 +1,5 @@
 import type { SiteDraftView } from "@/lib/site-draft";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 export type RestaurantJsonLd = {
   "@context": "https://schema.org";
@@ -56,7 +57,7 @@ export function buildRestaurantJsonLd(draft: SiteDraftView): RestaurantJsonLd {
 }
 
 export function serializeRestaurantJsonLd(draft: SiteDraftView): string {
-  return JSON.stringify(buildRestaurantJsonLd(draft)).replaceAll("<", "\\u003c");
+  return serializeJsonLd(buildRestaurantJsonLd(draft));
 }
 
 function stripHash(url: string): string {
