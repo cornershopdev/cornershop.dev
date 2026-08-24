@@ -16,6 +16,10 @@ type LighthouseConfig = {
   };
 };
 
+type PackageManifest = {
+  scripts: Record<string, string>;
+};
+
 describe("Lighthouse CI environment", () => {
   it("uses the local Workflow world instead of inheriting Postgres", async () => {
     const workflow = await readFile(
@@ -55,6 +59,45 @@ describe("Lighthouse CI environment", () => {
       { maxNumericValue: 0.1 },
     ]);
     expect(workflow).toContain("          include-hidden-files: true\n");
+  });
+
+  it("keeps multi-run budgets and machine-readable reports without LHCI", async () => {
+    const [runner, browserResolver, fontAudit, packageManifest, workflow] =
+      await Promise.all([
+        readFile(path.join(repoRoot, "scripts/run-lighthouse.mjs"), "utf8"),
+        readFile(path.join(repoRoot, "scripts/browser-path.mjs"), "utf8"),
+        readFile(path.join(repoRoot, "scripts/verify-brand-fonts.mjs"), "utf8"),
+        readFile(path.join(repoRoot, "package.json"), "utf8"),
+        readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8"),
+      ]);
+    const packageJson = JSON.parse(packageManifest) as PackageManifest;
+
+    expect(packageJson.scripts.lighthouse).toBe(
+      "node scripts/run-lighthouse.mjs",
+    );
+    expect(runner).toContain('import lighthouse from "lighthouse";');
+    expect(runner).toContain(
+      "for (let run = 1; run <= collect.numberOfRuns; run += 1)",
+    );
+    expect(runner).toContain("const maxCollectionAttempts = 3;");
+    expect(runner).toContain('aggregationMethod: "median"');
+    expect(runner).toContain("Math.floor(sorted.length / 2)");
+    expect(runner).toContain('const jsonFile = `${basename}.report.json`;');
+    expect(runner).toContain('const htmlFile = `${basename}.report.html`;');
+    expect(runner).toContain('path.join(outputDir, "manifest.json")');
+    expect(runner).toContain('path.join(outputDir, "assertion-results.json")');
+    expect(runner).toContain("isRepresentativeRun:");
+    expect(runner).toContain("summary: report.summary");
+    expect(runner).toContain('manifest.status = failure ? "failed" : "passed";');
+    expect(runner).toContain("if (chrome) await chrome.kill();");
+    expect(runner).toContain("await stopServer(server, runtime);");
+    expect(browserResolver.indexOf("Brave Browser")).toBeLessThan(
+      browserResolver.indexOf("google-chrome"),
+    );
+    expect(fontAudit).toContain(
+      'import { browserPath } from "./browser-path.mjs";',
+    );
+    expect(workflow.match(/node-version: "24\.19\.0"/g)).toHaveLength(2);
   });
 
   it("keeps brand fonts route-scoped instead of globally preloading them", async () => {

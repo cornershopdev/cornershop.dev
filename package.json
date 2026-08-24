@@ -11,7 +11,7 @@
     "test": "bun test",
     "test:e2e:first-customer": "playwright test tests/e2e/first-customer.pw.ts",
     "deps:update": "bunx npm-check-updates@latest -u --packageManager bun --deep --reject typescript,eslint && bun install",
-    "lighthouse": "lhci autorun",
+    "lighthouse": "node scripts/run-lighthouse.mjs",
     "verify:brand-fonts": "bun scripts/verify-brand-fonts.mjs",
     "lighthouse:assemble": "rm -rf .next/standalone/public .next/standalone/.next/static && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static",
     "lighthouse:serve": "bun run lighthouse:assemble && PORT=4173 HOSTNAME=127.0.0.1 PLATFORM_HOSTNAMES=127.0.0.1 node .next/standalone/server.js 2>&1 | tee .next/lighthouse-server.log",
@@ -67,7 +67,6 @@
   },
   "devDependencies": {
     "@google/design.md": "^0.4.0",
-    "@lhci/cli": "0.15.1",
     "@next/env": "16.3.1",
     "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4",
@@ -76,10 +75,12 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "chrome-launcher": "1.2.1",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.1",
+    "lighthouse": "13.4.1",
     "prisma": "^7.9.1",
-    "puppeteer-core": "24.43.1",
+    "puppeteer-core": "25.8.0",
     "tailwindcss": "^4",
     "typescript": "6.0.3"
   },
@@ -92,6 +93,12 @@
     "unrs-resolver"
   ],
   "overrides": {
+    "deepmerge-ts": "8.0.0",
     "sharp": "^0.35.3"
+  },
+  "patchedDependencies": {
+    "@workflow/core@4.8.4": "patches/@workflow%2Fcore@4.8.4.patch",
+    "@workflow/world-local@4.3.0": "patches/@workflow%2Fworld-local@4.3.0.patch",
+    "@workflow/world-vercel@4.7.0": "patches/@workflow%2Fworld-vercel@4.7.0.patch"
   }
 }

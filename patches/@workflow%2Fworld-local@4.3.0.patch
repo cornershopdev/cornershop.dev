@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index fef9d566356c1264eeb6bf0aa49635d9392c385f..343b5679650f7de22c736cf2b0e8896b6f420687 100644
+--- a/package.json
++++ b/package.json
+@@ -26,7 +26,7 @@
+     "@vercel/queue": "0.3.1",
+     "async-sema": "3.1.1",
+     "ulid": "~3.0.1",
+-    "undici": "7.28.0",
++    "undici": "7.29.0",
+     "zod": "~4.3.6",
+     "@workflow/errors": "4.2.1",
+     "@workflow/utils": "4.1.4",
