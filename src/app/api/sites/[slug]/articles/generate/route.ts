@@ -5,6 +5,10 @@ import {
 } from "@/lib/authorization";
 import { isSameOriginMutation } from "@/lib/request-origin";
 import { startArticleBatch } from "@/lib/articles/start-batch";
+import {
+  ARTICLE_MUTATION_GATE_REASON,
+  areArticleMutationsGated,
+} from "@/lib/articles/mutation-gate";
 
 const generateSchema = z.object({
   count: z.number().int().min(1).max(8).default(4),
@@ -20,6 +24,12 @@ export async function POST(
   const { slug } = await params;
   const access = await getSiteAccess(slug);
   if (!access.ok) return accessFailureResponse(access);
+  if (await areArticleMutationsGated()) {
+    return Response.json(
+      { error: ARTICLE_MUTATION_GATE_REASON },
+      { status: 503 },
+    );
+  }
 
   const parsed = generateSchema.safeParse(
     await request.json().catch(() => null),

@@ -1,18 +1,62 @@
+import type { ArticleIntegrationCapability } from "@/lib/articles/integration-capabilities";
 import type { VerticalId } from "@/lib/verticals/types";
 
 /**
  * A topic plan names a reusable angle an article can take for a site. The key
  * is stable across sites and batches so the dedupe pass can tell "the same
- * slot refilled" from "a new angle"; the title is the working headline the
- * composer hands the model; `requiredFacts` names site data the article may
+ * slot refilled" from "a new angle"; the title is the repository-owned topic
+ * label; `requiredFacts` names site data the article may
  * only exist if the site actually carries — a neighbourhood guide with no
  * address is exactly the generic filler this engine exists to prevent.
  */
 export type ArticleTopicPlan = {
-  key: string;
+  key: ArticleTopicKey;
   title: string;
   requiredFacts: ArticleFactKey[];
+  requiredAnyIntegrationCapabilities?: ArticleIntegrationCapability[];
+  templateKey: ArticleTemplateKey;
+  catalogItem: "required" | "forbidden";
 };
+
+export const ARTICLE_TOPIC_KEYS = [
+  "seasonal-menu",
+  "neighbourhood-guide",
+  "private-events",
+  "dietary-faqs",
+  "chef-story",
+  "treatment-explainers",
+  "aftercare",
+  "trends",
+  "first-visit",
+  "service-walkthrough",
+  "coverage-area",
+  "quote-guide",
+  "sourcing-story",
+  "seasonal-stock",
+  "ordering-options",
+] as const;
+
+export type ArticleTopicKey = (typeof ARTICLE_TOPIC_KEYS)[number];
+
+export const ARTICLE_TEMPLATE_KEYS = [
+  "restaurant-current-menu",
+  "restaurant-location",
+  "restaurant-group-enquiry",
+  "restaurant-dietary-enquiry",
+  "restaurant-menu-facts",
+  "beauty-treatment-listing",
+  "beauty-aftercare-enquiry",
+  "beauty-current-listing",
+  "beauty-visit-planning",
+  "service-current-listing",
+  "service-location",
+  "service-quote-enquiry",
+  "retail-listing-facts",
+  "retail-current-stock",
+  "retail-ordering-options",
+] as const;
+
+export type ArticleTemplateKey = (typeof ARTICLE_TEMPLATE_KEYS)[number];
 
 /**
  * The site facts a topic may draw on. Each maps to a field the composer
@@ -23,93 +67,125 @@ export type ArticleFactKey =
   | "catalogItems"
   | "address"
   | "businessHours"
-  | "phone"
-  | "integrations";
+  | "phone";
 
 const RESTAURANT_TOPICS: ArticleTopicPlan[] = [
   {
     key: "seasonal-menu",
-    title: "What's in season on our menu right now",
+    title: "A current menu listing",
     requiredFacts: ["catalogItems"],
+    templateKey: "restaurant-current-menu",
+    catalogItem: "required",
   },
   {
     key: "neighbourhood-guide",
-    title: "Where to find us and what else is nearby",
+    title: "How to find us",
     requiredFacts: ["address"],
+    templateKey: "restaurant-location",
+    catalogItem: "forbidden",
   },
   {
     key: "private-events",
-    title: "Booking us for private events and group tables",
-    requiredFacts: ["phone", "integrations"],
+    title: "Making a group enquiry",
+    requiredFacts: ["phone"],
+    requiredAnyIntegrationCapabilities: ["BOOKING", "CONTACT"],
+    templateKey: "restaurant-group-enquiry",
+    catalogItem: "forbidden",
   },
   {
     key: "dietary-faqs",
-    title: "Eating with dietary needs: what we can do",
+    title: "Checking dietary details before ordering",
     requiredFacts: ["catalogItems"],
+    templateKey: "restaurant-dietary-enquiry",
+    catalogItem: "required",
   },
   {
     key: "chef-story",
-    title: "How we cook: our kitchen, our suppliers",
+    title: "What the current menu confirms",
     requiredFacts: ["catalogItems"],
+    templateKey: "restaurant-menu-facts",
+    catalogItem: "required",
   },
 ];
 
 const BEAUTY_TOPICS: ArticleTopicPlan[] = [
   {
     key: "treatment-explainers",
-    title: "Our treatments explained: what to expect",
+    title: "A current treatment listing",
     requiredFacts: ["catalogItems"],
+    templateKey: "beauty-treatment-listing",
+    catalogItem: "required",
   },
   {
     key: "aftercare",
-    title: "Aftercare: keeping your results longer",
+    title: "How to ask about aftercare",
     requiredFacts: ["catalogItems"],
+    templateKey: "beauty-aftercare-enquiry",
+    catalogItem: "required",
   },
   {
     key: "trends",
-    title: "What we're seeing in the chair this season",
+    title: "What the current service list confirms",
     requiredFacts: ["catalogItems"],
+    templateKey: "beauty-current-listing",
+    catalogItem: "required",
   },
   {
     key: "first-visit",
-    title: "Your first visit: how an appointment runs",
+    title: "Planning your first visit",
     requiredFacts: ["businessHours", "address"],
+    templateKey: "beauty-visit-planning",
+    catalogItem: "forbidden",
   },
 ];
 
 const LOCAL_SERVICE_TOPICS: ArticleTopicPlan[] = [
   {
     key: "service-walkthrough",
-    title: "What happens when you book us",
+    title: "A current service listing",
     requiredFacts: ["catalogItems"],
+    templateKey: "service-current-listing",
+    catalogItem: "required",
   },
   {
     key: "coverage-area",
-    title: "Where we work: our coverage area",
+    title: "Where the business is based",
     requiredFacts: ["address"],
+    templateKey: "service-location",
+    catalogItem: "forbidden",
   },
   {
     key: "quote-guide",
-    title: "Getting a quote: what we need to know",
-    requiredFacts: ["phone", "integrations"],
+    title: "How to make a quote enquiry",
+    requiredFacts: ["phone"],
+    requiredAnyIntegrationCapabilities: ["QUOTE", "CONTACT"],
+    templateKey: "service-quote-enquiry",
+    catalogItem: "forbidden",
   },
 ];
 
 const FOOD_RETAIL_TOPICS: ArticleTopicPlan[] = [
   {
     key: "sourcing-story",
-    title: "Where our shelves come from",
+    title: "What a current product listing confirms",
     requiredFacts: ["catalogItems"],
+    templateKey: "retail-listing-facts",
+    catalogItem: "required",
   },
   {
     key: "seasonal-stock",
-    title: "In store this season",
+    title: "A current shop listing",
     requiredFacts: ["catalogItems"],
+    templateKey: "retail-current-stock",
+    catalogItem: "required",
   },
   {
     key: "ordering-options",
     title: "Ways to shop with us",
-    requiredFacts: ["integrations"],
+    requiredFacts: [],
+    requiredAnyIntegrationCapabilities: ["ORDERING", "DELIVERY"],
+    templateKey: "retail-ordering-options",
+    catalogItem: "forbidden",
   },
 ];
 

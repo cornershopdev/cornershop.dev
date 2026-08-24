@@ -363,21 +363,23 @@ model Article {
 /// produced an article set and so dedupe checks can read "what did the last
 /// batch cover" without scanning every article ever generated.
 model ArticleBatch {
-  id             String             @id @default(cuid())
-  siteId         String
-  site           Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  requestedCount Int
-  acceptedCount  Int                @default(0)
-  rejectedCount  Int                @default(0)
-  status         ArticleBatchStatus @default(QUEUED)
-  statusReason   String?
-  model          String?
-  workflowRunId  String?            @unique
-  requestedBy    String
-  startedAt      DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id                 String             @id @default(cuid())
+  siteId             String
+  site               Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  requestedCount     Int
+  acceptedCount      Int                @default(0) @map("producedCount")
+  rejectedCount      Int                @default(0)
+  status             ArticleBatchStatus @default(QUEUED)
+  statusReason       String?
+  model              String?
+  workflowRunId      String?            @unique
+  dispatchLeaseToken String?
+  dispatchLeaseUntil DateTime?
+  requestedBy        String
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @default(now()) @updatedAt
 
   articles Article[]
   /// Backed by a partial unique index in
@@ -386,6 +388,7 @@ model ArticleBatch {
 
   @@index([siteId, createdAt])
   @@index([siteId, status, createdAt])
+  @@index([status, workflowRunId, dispatchLeaseUntil, createdAt], map: "ArticleBatch_dispatch_queue_idx")
 }
 
 model PhotoAsset {

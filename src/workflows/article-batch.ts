@@ -1,7 +1,7 @@
-import { getWritable } from "workflow";
+import { getWorkflowMetadata, getWritable } from "workflow";
 import type { SiteFacts } from "@/lib/articles/site-facts";
-import type { GeneratedArticleDraft } from "@/lib/articles/composer";
-import type { GeneratedBatchDrafts } from "@/lib/articles/generation";
+import type { GeneratedArticlePlan } from "@/lib/articles/composer";
+import type { GeneratedBatchPlans } from "@/lib/articles/generation";
 
 /**
  * Durable article-batch generation for one site.
@@ -11,7 +11,7 @@ import type { GeneratedBatchDrafts } from "@/lib/articles/generation";
  * steps resumes instead of re-running. The generation library is imported
  * dynamically inside steps because it transitively reaches Prisma and the AI
  * SDK, which must not enter the orchestrator bundle (see the note at the top
- * of `lead-outreach.ts`). The `SiteFacts`/`GeneratedArticleDraft` imports here
+ * of `lead-outreach.ts`). The `SiteFacts`/`GeneratedArticlePlan` imports here
  * are type-only and vanish at build time.
  */
 
@@ -23,17 +23,25 @@ export type ArticleBatchEvent =
 
 export async function articleBatchWorkflow(input: {
   batchId: string;
+  dispatchLeaseToken: string;
 }): Promise<void> {
   "use workflow";
 
+  const { workflowRunId } = getWorkflowMetadata();
+  let knownRejectedCount = 0;
   try {
-    const reservation = await beginBatchStep(input.batchId);
+    const reservation = await beginBatchStep(
+      input.batchId,
+      workflowRunId,
+      input.dispatchLeaseToken,
+    );
     if (!reservation) return;
 
     const loaded = await loadInputsStep(reservation.siteId);
     if (!loaded.ok) {
       await closeBatchStep({
         batchId: input.batchId,
+        workflowRunId,
         status: "SKIPPED",
         statusReason: "SITE_INELIGIBLE",
       });
@@ -42,14 +50,16 @@ export async function articleBatchWorkflow(input: {
     }
 
     await emit({ type: "progress", message: "Selecting topics" });
-    const generated = await generateDraftsStep({
+    const generated = await generatePlansStep({
       facts: loaded.facts,
       recentTopicKeys: loaded.recentTopicKeys,
       count: reservation.requestedCount,
     });
+    knownRejectedCount = generated.rejectedCount;
     if (generated.status === "SKIPPED") {
       await closeBatchStep({
         batchId: input.batchId,
+        workflowRunId,
         status: "SKIPPED",
         statusReason: generated.statusReason,
       });
@@ -59,10 +69,11 @@ export async function articleBatchWorkflow(input: {
       });
       return;
     }
-    if (!generated.drafts.length) {
+    if (!generated.plans.length) {
       const rejected = generated.rejectedCount > 0;
       await closeBatchStep({
         batchId: input.batchId,
+        workflowRunId,
         status: rejected ? "REJECTED" : "ZERO_OUTPUT",
         statusReason: rejected
           ? "INVALID_MODEL_OUTPUT"
@@ -72,17 +83,17 @@ export async function articleBatchWorkflow(input: {
       await emit({
         type: "skipped",
         reason: rejected
-          ? "No returned draft matched a requested topic."
-          : "The generation run returned no drafts.",
+          ? "No returned plan matched a requested topic."
+          : "The generation run returned no plans.",
       });
       return;
     }
 
     const persisted = await persistBatchStep({
       batchId: input.batchId,
+      workflowRunId,
       siteId: reservation.siteId,
-      facts: loaded.facts,
-      drafts: generated.drafts,
+      plans: generated.plans,
       rejectedCount: generated.rejectedCount,
     });
 
@@ -96,8 +107,10 @@ export async function articleBatchWorkflow(input: {
       error instanceof Error ? error.message : "Article batch failed.";
     await closeBatchStep({
       batchId: input.batchId,
+      workflowRunId,
       status: "FAILED",
       statusReason: "GENERATION_FAILED",
+      rejectedCount: knownRejectedCount,
     });
     await emit({ type: "failed", message });
     throw error;
@@ -114,13 +127,17 @@ async function emit(event: ArticleBatchEvent): Promise<void> {
   }
 }
 
-async function beginBatchStep(batchId: string): Promise<{
+async function beginBatchStep(
+  batchId: string,
+  workflowRunId: string,
+  dispatchLeaseToken: string,
+): Promise<{
   siteId: string;
   requestedCount: number;
 } | null> {
   "use step";
   const { beginArticleBatch } = await import("@/lib/articles/generation");
-  return beginArticleBatch(batchId);
+  return beginArticleBatch(batchId, workflowRunId, dispatchLeaseToken);
 }
 
 async function loadInputsStep(
@@ -134,21 +151,21 @@ async function loadInputsStep(
   return loadGenerationInputs(siteId);
 }
 
-async function generateDraftsStep(input: {
+async function generatePlansStep(input: {
   facts: SiteFacts;
   recentTopicKeys: string[];
   count: number;
-}): Promise<GeneratedBatchDrafts> {
+}): Promise<GeneratedBatchPlans> {
   "use step";
-  const { generateBatchDrafts } = await import("@/lib/articles/generation");
-  return generateBatchDrafts(input);
+  const { generateBatchPlans } = await import("@/lib/articles/generation");
+  return generateBatchPlans(input);
 }
 
 async function persistBatchStep(input: {
   batchId: string;
+  workflowRunId: string;
   siteId: string;
-  facts: SiteFacts;
-  drafts: GeneratedArticleDraft[];
+  plans: GeneratedArticlePlan[];
   rejectedCount: number;
 }): Promise<{ batchId: string; producedCount: number }> {
   "use step";
@@ -158,6 +175,7 @@ async function persistBatchStep(input: {
 
 async function closeBatchStep(input: {
   batchId: string;
+  workflowRunId: string;
   status: "ZERO_OUTPUT" | "REJECTED" | "SKIPPED" | "FAILED";
   statusReason: string;
   rejectedCount?: number;

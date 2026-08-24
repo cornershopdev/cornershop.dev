@@ -14,67 +14,84 @@ const facts: SiteFacts = {
   phone: null,
   businessHours: [],
   catalogItems: [
-    { name: "Matcha Bun", price: 1_000, currency: "JPY" },
+    {
+      id: "catalog-matcha-bun",
+      name: "Matcha Bun",
+      price: 1_000,
+      currency: "JPY",
+    },
   ],
-  integrationLabels: [],
+  integrationCapabilities: [],
 };
 
+const plan = {
+  contractVersion: 1,
+  topicKey: "seasonal-stock",
+  templateKey: "retail-current-stock",
+  catalogItemId: "catalog-matcha-bun",
+  priceMode: "exact",
+} as const;
+
 describe("article generation model contract", () => {
-  it("puts structured canonical catalog facts and claim rules in the prompt", () => {
+  it("asks only for exact IDs and closed plan fields", () => {
     const prompt = buildArticleBatchPrompt({
       facts,
-      topics: [{ key: "product-guide", title: "A product guide" }],
+      topics: [
+        {
+          key: "seasonal-stock",
+          templateKey: "retail-current-stock",
+          catalogItem: "required",
+        },
+      ],
     });
 
     expect(prompt).toContain(
       JSON.stringify([
-        { name: "Matcha Bun", price: 1_000, currency: "JPY" },
+        {
+          catalogItemId: "catalog-matcha-bun",
+          hasExactPrice: true,
+        },
       ]),
     );
     expect(prompt).toContain(
-      "catalogClaims must enumerate every catalog item named",
+      "Return only contractVersion, topicKey, templateKey, catalogItemId, and priceMode.",
     );
     expect(prompt).toContain(
-      "price/currency pair must be copied exactly from that same catalog item",
+      "topicKey=seasonal-stock; templateKey=retail-current-stock; catalogItem=required",
     );
-    expect(prompt).toContain("[product-guide] A product guide");
+    expect(prompt).not.toContain('"price":1000');
+    expect(prompt).not.toContain('"currency":"JPY"');
+    expect(prompt).not.toContain("Matcha Bun");
+    expect(prompt).not.toContain("Prompt Contract Bakery");
+    expect(prompt).not.toContain("1 Test Street");
+    expect(prompt).not.toContain("bodyMarkdown");
   });
 
-  it("requires bounded structured claims in every model article", () => {
-    const article = {
-      topicKey: "product-guide",
-      slug: "matcha-bun-guide",
-      title: "Matcha Bun guide",
-      excerpt: "What to know.",
-      bodyMarkdown: "A factual body.",
-    };
+  it("accepts only strict closed plans", () => {
+    expect(articleBatchOutputSchema.safeParse({ articles: [plan] }).success).toBe(
+      true,
+    );
 
+    for (const extra of [
+      { title: "Matcha Bun guide" },
+      { excerpt: "What to know" },
+      { bodyMarkdown: "Matcha Bun costs JPY 1000" },
+      { name: "Matcha Bun" },
+      { price: 1_000 },
+      { currency: "JPY" },
+      { range: { from: 1_000 } },
+      { unit: "each" },
+      { text: "Try our Matcha Bun" },
+    ]) {
+      expect(
+        articleBatchOutputSchema.safeParse({
+          articles: [{ ...plan, ...extra }],
+        }).success,
+      ).toBe(false);
+    }
     expect(
-      articleBatchOutputSchema.safeParse({ articles: [article] }).success,
-    ).toBe(false);
-    expect(
-      articleBatchOutputSchema.safeParse({
-        articles: [
-          {
-            ...article,
-            catalogClaims: [
-              { name: "Matcha Bun", price: 1_000, currency: "JPY" },
-            ],
-          },
-        ],
-      }).success,
-    ).toBe(true);
-    expect(
-      articleBatchOutputSchema.safeParse({
-        articles: [
-          {
-            ...article,
-            catalogClaims: [
-              { name: "Matcha Bun", price: 1_000, currency: "jpy" },
-            ],
-          },
-        ],
-      }).success,
+      articleBatchOutputSchema.safeParse({ articles: [plan], prose: "no" })
+        .success,
     ).toBe(false);
   });
 });

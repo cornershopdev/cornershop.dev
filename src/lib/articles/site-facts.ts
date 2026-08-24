@@ -1,5 +1,6 @@
 import type { VerticalId } from "@/lib/verticals/types";
 import type { ArticleFactKey } from "@/lib/articles/topic-plans";
+import type { ArticleIntegrationCapability } from "@/lib/articles/integration-capabilities";
 
 /**
  * The slice of a published site snapshot the content engine may write about.
@@ -15,11 +16,12 @@ export type SiteFacts = {
   phone: string | null;
   businessHours: Array<{ days: string; hours: string }>;
   catalogItems: Array<{
+    id: string;
     name: string;
     price: number | null;
     currency: string;
   }>;
-  integrationLabels: string[];
+  integrationCapabilities: ArticleIntegrationCapability[];
 };
 
 export function availableFacts(facts: SiteFacts): Set<ArticleFactKey> {
@@ -34,6 +36,5 @@ export function availableFacts(facts: SiteFacts): Set<ArticleFactKey> {
     available.add("businessHours");
   }
   if (facts.phone?.trim()) available.add("phone");
-  if (facts.integrationLabels.length > 0) available.add("integrations");
   return available;
 }

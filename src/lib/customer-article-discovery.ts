@@ -1,5 +1,6 @@
 import type { Metadata, MetadataRoute } from "next";
 import type { PublishedArticle } from "@/lib/articles/public-articles";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { canonicalSiteLocale, localeHref } from "@/lib/site-surface";
 
 export type CustomerDiscoverySite = {
@@ -204,10 +205,7 @@ export function serializeCustomerArticleJsonLd(input: {
   site: CustomerDiscoverySite;
   article: CustomerDiscoveryArticle;
 }): string {
-  return JSON.stringify(buildCustomerArticleJsonLd(input)).replaceAll(
-    "<",
-    "\\u003c",
-  );
+  return serializeJsonLd(buildCustomerArticleJsonLd(input));
 }
 
 export function buildCustomerRss(input: {

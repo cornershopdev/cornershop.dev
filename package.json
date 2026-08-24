@@ -31,6 +31,7 @@
     "operator:monitor-public-site": "bun scripts/monitor-public-site.ts",
     "operator:preflight-outreach": "bun scripts/preflight-outreach.ts",
     "operator:preflight-platform-edge": "bun scripts/preflight-platform-edge.ts",
+    "operator:article-rollout": "bun scripts/article-rollout.ts",
     "workflow:migrate": "bun node_modules/@workflow/world-postgres/bin/setup.js",
     "postinstall": "bunx --bun prisma generate",
     "operator:import:servizo": "bun scripts/import-servizo.ts",

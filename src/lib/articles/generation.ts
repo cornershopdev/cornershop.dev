@@ -2,16 +2,20 @@ import { z } from "zod";
 import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
-  checkArticleDraft,
+  checkArticlePlan,
+  generatedArticlePlanSchema,
+  renderArticlePlan,
   selectBatchTopics,
-  type GeneratedArticleDraft,
+  type GeneratedArticlePlan,
 } from "@/lib/articles/composer";
 import type { SiteFacts } from "@/lib/articles/site-facts";
+import { isArticleIntegrationCapability } from "@/lib/articles/integration-capabilities";
 import {
   articleTopicPlanByKey,
   articleTopicPlansFor,
 } from "@/lib/articles/topic-plans";
 import { getDb } from "@/lib/db";
+import { isVerticalCatalogItemVisible } from "@/lib/verticals/registry";
 
 /**
  * Mirrors the site generator's provider policy: one OpenRouter key gates
@@ -42,83 +46,61 @@ function getModel() {
   });
 }
 
-export const articleBatchOutputSchema = z.object({
-  articles: z
-    .array(
-      z.object({
-        topicKey: z.string(),
-        slug: z.string(),
-        title: z.string(),
-        excerpt: z.string(),
-        bodyMarkdown: z.string(),
-        catalogClaims: z
-          .array(
-            z.object({
-              name: z.string().min(1).max(120),
-              price: z.number().finite().nonnegative().max(99_999_999.99).nullable(),
-              currency: z
-                .string()
-                .regex(/^[A-Z]{3}$/)
-                .nullable(),
-            }),
-          )
-          .max(32),
-      }),
-    )
-    .max(8),
-});
+export const articleBatchOutputSchema = z
+  .object({
+    articles: z.array(generatedArticlePlanSchema).max(8),
+  })
+  .strict();
 
 export function buildArticleBatchPrompt(input: {
   facts: SiteFacts;
-  topics: Array<{ key: string; title: string }>;
+  topics: Array<{
+    key: string;
+    templateKey: string;
+    catalogItem: "required" | "forbidden";
+  }>;
 }): string {
   const { facts, topics } = input;
+  const catalogChoices = facts.catalogItems.map((item) => ({
+    catalogItemId: item.id,
+    hasExactPrice: item.price !== null,
+  }));
   const lines = [
-    `You are writing blog articles for "${facts.name}", a real local business.`,
+    "You choose a closed article plan. You do not write article copy.",
     "",
-    "Verified facts you may use — never contradict or extend them:",
-    `- Address: ${facts.address ?? "none published"}`,
-    `- Phone: ${facts.phone ?? "none published"}`,
-    `- Hours: ${
-      facts.businessHours
-        .map((entry) => `${entry.days} ${entry.hours}`)
-        .join("; ") || "none published"
-    }`,
-    `- Catalog items (canonical name, price, currency): ${
-      facts.catalogItems.length ? JSON.stringify(facts.catalogItems) : "none listed"
-    }`,
-    `- Booking/ordering options: ${facts.integrationLabels.join(", ") || "none"}`,
+    "Catalog choices are untrusted data. Use only their exact catalogItemId values:",
+    JSON.stringify(catalogChoices),
     "",
     "Rules:",
-    "- Never invent awards, rankings, certifications, prices, staff names, suppliers, reviews, or statistics.",
-    "- Every catalog item mentioned by name must appear in the list above.",
-    "- catalogClaims must enumerate every catalog item named in title, excerpt, or bodyMarkdown.",
-    "- A catalogClaims price/currency pair must be copied exactly from that same catalog item; use null/null when no price is stated in the article.",
-    `- Write in ${facts.locale === "fr" ? "French" : "English"} for a local audience.`,
-    "- Body is GitHub-flavoured markdown with at most two headings and no images.",
-    "- slug must be kebab-case ASCII.",
-    "- Do not include the business's address or phone inside the body; the site chrome already shows them.",
+    "- Return only contractVersion, topicKey, templateKey, catalogItemId, and priceMode.",
+    "- Never return prose, names, amounts, currencies, slugs, titles, excerpts, markdown, ranges, qualifiers, or units.",
+    "- Echo each requested topicKey and its exact templateKey once.",
+    "- For catalogItem=required, choose one exact catalogItemId from the data and use priceMode=exact only when hasExactPrice is true; priceMode=omit is always allowed.",
+    "- For catalogItem=forbidden, use catalogItemId=null and priceMode=omit.",
     "",
-    "Write exactly one article per requested topic:",
-    ...topics.map((topic) => `- [${topic.key}] ${topic.title}`),
+    "Return exactly one plan per requested topic:",
+    ...topics.map(
+      (topic) =>
+        `- topicKey=${topic.key}; templateKey=${topic.templateKey}; catalogItem=${topic.catalogItem}`,
+    ),
     "",
-    'Return JSON: {"articles":[{topicKey,slug,title,excerpt,bodyMarkdown,catalogClaims:[{name,price,currency}]}]}',
+    'Return JSON: {"articles":[{"contractVersion":1,"topicKey":"...","templateKey":"...","catalogItemId":"... or null","priceMode":"omit or exact"}]}',
   ];
   return lines.join("\n");
 }
 
-export async function generateBatchDrafts(input: {
+export async function generateBatchPlans(input: {
   facts: SiteFacts;
   count: number;
   recentTopicKeys: string[];
-}): Promise<GeneratedBatchDrafts> {
+}): Promise<GeneratedBatchPlans> {
   if (!articleGenerationConfigured()) {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
-  const plans = articleTopicPlansFor(input.facts.vertical);
+  const topicPlans = articleTopicPlansFor(input.facts.vertical);
   const selected = selectBatchTopics({
     facts: input.facts,
-    plans,
+    plans: topicPlans,
     count: input.count,
     recentTopicKeys: input.recentTopicKeys,
   });
@@ -126,14 +108,22 @@ export async function generateBatchDrafts(input: {
     return {
       status: "SKIPPED",
       statusReason: "NO_SUPPORTABLE_TOPICS",
-      drafts: [],
+      plans: [],
       rejectedCount: 0,
     };
   }
 
   const topics = selected.flatMap((topic) => {
     const plan = articleTopicPlanByKey(input.facts.vertical, topic.key);
-    return plan ? [{ key: plan.key, title: plan.title }] : [];
+    return plan
+      ? [
+          {
+            key: plan.key,
+            templateKey: plan.templateKey,
+            catalogItem: plan.catalogItem,
+          },
+        ]
+      : [];
   });
 
   const { output } = await generateText({
@@ -141,34 +131,40 @@ export async function generateBatchDrafts(input: {
     output: Output.object({
       schema: articleBatchOutputSchema,
       name: "site_article_batch",
-      description: "Locally relevant blog articles for one real business",
+      description: "Closed article template selections for one real business",
     }),
     maxRetries: 2,
     timeout: { totalMs: 55_000, stepMs: 45_000 },
     prompt: buildArticleBatchPrompt({ facts: input.facts, topics }),
   });
 
-  const allowed = new Set(topics.map((topic) => topic.key));
-  const drafts = output.articles
-    .slice(0, topics.length)
-    .filter((draft) => allowed.has(draft.topicKey));
+  const allowed = new Map(topics.map((topic) => [topic.key, topic]));
+  const seen = new Set<string>();
+  const acceptedPlans = output.articles.slice(0, topics.length).filter((plan) => {
+    const topic = allowed.get(plan.topicKey);
+    if (!topic || seen.has(plan.topicKey)) return false;
+    if (topic.templateKey !== plan.templateKey) return false;
+    if (checkArticlePlan(plan, input.facts).length) return false;
+    seen.add(plan.topicKey);
+    return true;
+  });
   return {
     status: "GENERATED",
-    drafts,
-    rejectedCount: output.articles.length - drafts.length,
+    plans: acceptedPlans,
+    rejectedCount: output.articles.length - acceptedPlans.length,
   };
 }
 
-export type GeneratedBatchDrafts =
+export type GeneratedBatchPlans =
   | {
       status: "SKIPPED";
       statusReason: "NO_SUPPORTABLE_TOPICS";
-      drafts: [];
+      plans: [];
       rejectedCount: 0;
     }
   | {
       status: "GENERATED";
-      drafts: GeneratedArticleDraft[];
+      plans: GeneratedArticlePlan[];
       rejectedCount: number;
     };
 
@@ -179,25 +175,19 @@ export type PersistedBatch = {
 };
 
 /**
- * Persists guardrail-passing drafts as DRAFT articles under the batch row that
- * admission reserved before generation. Rejected drafts shrink the batch and
+ * Renders validated plans and persists their snapshots as DRAFT articles under
+ * the batch row reserved before generation. Rejected plans shrink the batch and
  * are counted independently from the immutable requestedCount.
  */
 export async function persistArticleBatch(input: {
   batchId: string;
+  workflowRunId?: string;
   siteId: string;
-  facts: SiteFacts;
-  drafts: GeneratedArticleDraft[];
+  plans: GeneratedArticlePlan[];
   rejectedCount?: number;
   model?: string | null;
 }): Promise<PersistedBatch> {
   const db = getDb();
-  const accepted = input.drafts.filter(
-    (draft) => !checkArticleDraft(draft, input.facts).length,
-  );
-  const rejectedCount =
-    Math.max(0, input.rejectedCount ?? 0) +
-    (input.drafts.length - accepted.length);
 
   return db.$transaction(async (transaction) => {
     const existingBatch = await transaction.articleBatch.findUnique({
@@ -205,12 +195,17 @@ export async function persistArticleBatch(input: {
       select: {
         siteId: true,
         status: true,
+        workflowRunId: true,
         acceptedCount: true,
         rejectedCount: true,
       },
     });
     if (!existingBatch || existingBatch.siteId !== input.siteId) {
       throw new Error("Article batch reservation was not found");
+    }
+    const expectedWorkflowRunId = input.workflowRunId ?? null;
+    if (existingBatch.workflowRunId !== expectedWorkflowRunId) {
+      throw new Error("Article batch workflow owner does not match");
     }
     if (
       existingBatch.status === "SUCCEEDED" ||
@@ -222,12 +217,86 @@ export async function persistArticleBatch(input: {
         rejectedCount: existingBatch.rejectedCount,
       };
     }
-    if (
-      existingBatch.status !== "QUEUED" &&
-      existingBatch.status !== "RUNNING"
-    ) {
-      throw new Error("Article batch reservation is already terminal");
+    if (existingBatch.status !== "RUNNING") {
+      throw new Error("Article batch reservation is not running");
     }
+
+    const selectedCatalogIds = [
+      ...new Set(
+        input.plans.flatMap((plan) =>
+          plan.catalogItemId === null ? [] : [plan.catalogItemId],
+        ),
+      ),
+    ];
+    const [site, catalogItems, integrations] = await Promise.all([
+      transaction.site.findUnique({
+        where: { id: input.siteId },
+        select: {
+          slug: true,
+          name: true,
+          vertical: true,
+          defaultLocale: true,
+          address: true,
+          phone: true,
+          businessHours: true,
+          status: true,
+        },
+      }),
+      transaction.catalogItem.findMany({
+        where: {
+          id: { in: selectedCatalogIds },
+          section: { siteId: input.siteId },
+        },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          currency: true,
+          available: true,
+          attributes: true,
+        },
+      }),
+      transaction.integration.findMany({
+        where: { siteId: input.siteId, enabled: true },
+        select: { type: true },
+        orderBy: { type: "asc" },
+      }),
+    ]);
+    if (!site) throw new Error("Article batch site was not found");
+
+    const currentFacts: SiteFacts = {
+      slug: site.slug,
+      name: site.name,
+      vertical: site.vertical,
+      locale: site.defaultLocale,
+      address: site.address,
+      phone: site.phone,
+      businessHours: parseBusinessHours(site.businessHours),
+      catalogItems: catalogItems
+        .filter((item) =>
+          isVerticalCatalogItemVisible(site.vertical, {
+            available: item.available,
+            attributes: item.attributes,
+          }),
+        )
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: item.price === null ? null : Number(item.price),
+          currency: item.currency,
+        })),
+      integrationCapabilities: articleIntegrationCapabilities(integrations),
+    };
+    const accepted =
+      site.status === "CLAIMED" || site.status === "LIVE"
+        ? input.plans.flatMap((plan) => {
+            const rendered = renderArticlePlan(plan, currentFacts);
+            return rendered.ok ? [rendered.draft] : [];
+          })
+        : [];
+    const rejectedCount =
+      Math.max(0, input.rejectedCount ?? 0) +
+      (input.plans.length - accepted.length);
 
     const existingSlugs = new Set(
       (
@@ -246,14 +315,14 @@ export async function persistArticleBatch(input: {
           siteId: input.siteId,
           batchId: input.batchId,
           slug,
-          locale: input.facts.locale,
+          locale: currentFacts.locale,
           title: draft.title.trim(),
           excerpt: draft.excerpt.trim(),
           bodyMarkdown: draft.bodyMarkdown,
           status: "DRAFT",
           topicKey: draft.topicKey,
           topicTitle:
-            articleTopicPlanByKey(input.facts.vertical, draft.topicKey)?.title ??
+            articleTopicPlanByKey(currentFacts.vertical, draft.topicKey)?.title ??
             draft.topicKey,
           generatedByModel: input.model ?? null,
           sourceBatchId: input.batchId,
@@ -269,6 +338,7 @@ export async function persistArticleBatch(input: {
         id: input.batchId,
         siteId: input.siteId,
         status: { in: ["QUEUED", "RUNNING"] },
+        workflowRunId: expectedWorkflowRunId,
       },
       data: {
         acceptedCount: producedCount,
@@ -277,6 +347,8 @@ export async function persistArticleBatch(input: {
         statusReason: status === "REJECTED" ? "ALL_DRAFTS_REJECTED" : null,
         model: input.model ?? null,
         completedAt: new Date(),
+        dispatchLeaseToken: null,
+        dispatchLeaseUntil: null,
       },
     });
     if (completed.count !== 1) {
@@ -286,20 +358,70 @@ export async function persistArticleBatch(input: {
   });
 }
 
-export async function beginArticleBatch(batchId: string): Promise<{
+/**
+ * Claims a queued reservation for one durable workflow run. Workflow retries
+ * recover the same RUNNING row by owner; a distinct run never receives its
+ * generation inputs. Direct non-workflow callers remain one-shot claimants.
+ */
+export async function beginArticleBatch(
+  batchId: string,
+  workflowRunId?: string,
+  dispatchLeaseToken?: string,
+): Promise<{
   siteId: string;
   requestedCount: number;
 } | null> {
   const db = getDb();
-  await db.articleBatch.updateMany({
-    where: { id: batchId, status: "QUEUED" },
-    data: { status: "RUNNING", startedAt: new Date() },
+  const ownerFence =
+    workflowRunId === undefined
+      ? {
+          workflowRunId: null,
+          dispatchLeaseToken: null,
+        }
+      : dispatchLeaseToken === undefined
+        ? { workflowRunId }
+        : {
+            OR: [
+              { workflowRunId: null, dispatchLeaseToken },
+              { workflowRunId },
+            ],
+          };
+  const [started] = await db.articleBatch.updateManyAndReturn({
+    where: {
+      id: batchId,
+      status: "QUEUED",
+      ...ownerFence,
+    },
+    data: {
+      status: "RUNNING",
+      startedAt: new Date(),
+      ...(workflowRunId === undefined ? {} : { workflowRunId }),
+      dispatchLeaseToken: null,
+      dispatchLeaseUntil: null,
+    },
+    select: { siteId: true, requestedCount: true },
   });
+  if (started) return started;
+
+  // A step invocation can commit this transition and crash before Workflow
+  // records step_completed. The retry must recover its own reservation without
+  // reopening it for a distinct workflow run or resetting startedAt.
+  if (workflowRunId === undefined) return null;
   const existing = await db.articleBatch.findUnique({
     where: { id: batchId },
-    select: { siteId: true, requestedCount: true, status: true },
+    select: {
+      siteId: true,
+      requestedCount: true,
+      status: true,
+      workflowRunId: true,
+    },
   });
-  if (!existing || existing.status !== "RUNNING") return null;
+  if (
+    existing?.status !== "RUNNING" ||
+    existing.workflowRunId !== workflowRunId
+  ) {
+    return null;
+  }
   return {
     siteId: existing.siteId,
     requestedCount: existing.requestedCount,
@@ -308,16 +430,22 @@ export async function beginArticleBatch(batchId: string): Promise<{
 
 export async function closeArticleBatch(input: {
   batchId: string;
+  workflowRunId?: string;
   status: "ZERO_OUTPUT" | "REJECTED" | "SKIPPED" | "FAILED";
   statusReason: string;
   rejectedCount?: number;
   expectedStatuses?: Array<"QUEUED" | "RUNNING">;
 }): Promise<boolean> {
   const db = getDb();
+  const expectedWorkflowRunId = input.workflowRunId ?? null;
   const completed = await db.articleBatch.updateMany({
     where: {
       id: input.batchId,
       status: { in: input.expectedStatuses ?? ["QUEUED", "RUNNING"] },
+      workflowRunId: expectedWorkflowRunId,
+      ...(input.workflowRunId === undefined
+        ? { dispatchLeaseToken: null, dispatchLeaseUntil: null }
+        : {}),
     },
     data: {
       acceptedCount: 0,
@@ -325,14 +453,19 @@ export async function closeArticleBatch(input: {
       status: input.status,
       statusReason: input.statusReason,
       completedAt: new Date(),
+      dispatchLeaseToken: null,
+      dispatchLeaseUntil: null,
     },
   });
   if (completed.count === 1) return true;
   const existing = await db.articleBatch.findUnique({
     where: { id: input.batchId },
-    select: { status: true },
+    select: { status: true, workflowRunId: true },
   });
-  return existing?.status === input.status;
+  return (
+    existing?.status === input.status &&
+    existing.workflowRunId === expectedWorkflowRunId
+  );
 }
 
 /** Reads the fact slice + recent topics used for generation in one pass. */
@@ -367,15 +500,22 @@ export async function loadGenerationInputs(siteId: string): Promise<{
       orderBy: { position: "asc" },
       select: {
         items: {
-          select: { name: true, price: true, currency: true },
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            currency: true,
+            available: true,
+            attributes: true,
+          },
           orderBy: { position: "asc" },
         },
       },
     }),
     db.integration.findMany({
-      where: { siteId },
-      select: { label: true },
-      orderBy: { label: "asc" },
+      where: { siteId, enabled: true },
+      select: { type: true },
+      orderBy: { type: "asc" },
     }),
     // The dedupe contract is "topics covered by the two most recent batches",
     // so read batches first and expand from there — scanning articles by
@@ -402,15 +542,6 @@ export async function loadGenerationInputs(siteId: string): Promise<{
     ...new Set(recentBatches.flatMap((batch) => batch.articles.map((a) => a.topicKey))),
   ];
 
-  const businessHours = Array.isArray(site.businessHours)
-    ? (site.businessHours as Array<{ days?: unknown; hours?: unknown }>).flatMap(
-        (entry) =>
-          typeof entry?.days === "string" && typeof entry?.hours === "string"
-            ? [{ days: entry.days, hours: entry.hours }]
-            : [],
-      )
-    : [];
-
   return {
     ok: true,
     facts: {
@@ -420,18 +551,52 @@ export async function loadGenerationInputs(siteId: string): Promise<{
       locale: site.defaultLocale,
       address: site.address,
       phone: site.phone,
-      businessHours,
+      businessHours: parseBusinessHours(site.businessHours),
       catalogItems: sections.flatMap((section) =>
-        section.items.map((item) => ({
-          name: item.name,
-          price: item.price === null ? null : Number(item.price),
-          currency: item.currency,
-        })),
+        section.items
+          .filter((item) =>
+            isVerticalCatalogItemVisible(site.vertical, {
+              available: item.available,
+              attributes: item.attributes,
+            }),
+          )
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price === null ? null : Number(item.price),
+            currency: item.currency,
+          })),
       ),
-      integrationLabels: integrations.map((integration) => integration.label),
+      integrationCapabilities: articleIntegrationCapabilities(integrations),
     },
     recentTopicKeys,
   };
+}
+
+function articleIntegrationCapabilities(
+  integrations: Array<{ type: string }>,
+): SiteFacts["integrationCapabilities"] {
+  return [
+    ...new Set(
+      integrations.flatMap((integration) =>
+        isArticleIntegrationCapability(integration.type)
+          ? [integration.type]
+          : [],
+      ),
+    ),
+  ];
+}
+
+function parseBusinessHours(
+  value: unknown,
+): Array<{ days: string; hours: string }> {
+  return Array.isArray(value)
+    ? (value as Array<{ days?: unknown; hours?: unknown }>).flatMap((entry) =>
+        typeof entry?.days === "string" && typeof entry?.hours === "string"
+          ? [{ days: entry.days, hours: entry.hours }]
+          : [],
+      )
+    : [];
 }
 
 function dedupeSlug(slug: string, taken: Set<string>): string {
