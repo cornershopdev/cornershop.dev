@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.14-alpine AS bun-source
+FROM oven/bun:1.4.0-alpine AS bun-source
 
 FROM node:24.19.0-alpine3.24 AS node-toolchain
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
