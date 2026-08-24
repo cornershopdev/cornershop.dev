@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE } from "@/lib/outreach-inbound-forward-policy";
 
 mock.module("server-only", () => ({}));
 
@@ -27,7 +28,7 @@ describe("inbound read-copy provider event persistence", () => {
     expect(fixture.state.forward.deliveryStatus).toBe("SENT");
   });
 
-  it("records delivery once, reconciles an early receipt, and never mutates the source message", async () => {
+  it("records delivery, atomically accepts the outbox, and never mutates the source message", async () => {
     const fixture = deliveryFixture();
     const sourceBefore = structuredClone(fixture.state.sourceMessage);
     const delivered = eventInput({
@@ -45,17 +46,340 @@ describe("inbound read-copy provider event persistence", () => {
 
     expect(fixture.state.events).toHaveLength(1);
     expect(fixture.state.forward).toMatchObject({
-      status: "PENDING",
+      status: "SENT",
       deliveryStatus: "DELIVERED",
       providerMessageId: "resend_forward_1",
       providerEventAt: delivered.occurredAt,
       deliveredAt: delivered.occurredAt,
-      deliveryLeaseToken: "lease_1",
-      deliveryLeaseUntil: new Date("2026-08-23T10:05:00.000Z"),
-      lastFailureCode: "provider_unavailable",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+      lastFailureCode: null,
     });
     expect(fixture.state.sourceMessage).toEqual(sourceBefore);
     expect(fixture.state.alerts).toHaveLength(0);
+  });
+
+  it("settles every signed receipt after a durable attempt while keeping delivery outcomes separate", async () => {
+    const cases = [
+      ["email.sent", "SENT", null],
+      ["email.delivered", "DELIVERED", null],
+      ["email.failed", "FAILED", "provider_reported_failure"],
+      ["email.suppressed", "SUPPRESSED", "provider_suppressed"],
+      ["email.bounced", "BOUNCED", "recipient_bounced"],
+      ["email.complained", "COMPLAINED", "recipient_complained"],
+    ] as const;
+
+    for (const [eventType, deliveryStatus, deliveryFailureCode] of cases) {
+      const fixture = deliveryFixture();
+      const occurredAt = new Date("2026-08-23T10:02:00.000Z");
+      expect(
+        await recordResendInboundForwardEvent(
+          eventInput({
+            eventId: `webhook_acceptance_${deliveryStatus.toLowerCase()}`,
+            eventType,
+            occurredAt,
+          }),
+          fixture.db,
+        ),
+      ).toEqual({ handled: true, updated: 1 });
+      expect(fixture.state.forward).toMatchObject({
+        status: "SENT",
+        sentAt: occurredAt,
+        providerMessageId: "resend_forward_1",
+        deliveryStatus,
+        providerEventAt: occurredAt,
+        deliveryFailureCode,
+        lastFailureCode: null,
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
+      });
+      expect(fixture.state.alerts).toHaveLength(
+        deliveryFailureCode ? 1 : 0,
+      );
+    }
+  });
+
+  it("repairs a late positive receipt and keeps stale failure evidence from regressing it", async () => {
+    const fixture = deliveryFixture({
+      status: "EXHAUSTED",
+      lastFailureCode: "provider_unavailable",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    fixture.state.alerts.push({
+      id: "alert_exhausted",
+      kind: "OUTREACH_SEND_FAILURE",
+      status: "PENDING",
+      title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+      context: { forwardId: "forward_1", failureCode: "provider_unavailable" },
+    });
+    const delivered = eventInput({
+      eventId: "webhook_late_delivered",
+      eventType: "email.delivered",
+      occurredAt: new Date("2026-08-23T10:05:00.000Z"),
+    });
+
+    expect(
+      await recordResendInboundForwardEvent(delivered, fixture.db),
+    ).toEqual({ handled: true, updated: 1 });
+    expect(fixture.state.forward).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "DELIVERED",
+      providerMessageId: "resend_forward_1",
+      providerEventAt: delivered.occurredAt,
+      sentAt: delivered.occurredAt,
+      lastFailureCode: null,
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    expect(fixture.state.alerts).toEqual([
+      expect.objectContaining({
+        status: "PENDING",
+        title: "Inbound read-copy acceptance reconciled",
+        context: {
+          forwardId: "forward_1",
+          outreachMessageId: "inbound_1",
+          failureCode: "provider_acceptance_reconciled",
+        },
+      }),
+    ]);
+
+    const staleFailure = eventInput({
+      eventId: "webhook_stale_after_acceptance",
+      eventType: "email.bounced",
+      occurredAt: new Date("2026-08-23T10:04:00.000Z"),
+    });
+    expect(
+      await recordResendInboundForwardEvent(staleFailure, fixture.db),
+    ).toEqual({ handled: true, updated: 0 });
+    expect(fixture.state.events).toHaveLength(2);
+    expect(fixture.state.forward).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "DELIVERED",
+      providerEventAt: delivered.occurredAt,
+      deliveryFailureCode: null,
+    });
+    expect(fixture.state.alerts).toHaveLength(1);
+  });
+
+  it("does not bind a tagged receipt to a configuration-only exhaustion", async () => {
+    const fixture = deliveryFixture({
+      status: "EXHAUSTED",
+      attempts: 0,
+      firstProviderAttemptAt: null,
+      lastFailureCode: "configuration_invalid",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    fixture.state.alerts.push({
+      id: "alert_configuration_exhausted",
+      kind: "OUTREACH_SEND_FAILURE",
+      status: "PENDING",
+      title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+      context: {
+        forwardId: "forward_1",
+        failureCode: "configuration_invalid",
+      },
+    });
+
+    expect(
+      await recordResendInboundForwardEvent(
+        eventInput({
+          eventId: "webhook_unattempted_delivered",
+          eventType: "email.delivered",
+        }),
+        fixture.db,
+      ),
+    ).toEqual({ handled: true, updated: 0 });
+    expect(fixture.state.events).toHaveLength(1);
+    expect(fixture.state.forward).toMatchObject({
+      status: "EXHAUSTED",
+      attempts: 0,
+      firstProviderAttemptAt: null,
+      providerMessageId: null,
+      deliveryStatus: "PENDING",
+      sentAt: null,
+      lastFailureCode: "configuration_invalid",
+    });
+    expect(fixture.state.alerts).toEqual([
+      expect.objectContaining({
+        id: "alert_configuration_exhausted",
+        title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+      }),
+    ]);
+  });
+
+  it("does not resurrect prebound configuration-only rows through either identity lookup", async () => {
+    const cases = [
+      {
+        attempts: 0,
+        firstProviderAttemptAt: new Date("2026-08-23T10:00:00.000Z"),
+        taggedInboundForwardId: "forward_1" as string | undefined,
+      },
+      {
+        attempts: 1,
+        firstProviderAttemptAt: null,
+        taggedInboundForwardId: undefined,
+      },
+    ];
+
+    for (const [index, attemptEvidence] of cases.entries()) {
+      const previousEventAt = new Date("2026-08-23T10:00:00.000Z");
+      const fixture = deliveryFixture({
+        status: "EXHAUSTED",
+        attempts: attemptEvidence.attempts,
+        firstProviderAttemptAt: attemptEvidence.firstProviderAttemptAt,
+        providerMessageId: "resend_forward_1",
+        providerEventAt: previousEventAt,
+        deliveryStatus: "SENT",
+        sentAt: null,
+        lastFailureCode: "configuration_invalid",
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
+      });
+      fixture.state.alerts.push({
+        id: `alert_configuration_prebound_${index}`,
+        kind: "OUTREACH_SEND_FAILURE",
+        status: "PENDING",
+        title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+        context: {
+          forwardId: "forward_1",
+          failureCode: "configuration_invalid",
+        },
+      });
+
+      expect(
+        await recordResendInboundForwardEvent(
+          eventInput({
+            eventId: `webhook_configuration_prebound_${index}`,
+            eventType: "email.bounced",
+            occurredAt: new Date("2026-08-23T10:03:00.000Z"),
+            taggedInboundForwardId: attemptEvidence.taggedInboundForwardId,
+          }),
+          fixture.db,
+        ),
+      ).toEqual({ handled: true, updated: 0 });
+      expect(fixture.state.forward).toMatchObject({
+        status: "EXHAUSTED",
+        attempts: attemptEvidence.attempts,
+        firstProviderAttemptAt: attemptEvidence.firstProviderAttemptAt,
+        providerMessageId: "resend_forward_1",
+        providerEventAt: previousEventAt,
+        deliveryStatus: "SENT",
+        sentAt: null,
+        lastFailureCode: "configuration_invalid",
+      });
+      expect(fixture.state.events).toHaveLength(1);
+      expect(fixture.state.alerts).toHaveLength(1);
+    }
+  });
+
+  it("repairs late failure evidence without retaining a false exhaustion alert", async () => {
+    const fixture = deliveryFixture({
+      status: "EXHAUSTED",
+      lastFailureCode: "provider_unavailable",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+    fixture.state.alerts.push({
+      id: "alert_false_exhaustion",
+      kind: "OUTREACH_SEND_FAILURE",
+      status: "PENDING",
+      title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+      context: { forwardId: "forward_1", failureCode: "provider_unavailable" },
+    });
+
+    expect(
+      await recordResendInboundForwardEvent(
+        eventInput({
+          eventId: "webhook_late_bounced",
+          eventType: "email.bounced",
+          occurredAt: new Date("2026-08-23T10:06:00.000Z"),
+        }),
+        fixture.db,
+      ),
+    ).toEqual({ handled: true, updated: 1 });
+    expect(fixture.state.forward).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "BOUNCED",
+      deliveryFailureCode: "recipient_bounced",
+      lastFailureCode: null,
+    });
+    expect(
+      fixture.state.alerts.filter(
+        (alert) =>
+          alert.title === OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+      ),
+    ).toHaveLength(0);
+    expect(fixture.state.alerts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Inbound read-copy acceptance reconciled",
+        }),
+        expect.objectContaining({
+          title: "Inbound read-copy delivery failed",
+          context: expect.objectContaining({
+            failureCode: "recipient_bounced",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("repairs acceptance independently of a newer terminal delivery snapshot", async () => {
+    const newerFailureAt = new Date("2026-08-23T10:05:00.000Z");
+    const fixture = deliveryFixture({
+      status: "EXHAUSTED",
+      deliveryStatus: "FAILED",
+      providerMessageId: "resend_forward_1",
+      providerEventAt: newerFailureAt,
+      lastFailureCode: "provider_unavailable",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+
+    expect(
+      await recordResendInboundForwardEvent(
+        eventInput({
+          eventId: "webhook_older_sent_acceptance",
+          eventType: "email.sent",
+          occurredAt: new Date("2026-08-23T10:04:00.000Z"),
+        }),
+        fixture.db,
+      ),
+    ).toEqual({ handled: true, updated: 1 });
+    expect(fixture.state.forward).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "FAILED",
+      providerEventAt: newerFailureAt,
+      lastFailureCode: null,
+    });
+  });
+
+  it("repairs an exhausted identity conflict without clearing its alert marker", async () => {
+    const fixture = deliveryFixture({
+      status: "EXHAUSTED",
+      providerMessageId: "resend_forward_1",
+      sentAt: new Date("2026-08-23T10:00:00.000Z"),
+      lastFailureCode: "provider_identity_conflict",
+      deliveryLeaseToken: null,
+      deliveryLeaseUntil: null,
+    });
+
+    expect(
+      await recordResendInboundForwardEvent(
+        eventInput({
+          eventId: "webhook_identity_marker_sent",
+          eventType: "email.sent",
+        }),
+        fixture.db,
+      ),
+    ).toEqual({ handled: true, updated: 1 });
+    expect(fixture.state.forward).toMatchObject({
+      status: "SENT",
+      deliveryStatus: "SENT",
+      lastFailureCode: "provider_identity_conflict",
+    });
   });
 
   it("records a newer bounce once and enqueues one content-free alert atomically", async () => {
@@ -363,6 +687,12 @@ function deliveryFixture(
     providerMessageId: string | null;
     providerEventAt: Date | null;
     deliveredAt: Date | null;
+    sentAt: Date | null;
+    attempts: number;
+    firstProviderAttemptAt: Date | null;
+    lastFailureCode: string | null;
+    deliveryLeaseToken: string | null;
+    deliveryLeaseUntil: Date | null;
   }> = {},
 ) {
   const state = {
@@ -374,6 +704,10 @@ function deliveryFixture(
       providerMessageId: null as string | null,
       providerEventAt: null as Date | null,
       sentAt: null as Date | null,
+      attempts: 1,
+      firstProviderAttemptAt: new Date(
+        "2026-08-23T10:00:00.000Z",
+      ) as Date | null,
       deliveredAt: null as Date | null,
       deliveryFailureCode: null as string | null,
       lastFailureCode: "provider_unavailable" as string | null,
@@ -412,43 +746,14 @@ function deliveryFixture(
           : null;
       },
       updateMany: async (input: {
-        where: {
-          id: string;
-          deliveryStatus: { in: DeliveryStatus[] };
-          OR: Array<{ providerMessageId: string | null }>;
-          AND: Array<{
-            OR: Array<{
-              providerEventAt: null | { lte: Date };
-            }>;
-          }>;
-        };
+        where: Record<string, unknown>;
         data: Partial<typeof state.forward>;
       }) => {
         if (providerIdBeforeNextUpdate) {
           state.forward.providerMessageId = providerIdBeforeNextUpdate;
           providerIdBeforeNextUpdate = null;
         }
-        const providerMatches = input.where.OR.some(
-          ({ providerMessageId }) =>
-            providerMessageId === state.forward.providerMessageId,
-        );
-        const eventAtMatches = input.where.AND[0]!.OR.some((condition) => {
-          if (condition.providerEventAt === null) {
-            return state.forward.providerEventAt === null;
-          }
-          return (
-            state.forward.providerEventAt !== null &&
-            state.forward.providerEventAt <= condition.providerEventAt.lte
-          );
-        });
-        if (
-          input.where.id !== state.forward.id ||
-          !input.where.deliveryStatus.in.includes(
-            state.forward.deliveryStatus,
-          ) ||
-          !providerMatches ||
-          !eventAtMatches
-        ) {
+        if (!matchesRecorderWhere(state.forward, input.where)) {
           return { count: 0 };
         }
         for (const [key, value] of Object.entries(input.data)) {
@@ -478,8 +783,23 @@ function deliveryFixture(
           failAlert = false;
           throw new Error("fixture alert persistence failure");
         }
-        state.alerts.push(input.create);
+        state.alerts.push({
+          id: `alert_${state.alerts.length + 1}`,
+          status: "PENDING",
+          ...input.create,
+        });
         return { id: "alert_1", occurrenceCount: 1, status: "PENDING" };
+      },
+      findFirst: async (input: { where: Record<string, unknown> }) =>
+        state.alerts.find((alert) => matchesAlertWhere(alert, input.where)) ??
+        null,
+      deleteMany: async (input: { where: Record<string, unknown> }) => {
+        const retained = state.alerts.filter(
+          (alert) => !matchesAlertWhere(alert, input.where),
+        );
+        const count = state.alerts.length - retained.length;
+        state.alerts.splice(0, state.alerts.length, ...retained);
+        return { count };
       },
     },
   };
@@ -508,6 +828,65 @@ function deliveryFixture(
       providerIdBeforeNextUpdate = providerMessageId;
     },
   };
+}
+
+function matchesRecorderWhere(
+  forward: Record<string, unknown>,
+  where: Record<string, unknown>,
+): boolean {
+  return Object.entries(where).every(([key, expected]) => {
+    if (key === "OR") {
+      return (expected as Array<Record<string, unknown>>).some((clause) =>
+        matchesRecorderWhere(forward, clause),
+      );
+    }
+    if (key === "AND") {
+      return (expected as Array<Record<string, unknown>>).every((clause) =>
+        matchesRecorderWhere(forward, clause),
+      );
+    }
+    const actual = forward[key];
+    if (expected && typeof expected === "object" && !(expected instanceof Date)) {
+      const comparison = expected as {
+        in?: unknown[];
+        not?: unknown;
+        lte?: Date;
+        gt?: number;
+      };
+      if (comparison.in) return comparison.in.includes(actual);
+      if ("not" in comparison) return actual !== comparison.not;
+      if (comparison.lte) {
+        return actual instanceof Date && actual <= comparison.lte;
+      }
+      if (comparison.gt !== undefined) {
+        return typeof actual === "number" && actual > comparison.gt;
+      }
+    }
+    return actual === expected;
+  });
+}
+
+function matchesAlertWhere(
+  alert: Record<string, unknown>,
+  where: Record<string, unknown>,
+): boolean {
+  return Object.entries(where).every(([key, expected]) => {
+    if (key === "status" && expected && typeof expected === "object") {
+      return (expected as { in: unknown[] }).in.includes(alert.status);
+    }
+    if (key === "context" && expected && typeof expected === "object") {
+      const filter = expected as { path: string[]; equals: unknown };
+      let actual = alert.context;
+      for (const segment of filter.path) {
+        if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
+          return false;
+        }
+        actual = (actual as Record<string, unknown>)[segment];
+      }
+      return actual === filter.equals;
+    }
+    return alert[key] === expected;
+  });
 }
 
 function eventInput(

@@ -4,10 +4,12 @@ import { getDb } from "@/lib/db";
 import { enqueueOperatorAlert } from "@/lib/operator-alert-queue";
 import {
   canApplyResendInboundForwardEvent,
+  inboundForwardReceiptProvesProviderAcceptance,
   inboundForwardDeliveryFailureCode,
   RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS,
   type ResendInboundForwardEventType,
 } from "@/lib/outreach-inbound-forward-event-policy";
+import { OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE } from "@/lib/outreach-inbound-forward-policy";
 
 export type InboundForwardEventRecordResult = {
   handled: boolean;
@@ -32,6 +34,9 @@ export async function recordResendInboundForwardEvent(
       providerMessageId: true,
       providerEventAt: true,
       deliveryStatus: true,
+      sentAt: true,
+      attempts: true,
+      firstProviderAttemptAt: true,
     } as const;
     const hasTaggedForward = input.taggedInboundForwardId !== undefined;
     const taggedForward = hasTaggedForward
@@ -68,6 +73,53 @@ export async function recordResendInboundForwardEvent(
     const transition = RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS[input.eventType];
     await upsertProviderEventEvidence(tx, forward.id, input);
 
+    let acceptanceUpdated = 0;
+    if (inboundForwardReceiptProvesProviderAcceptance(input.eventType)) {
+      const accepted = await tx.outreachInboundForward.updateMany({
+        where: {
+          id: forward.id,
+          status: { in: ["PENDING", "EXHAUSTED"] },
+          attempts: { gt: 0 },
+          firstProviderAttemptAt: { not: null },
+          OR: [
+            { providerMessageId: input.providerMessageId },
+            { providerMessageId: null },
+          ],
+        },
+        data: {
+          status: "SENT",
+          sentAt: forward.sentAt ?? input.occurredAt,
+          providerMessageId: input.providerMessageId,
+          deliveryLeaseToken: null,
+          deliveryLeaseUntil: null,
+        },
+      });
+      acceptanceUpdated = accepted.count;
+      if (accepted.count === 1) {
+        await tx.outreachInboundForward.updateMany({
+          where: {
+            id: forward.id,
+            status: "SENT",
+            providerMessageId: input.providerMessageId,
+            OR: [
+              { lastFailureCode: null },
+              {
+                lastFailureCode: {
+                  not: "provider_identity_conflict",
+                },
+              },
+            ],
+          },
+          data: { lastFailureCode: null },
+        });
+        await reconcileSupersededExhaustionAlert(
+          tx,
+          forward,
+          input.occurredAt,
+        );
+      }
+    }
+
     if (
       !canApplyResendInboundForwardEvent({
         currentStatus: forward.deliveryStatus,
@@ -76,7 +128,7 @@ export async function recordResendInboundForwardEvent(
         occurredAt: input.occurredAt,
       })
     ) {
-      return { handled: true, updated: 0 };
+      return { handled: true, updated: acceptanceUpdated };
     }
 
     const failureCode = inboundForwardDeliveryFailureCode(input.eventType);
@@ -84,9 +136,11 @@ export async function recordResendInboundForwardEvent(
       where: {
         id: forward.id,
         deliveryStatus: { in: [...transition.from] },
+        attempts: { gt: 0 },
+        firstProviderAttemptAt: { not: null },
         OR: [
-          { providerMessageId: null },
           { providerMessageId: input.providerMessageId },
+          { providerMessageId: null },
         ],
         AND: [
           {
@@ -138,7 +192,46 @@ export async function recordResendInboundForwardEvent(
         };
       }
     }
-    return { handled: true, updated: updated.count };
+    return {
+      handled: true,
+      updated: Math.max(acceptanceUpdated, updated.count),
+    };
+  });
+}
+
+async function reconcileSupersededExhaustionAlert(
+  tx: Pick<Prisma.TransactionClient, "operatorAlert">,
+  forward: { id: string; outreachMessageId: string },
+  occurredAt: Date,
+) {
+  const alertIdentity = {
+    kind: "OUTREACH_SEND_FAILURE" as const,
+    title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
+    context: { path: ["forwardId"], equals: forward.id },
+  };
+  const existing = await tx.operatorAlert.findFirst({
+    where: alertIdentity,
+    select: { id: true },
+  });
+  await tx.operatorAlert.deleteMany({
+    where: {
+      ...alertIdentity,
+      status: { in: ["PENDING", "EXHAUSTED"] },
+    },
+  });
+  if (!existing) return;
+  await enqueueOperatorAlert(tx, {
+    kind: "OUTREACH_SEND_FAILURE",
+    dedupKey: `inbound-forward-acceptance-reconciled:${forward.id}`,
+    title: "Inbound read-copy acceptance reconciled",
+    message:
+      "A late signed positive provider receipt repaired an inbound read copy previously reported as exhausted. No additional copy was sent; the Postgres/admin outreach thread remains authoritative.",
+    context: {
+      forwardId: forward.id,
+      outreachMessageId: forward.outreachMessageId,
+      failureCode: "provider_acceptance_reconciled",
+    },
+    occurredAt,
   });
 }
 

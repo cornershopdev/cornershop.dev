@@ -15,6 +15,7 @@ import {
   inboundForwardFailureState,
   inboundForwardingConfigured,
   OUTREACH_INBOUND_FORWARD_BATCH_SIZE,
+  OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
   OUTREACH_INBOUND_FORWARD_LEASE_MS,
   OUTREACH_INBOUND_FORWARD_MAX_ATTEMPTS,
   type InboundForwardDeliveryOutcome,
@@ -189,25 +190,39 @@ export async function deliverOutreachInboundForward(
     }
     return resolveSentProviderIdentityConflict({
       id: forward.id,
-      leaseToken,
       outreachMessageId: forward.outreachMessageId,
     });
   }
   if (forward.status !== "PENDING") return "deduplicated";
   if (forward.lastFailureCode === "provider_identity_conflict") {
-    return resolveProviderIdentityConflict(
-      forward.id,
+    return resolveProviderIdentityConflict({
+      id: forward.id,
       leaseToken,
-      forward.outreachMessageId,
-    );
+      outreachMessageId: forward.outreachMessageId,
+    });
   }
+  const hasDurableProviderAttempt =
+    forward.attempts > 0 && forward.firstProviderAttemptAt !== null;
   if (forward.providerMessageId) {
+    if (!hasDurableProviderAttempt || !forward.providerEventAt) {
+      return (await exhaustForward(
+        forward.id,
+        leaseToken,
+        forward.outreachMessageId,
+        "provider_identity_without_attempt_evidence",
+      ))
+        ? "exhausted"
+        : "deduplicated";
+    }
     const reconciled = await db.outreachInboundForward.updateMany({
       where: {
         id: forward.id,
         status: "PENDING",
         deliveryLeaseToken: leaseToken,
         providerMessageId: forward.providerMessageId,
+        providerEventAt: forward.providerEventAt,
+        attempts: { gt: 0 },
+        firstProviderAttemptAt: { not: null },
       },
       data: {
         status: "SENT",
@@ -404,11 +419,12 @@ export async function deliverOutreachInboundForward(
         returnedProviderMessageId: data.id,
       });
     }
-    return resolveProviderIdentityConflict(
-      forward.id,
+    return resolveProviderIdentityConflict({
+      id: forward.id,
       leaseToken,
-      forward.outreachMessageId,
-    );
+      outreachMessageId: forward.outreachMessageId,
+      returnedProviderMessageId: data.id,
+    });
   }
   if (error?.name === "invalid_idempotent_request") {
     return (await exhaustForward(
@@ -485,7 +501,18 @@ async function exhaustForward(
 ): Promise<boolean> {
   return getDb().$transaction(async (tx) => {
     const exhausted = await tx.outreachInboundForward.updateMany({
-      where: { id, status: "PENDING", deliveryLeaseToken: leaseToken },
+      where: {
+        id,
+        status: "PENDING",
+        deliveryLeaseToken: leaseToken,
+        sentAt: null,
+        OR: [
+          { attempts: { lte: 0 } },
+          { firstProviderAttemptAt: null },
+          { providerMessageId: null },
+          { providerEventAt: null },
+        ],
+      },
       data: {
         status: "EXHAUSTED",
         lastFailureCode: failureCode,
@@ -497,7 +524,7 @@ async function exhaustForward(
     await enqueueOperatorAlert(tx, {
       kind: "OUTREACH_SEND_FAILURE",
       dedupKey: `inbound-forward:${id}`,
-      title: "Inbound read-copy forwarding exhausted",
+      title: OUTREACH_INBOUND_FORWARD_EXHAUSTION_ALERT_TITLE,
       message:
         "A persisted inbound read copy could not be forwarded after bounded retries. The Postgres/admin outreach thread remains authoritative.",
       context: { forwardId: id, outreachMessageId, failureCode },
@@ -578,7 +605,6 @@ function isProviderMessageIdentityConflict(error: unknown): boolean {
 async function resolveSentProviderIdentityConflict(input: {
   id: string;
   outreachMessageId: string;
-  leaseToken?: string;
   returnedProviderMessageId?: string;
 }): Promise<"pending" | "exhausted" | "deduplicated"> {
   const eligibility = input.returnedProviderMessageId
@@ -591,7 +617,6 @@ async function resolveSentProviderIdentityConflict(input: {
         id: input.id,
         status: "SENT" as const,
         lastFailureCode: "provider_identity_conflict",
-        deliveryLeaseToken: input.leaseToken,
       };
   try {
     const alerted = await getDb().$transaction(async (tx) => {
@@ -656,26 +681,39 @@ function enqueueProviderIdentityConflictAlert(
   });
 }
 
-async function resolveProviderIdentityConflict(
-  id: string,
-  leaseToken: string,
-  outreachMessageId: string,
-): Promise<"pending" | "exhausted" | "deduplicated"> {
+async function resolveProviderIdentityConflict(input: {
+  id: string;
+  leaseToken: string;
+  outreachMessageId: string;
+  returnedProviderMessageId?: string;
+}): Promise<"pending" | "exhausted" | "deduplicated"> {
+  const reconcileSentConflict = () =>
+    resolveSentProviderIdentityConflict({
+      id: input.id,
+      outreachMessageId: input.outreachMessageId,
+      ...(input.returnedProviderMessageId
+        ? { returnedProviderMessageId: input.returnedProviderMessageId }
+        : {}),
+    });
   try {
-    return (await exhaustForward(
-      id,
-      leaseToken,
-      outreachMessageId,
+    const exhausted = await exhaustForward(
+      input.id,
+      input.leaseToken,
+      input.outreachMessageId,
       "provider_identity_conflict",
-    ))
-      ? "exhausted"
-      : "deduplicated";
+    );
+    if (exhausted) return "exhausted";
+    return reconcileSentConflict();
   } catch {
     // Preserve a content-free reconciliation marker if alert persistence is
     // temporarily unavailable. The next lease retries only the atomic alert
     // boundary; it never calls the provider with a conflicting identity.
     const pending = await getDb().outreachInboundForward.updateMany({
-      where: { id, status: "PENDING", deliveryLeaseToken: leaseToken },
+      where: {
+        id: input.id,
+        status: "PENDING",
+        deliveryLeaseToken: input.leaseToken,
+      },
       data: {
         lastFailureCode: "provider_identity_conflict",
         nextAttemptAt: new Date(),
@@ -683,6 +721,7 @@ async function resolveProviderIdentityConflict(
         deliveryLeaseUntil: null,
       },
     });
-    return pending.count === 1 ? "pending" : "deduplicated";
+    if (pending.count === 1) return "pending";
+    return reconcileSentConflict();
   }
 }

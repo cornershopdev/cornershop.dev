@@ -20,6 +20,7 @@ type ForwardRow = Record<string, unknown> & {
   deliveryLeaseUntil: Date | null;
   deliveryLeaseToken: string | null;
   firstProviderAttemptAt: Date | null;
+  sentAt: Date | null;
   targetAddress: string | null;
   providerMessageId: string | null;
   deliveryStatus:
@@ -100,6 +101,7 @@ const fakeDb = {
         deliveryLeaseUntil: null,
         deliveryLeaseToken: null,
         firstProviderAttemptAt: null,
+        sentAt: null,
         targetAddress: null,
         providerMessageId: null,
         deliveryStatus: "PENDING",
@@ -712,11 +714,17 @@ describe("inbound read-copy outbox", () => {
       configuredEnvironment,
     );
     beforeProviderReturn = () => {
+      const eventAt = new Date("2026-08-23T10:01:00.000Z");
       Object.assign(forwards[0]!, {
+        status: "SENT",
+        sentAt: eventAt,
         deliveryStatus: "DELIVERED",
         providerMessageId: "resend_forward_1",
-        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
-        deliveredAt: new Date("2026-08-23T10:01:00.000Z"),
+        providerEventAt: eventAt,
+        deliveredAt: eventAt,
+        lastFailureCode: null,
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
       });
     };
 
@@ -743,10 +751,16 @@ describe("inbound read-copy outbox", () => {
       configuredEnvironment,
     );
     beforeProviderReturn = () => {
+      const eventAt = new Date("2026-08-23T10:01:00.000Z");
       Object.assign(forwards[0]!, {
+        status: "SENT",
+        sentAt: eventAt,
         deliveryStatus: "BOUNCED",
         providerMessageId: "resend_forward_event",
-        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
+        providerEventAt: eventAt,
+        lastFailureCode: null,
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
       });
     };
 
@@ -758,10 +772,10 @@ describe("inbound read-copy outbox", () => {
     ).toBe("exhausted");
     expect(providerSend).toHaveBeenCalledTimes(1);
     expect(forwards[0]).toMatchObject({
-      status: "EXHAUSTED",
+      status: "SENT",
       deliveryStatus: "BOUNCED",
       providerMessageId: "resend_forward_event",
-      lastFailureCode: "provider_identity_conflict",
+      lastFailureCode: null,
     });
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({
@@ -780,10 +794,16 @@ describe("inbound read-copy outbox", () => {
       configuredEnvironment,
     );
     beforeProviderReturn = () => {
+      const eventAt = new Date("2026-08-23T10:01:00.000Z");
       Object.assign(forwards[0]!, {
+        status: "SENT",
+        sentAt: eventAt,
         deliveryStatus: "BOUNCED",
         providerMessageId: "resend_forward_event",
-        providerEventAt: new Date("2026-08-23T10:01:00.000Z"),
+        providerEventAt: eventAt,
+        lastFailureCode: null,
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
       });
     };
     failNextOperatorAlert = true;
@@ -796,7 +816,7 @@ describe("inbound read-copy outbox", () => {
     ).toBe("pending");
     expect(providerSend).toHaveBeenCalledTimes(1);
     expect(forwards[0]).toMatchObject({
-      status: "PENDING",
+      status: "SENT",
       providerMessageId: "resend_forward_event",
       lastFailureCode: "provider_identity_conflict",
       deliveryLeaseToken: null,
@@ -814,9 +834,9 @@ describe("inbound read-copy outbox", () => {
     ).toBe("exhausted");
     expect(providerSend).toHaveBeenCalledTimes(1);
     expect(forwards[0]).toMatchObject({
-      status: "EXHAUSTED",
+      status: "SENT",
       providerMessageId: "resend_forward_event",
-      lastFailureCode: "provider_identity_conflict",
+      lastFailureCode: null,
     });
     expect(alerts).toHaveLength(1);
   });
@@ -964,6 +984,41 @@ describe("inbound read-copy outbox", () => {
       lastFailureCode: null,
     });
     expect(alerts).toHaveLength(0);
+  });
+
+  it("terminalizes prebound identity evidence without a durable provider attempt", async () => {
+    for (const [index, attemptEvidence] of [
+      { attempts: 0, firstProviderAttemptAt: new Date() },
+      { attempts: 1, firstProviderAttemptAt: null },
+    ].entries()) {
+      await enqueueOutreachInboundForward(
+        enqueueDb,
+        inboundInput({ outreachMessageId: `inbound_invalid_${index}` }),
+        configuredEnvironment,
+      );
+      const forward = forwards[index]!;
+      Object.assign(forward, {
+        attempts: attemptEvidence.attempts,
+        firstProviderAttemptAt: attemptEvidence.firstProviderAttemptAt,
+        providerMessageId: `invalid_prebound_${index}`,
+        providerEventAt: new Date(),
+      });
+
+      expect(
+        await deliverOutreachInboundForward(
+          forward.id,
+          configuredEnvironment,
+        ),
+      ).toBe("exhausted");
+      expect(forward).toMatchObject({
+        status: "EXHAUSTED",
+        lastFailureCode: "provider_identity_without_attempt_evidence",
+        deliveryLeaseToken: null,
+        deliveryLeaseUntil: null,
+      });
+    }
+    expect(providerSend).not.toHaveBeenCalled();
+    expect(alerts).toHaveLength(2);
   });
 
   it("does not alert exhaustion after another worker finalizes the row", async () => {
@@ -1136,12 +1191,20 @@ describe("inbound read-copy outbox", () => {
   });
 });
 
-function inboundInput() {
+function inboundInput(
+  overrides: Partial<{
+    outreachMessageId: string;
+    siteId: string;
+    fromAddress: string;
+    toAddress: string;
+  }> = {},
+) {
   return {
     outreachMessageId: "inbound_1",
     siteId: "site_1",
     fromAddress: "owner@chez-lea.test",
     toAddress: "vincent@restofront.com",
+    ...overrides,
   };
 }
 
@@ -1161,11 +1224,15 @@ function matchesWhere(
     const actual = forward[key];
     if (expected && typeof expected === "object" && !(expected instanceof Date)) {
       const comparison = expected as {
+        gt?: number;
         lt?: number | Date;
         lte?: number | Date;
         not?: unknown;
       };
       if (comparison.not !== undefined) return actual !== comparison.not;
+      if (comparison.gt !== undefined) {
+        return typeof actual === "number" && actual > comparison.gt;
+      }
       if (comparison.lt !== undefined) {
         return comparison.lt instanceof Date
           ? actual instanceof Date && actual < comparison.lt

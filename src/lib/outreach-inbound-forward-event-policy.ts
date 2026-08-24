@@ -30,6 +30,12 @@ export const RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS = {
 export type ResendInboundForwardEventType =
   keyof typeof RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS;
 
+export function inboundForwardReceiptProvesProviderAcceptance(
+  eventType: ResendInboundForwardEventType,
+): boolean {
+  return eventType in RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS;
+}
+
 export function canApplyResendInboundForwardEvent(input: {
   currentStatus: OutreachInboundForwardDeliveryStatus;
   currentEventAt: Date | null;

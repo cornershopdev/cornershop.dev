@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   canApplyResendInboundForwardEvent,
+  inboundForwardReceiptProvesProviderAcceptance,
   inboundForwardDeliveryFailureCode,
   RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS,
 } from "@/lib/outreach-inbound-forward-event-policy";
@@ -62,5 +63,15 @@ describe("inbound read-copy receipt policy", () => {
       "recipient_complained",
     );
     expect(inboundForwardDeliveryFailureCode("email.delivered")).toBeNull();
+  });
+
+  it("treats every validated signed receipt as provider acceptance evidence", () => {
+    for (const eventType of Object.keys(
+      RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS,
+    ) as Array<keyof typeof RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS>) {
+      expect(inboundForwardReceiptProvesProviderAcceptance(eventType)).toBe(
+        true,
+      );
+    }
   });
 });

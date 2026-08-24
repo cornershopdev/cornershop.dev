@@ -186,9 +186,13 @@ Resend tag. Signed `sent`, `delivered`, `failed`, `suppressed`, `bounced`, and
 ledger keyed by the Svix event ID. `deliveryStatus` is deliberately separate
 from the forwarding outbox `status`: provider acceptance completes the outbox,
 while a later delivery failure advances only the receipt snapshot and enqueues
-a durable, content-free alert. Exact webhook retries are no-ops, older events
-cannot regress the snapshot, and a tagged row that is not visible yet returns a
-retryable response instead of acknowledging and losing the receipt.
+a durable, content-free alert. Every validated receipt class, including
+`failed` and `suppressed`, proves provider handling only when the row already
+records a real prepared attempt; it therefore settles that outbox to `SENT`
+without weakening the distinct delivery failure. Exact webhook retries are
+no-ops, older events cannot regress the snapshot, and a tagged row that is not
+visible yet returns a retryable response instead of acknowledging and losing
+the receipt.
 
 Read copies contain a bounded site name, slug, original sender/subject, and a
 bounded plain-text message body. Raw inbound HTML is never rendered. The copy is
