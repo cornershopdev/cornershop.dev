@@ -12,6 +12,13 @@ const [deployScript, entrypoint, migration, generateRoute, articleRoute] =
     ].map((path) => Bun.file(new URL(path, repoRoot)).text()),
   );
 
+const rolloutHarness = Bun.spawnSync({
+  cmd: ["bash", "deploy/aws/test-article-rollout.sh"],
+  cwd: repoRoot.pathname,
+  stdout: "pipe",
+  stderr: "pipe",
+});
+
 function assertOrdered(markers: string[]) {
   let cursor = -1;
   for (const marker of markers) {
@@ -22,6 +29,14 @@ function assertOrdered(markers: string[]) {
 }
 
 describe("article blue-green rollout contract", () => {
+  it("preserves a closed gate through bootstrap and proves rollback failures", () => {
+    expect(new TextDecoder().decode(rolloutHarness.stderr)).toBe("");
+    expect(rolloutHarness.exitCode).toBe(0);
+    expect(new TextDecoder().decode(rolloutHarness.stdout)).toContain(
+      "article rollout failure-path tests passed",
+    );
+  });
+
   it("gates both mutation routes on API and custom-domain ingress", () => {
     expect(deployScript).toContain(
       '$0 == "api.cornershop.dev {" || $0 == "https:// {"',
@@ -71,7 +86,9 @@ describe("article blue-green rollout contract", () => {
     )?.[1];
     expect(rollback).toBeDefined();
     expect(rollback).toContain("set_article_edge_gate closed");
+    expect(rollback).toContain("verify_article_edge_gate closed");
     expect(rollback).toContain("run_article_rollout close");
+    expect(rollback).toContain("leaving application containers stopped");
     expect(rollback).toContain('docker rename "$previous" "$container"');
     expect(rollback).not.toContain("set_article_edge_gate open");
     expect(rollback).not.toContain("run_article_rollout open");

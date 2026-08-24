@@ -15,7 +15,7 @@ readonly container="api-cornershop-dev"
 readonly candidate="${container}-candidate"
 readonly previous="${container}-previous"
 readonly deployed_sha="${image_name#cornershopdev:}"
-readonly expected_bootstrap_sha256="257af17d1b20743948bb5d674d8dc12675bf45e47c697f987ed596bdcf802532"
+readonly expected_bootstrap_sha256="e9634ec4452851279a933eb0e423b1239bebdc84c87f0bf9ef9a9ac4bef375f5"
 readonly expected_caddy_fragment_sha256="9f0bb5f0c1d9cc0e4b341b2795c6c63563aff918c4e47a8570fcecc23ec72b70"
 readonly expected_host_launcher_sha256="75aa0e06cf621dd7c9c742b6a73e45a1d8c23dc7720feab08547253f1e934abc"
 readonly article_gate_body="Article mutations are temporarily gated for a safe release."
@@ -300,12 +300,27 @@ rollback_article_rollout() {
   local failure_status="${1:-1}"
   trap - ERR
   set +e
+  local edge_gate_verified=0
+  local database_gate_verified=0
   if [[ "$article_rollout_active" == 1 ]]; then
     echo "Article rollout failed; retaining both mutation gates" >&2
-    set_article_edge_gate closed
-    run_article_rollout close >/dev/null
+    if set_article_edge_gate closed && verify_article_edge_gate closed; then
+      edge_gate_verified=1
+    fi
+    if run_article_rollout close >/dev/null; then
+      database_gate_verified=1
+    fi
   fi
   docker rm -f "$candidate" >/dev/null 2>&1
+  if
+    [[ "$article_rollout_active" == 1 ]] &&
+    [[ "$edge_gate_verified" != 1 || "$database_gate_verified" != 1 ]]
+  then
+    echo "Article gates could not be verified; leaving application containers stopped" >&2
+    docker stop "$container" >/dev/null 2>&1
+    docker stop "$previous" >/dev/null 2>&1
+    return "$failure_status"
+  fi
   if docker inspect "$previous" >/dev/null 2>&1; then
     docker rm -f "$container" >/dev/null 2>&1
     docker rename "$previous" "$container"
