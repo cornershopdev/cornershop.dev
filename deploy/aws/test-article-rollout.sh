@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The rollback function is extracted and sourced dynamically so this harness
 # executes the production definition; ShellCheck cannot resolve those symbols.
-# shellcheck disable=SC1090,SC2034,SC2329
+# shellcheck disable=SC1090,SC2034,SC2317,SC2329
 set -Eeuo pipefail
 
 deploy_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
