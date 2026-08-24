@@ -13,7 +13,10 @@
 - `public/brand/cornershopdev/mark.png`: 512 × 512 RGBA header mark
 - `public/brand/cornershopdev/apple-touch-icon.png`: 180 × 180 RGBA touch icon
 - `public/brand/cornershopdev/favicon-32.png`: 32 × 32 RGBA favicon
-- `src/app/favicon.ico`: multi-size browser favicon
+
+The root layout declares the dedicated PNG favicon and Apple touch icon. There
+is no `src/app/favicon.ico` file convention because Next.js forces that global
+file into customer-host metadata after child metadata has resolved.
 
 The master contains only the two exact flat sRGB brand colors plus alpha. All
 four corners are transparent.
@@ -24,8 +27,8 @@ four corners are transparent.
   renders cleanly in the header with correct wordmark spacing and no clipping.
 - Mobile: verified at 390 × 844. The mark renders at 36 × 36, the wordmark stays
   legible, and the navigation remains contained with no horizontal overflow.
-- Browser metadata: the generated favicon, dedicated 32px favicon and 180px
-  Apple touch icon all resolve from the page.
+- Browser metadata: the declared 32px favicon and 180px Apple touch icon both
+  resolve from factory pages without leaking into customer-host article pages.
 - Responsive page state: hero copy, controls and header remain readable at both
   inspected viewports.
 

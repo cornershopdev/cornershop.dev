@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Prisma } from "@/generated/prisma/client";
 import { getDb } from "@/lib/db";
 import {
   configuredOperatorAlertRecipients,
@@ -9,62 +8,34 @@ import {
   OPERATOR_ALERT_LEASE_MS,
   OPERATOR_ALERT_MAX_ATTEMPTS,
   operatorAlertFailureState,
-  operatorAlertFingerprint,
   type AlertDeliveryOutcome,
-  type OperatorAlertKind,
-  safeAlertText,
 } from "@/lib/operator-alert-policy";
+import {
+  persistPreparedOperatorAlert,
+  prepareOperatorAlert,
+  type OperatorAlertInput,
+  type PreparedOperatorAlert,
+} from "@/lib/operator-alert-queue";
 import { emailSender } from "@/lib/email-identity";
 import { getResend } from "@/lib/resend";
 
-export type CaptureOperatorAlertInput = {
-  kind: OperatorAlertKind;
-  dedupKey: string;
-  title: string;
-  message: string;
-  context?: Record<string, string | number | boolean | null>;
-  occurredAt?: Date;
-};
+export type CaptureOperatorAlertInput = OperatorAlertInput;
 
 export type { AlertDeliveryOutcome } from "@/lib/operator-alert-policy";
 
 export async function captureOperatorAlert(
   input: CaptureOperatorAlertInput,
 ): Promise<AlertDeliveryOutcome> {
-  const occurredAt = input.occurredAt ?? new Date();
-  const safeInput = {
-    ...input,
-    title: safeAlertText(input.title, 160),
-    message: safeAlertText(input.message, 1000),
-    occurredAt,
-  };
-  const fingerprint = operatorAlertFingerprint(safeInput);
+  const prepared = prepareOperatorAlert(input);
 
   try {
-    const result = await getDb().operatorAlert.upsert({
-      where: { fingerprint },
-      update: {
-        occurrenceCount: { increment: 1 },
-        lastOccurredAt: occurredAt,
-      },
-      create: {
-        fingerprint,
-        kind: input.kind,
-        title: safeInput.title,
-        message: safeInput.message,
-        context: (input.context ?? {}) as Prisma.InputJsonValue,
-        firstOccurredAt: occurredAt,
-        lastOccurredAt: occurredAt,
-        nextAttemptAt: occurredAt,
-      },
-      select: { id: true, occurrenceCount: true, status: true },
-    });
+    const result = await persistPreparedOperatorAlert(getDb(), prepared);
     if (result.occurrenceCount > 1 || result.status !== "PENDING") {
       return "deduplicated";
     }
     return deliverOperatorAlert(result.id);
   } catch {
-    return deliverFallbackAlert({ ...safeInput, fingerprint });
+    return deliverFallbackAlert(prepared);
   }
 }
 
@@ -167,10 +138,7 @@ async function deliverOperatorAlert(id: string): Promise<AlertDeliveryOutcome> {
 }
 
 async function deliverFallbackAlert(
-  input: CaptureOperatorAlertInput & {
-    fingerprint: string;
-    occurredAt: Date;
-  },
+  input: PreparedOperatorAlert,
 ): Promise<AlertDeliveryOutcome> {
   try {
     const recipients = configuredOperatorAlertRecipients();

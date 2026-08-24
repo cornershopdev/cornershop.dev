@@ -23,6 +23,14 @@ describe("production container runtime", () => {
     );
     expect(dockerfile).toContain("FROM node-toolchain AS dependencies");
     expect(dockerfile).toContain("FROM node-toolchain AS runner");
+    const patchCopy = dockerfile.indexOf("COPY patches ./patches");
+    const frozenInstall = dockerfile.indexOf(
+      "RUN bun install --frozen-lockfile",
+    );
+    expect(patchCopy).toBeGreaterThan(
+      dockerfile.indexOf("COPY package.json bun.lock ./"),
+    );
+    expect(patchCopy).toBeLessThan(frozenInstall);
     expect(dockerfile).toContain(
       "COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun",
     );
@@ -41,6 +49,9 @@ describe("production container runtime", () => {
     );
     expect(dockerfile).toContain("sharp(encoded).resize(1, 1).toBuffer()");
     expect(dockerfile).not.toContain("RUN bun -e 'import sharp");
+    expect(dockerfile).toContain(
+      "--outfile=.operator-scripts/dispatch-inbound-forwards.ts",
+    );
   });
 
   it("boots and exercises the candidate image in CI", () => {
@@ -54,6 +65,12 @@ describe("production container runtime", () => {
     expect(runtimeContract).toContain("readlink /proc/1/exe");
     expect(runtimeContract).toContain("command -v node");
     expect(runtimeContract).toContain("Expected PID 1 executable");
+    expect(runtimeContract).toContain(
+      "test -f /app/scripts/dispatch-inbound-forwards.ts",
+    );
+    expect(runtimeContract).toContain(
+      "bun run operator:dispatch-inbound-forwards",
+    );
     expect(runtimeContract).toContain('assert_status "/" "200"');
     expect(runtimeContract).toContain(
       'assert_status "/niche/restaurant" "200"',

@@ -17,6 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG DATABASE_URL=postgresql://build:build@127.0.0.1:5432/cornershopdev_build
 ENV DATABASE_URL=$DATABASE_URL
 COPY package.json bun.lock ./
+COPY patches ./patches
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN bun install --frozen-lockfile
@@ -62,6 +63,10 @@ RUN bun build scripts/dispatch-operator-alerts.ts \
   --target=bun \
   --packages=external \
   --outfile=.operator-scripts/dispatch-operator-alerts.ts
+RUN bun build scripts/dispatch-inbound-forwards.ts \
+  --target=bun \
+  --packages=external \
+  --outfile=.operator-scripts/dispatch-inbound-forwards.ts
 RUN bun build scripts/monitor-public-site.ts \
   --target=bun \
   --packages=external \

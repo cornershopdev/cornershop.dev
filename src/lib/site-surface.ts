@@ -1,6 +1,13 @@
 export const LIVE_SITE_SLUG_HEADER = "x-cornershop-live-site-slug";
 export const LIVE_SITE_VERSION_HEADER = "x-cornershop-live-site-version";
+export const LIVE_SITE_ORIGIN_HEADER = "x-cornershop-live-site-origin";
 export const PUBLIC_SITE_VERSION_HEADER = "x-cornershop-site-version";
+
+export type LiveSiteContext = {
+  slug: string;
+  versionId: string;
+  origin: string;
+};
 
 export function liveSiteVersionId(
   headers: Pick<Headers, "get">,
@@ -18,6 +25,24 @@ export function isLiveSiteSurface(
   return liveSiteVersionId(headers, siteSlug) !== null;
 }
 
+/**
+ * Complete public identity attached by `proxy.ts` after hostname, publication,
+ * and snapshot checks have passed. Customer discovery routes have no slug in
+ * their filesystem path, so they must require the full marker set rather than
+ * infer identity from an untrusted Host header.
+ */
+export function liveSiteContext(
+  headers: Pick<Headers, "get">,
+): LiveSiteContext | null {
+  const slug = headers.get(LIVE_SITE_SLUG_HEADER)?.trim();
+  const versionId = headers.get(LIVE_SITE_VERSION_HEADER)?.trim();
+  const origin = canonicalHttpsOrigin(
+    headers.get(LIVE_SITE_ORIGIN_HEADER)?.trim() ?? "",
+  );
+  if (!slug || !versionId || !origin) return null;
+  return { slug, versionId, origin };
+}
+
 export function localeHref(
   basePath: string,
   locale: string,
@@ -25,6 +50,17 @@ export function localeHref(
 ): string {
   if (locale === defaultLocale) return basePath;
   return `${basePath.replace(/\/$/, "")}/${locale}`;
+}
+
+/** Canonical shape accepted by the shared site schema: `en` or `fr-CA`. */
+export function canonicalSiteLocale(value: string): string | null {
+  const match = value.match(/^([a-z]{2})(?:-([a-z]{2}))?$/i);
+  const language = match?.[1];
+  if (!language) return null;
+  const region = match[2];
+  return region
+    ? `${language.toLowerCase()}-${region.toUpperCase()}`
+    : language.toLowerCase();
 }
 
 export function liveSiteCanonicalPath(
@@ -44,4 +80,26 @@ export function liveSiteCanonicalPath(
  */
 export function previewCacheTagFor(slug: string): string {
   return `preview-site:${slug}`;
+}
+
+function canonicalHttpsOrigin(value: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    if (value !== url.origin && value !== `${url.origin}/`) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
 }

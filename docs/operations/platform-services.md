@@ -18,7 +18,7 @@ encrypted SSM parameters on the EC2 host.
 | Images          | Private versioned S3 bucket served through CloudFront OAC                                        | `AWS_REGION`, `S3_BUCKET`, `S3_PUBLIC_BASE_URL`                                          |
 | Billing         | Stripe Checkout, signed webhooks, and Customer Portal                                            | `STRIPE_*`, `CLAIM_TOKEN_SECRET`                                                         |
 | Operator alerts | Durable PostgreSQL outbox delivered through Resend                                               | `OPERATOR_ALERT_EMAILS`, `RESEND_API_KEY`                                                |
-| Niche outreach  | Explicit operator send, Workflow follow-up, separately signed Resend delivery and inbound events | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RESEND_INBOUND_WEBHOOK_SECRET`, `WORKFLOW_*` |
+| Niche outreach  | Explicit operator send, Workflow follow-up, separately signed Resend delivery and inbound events | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RESEND_INBOUND_WEBHOOK_SECRET`, optional `OUTREACH_INBOUND_FORWARD_TO`, `WORKFLOW_*` |
 
 Preview database provisioning is still an external infrastructure gate. Do not
 mark it complete because a Preview URL exists in a local file or CI placeholder.
@@ -157,6 +157,52 @@ Inbound mail is webhook-driven (`email.received`); there is no IMAP mailbox.
 Operator threads live in the admin outreach panel and in Postgres, not in a
 traditional mail client.
 
+`OUTREACH_INBOUND_FORWARD_TO` optionally sends a read copy of each matched
+inbound message to one operator mailbox. Leave it unset or blank to keep
+forwarding disabled; no outbox row or provider call is created for a new inbound
+message in that mode. The dispatcher still reconciles an already-persisted due
+row if the setting is later removed: it makes no provider call, records the row
+as `EXHAUSTED`, and commits a content-free operator alert in the same
+transaction so a pending or ambiguous copy cannot remain stranded silently.
+When enabled, store exactly one bare email address as the optional encrypted SSM
+parameter `/shipshit/production/cornershopdev/OUTREACH_INBOUND_FORWARD_TO`.
+Lists, display-name syntax, malformed addresses, message participants, and any
+niche receiving domain are rejected so forwarding cannot loop back through
+`email.received`. Changing this setting never changes root MX records or plus-tag
+thread routing.
+
+The webhook transaction commits the inbound `OutreachMessage`, its audit event,
+and a unique forwarding outbox intent together. The Postgres message and admin
+thread remain the source of truth; provider delivery happens later from the
+leased outbox worker. Webhook replay converges on the same outbox row, and every
+provider retry reuses the row's stable Resend idempotency key. The worker makes
+at most three attempts, retrying after one and five minutes while the key is
+inside the provider idempotency window. A terminal row is retained as
+`EXHAUSTED` and creates a content-free operator alert for reconciliation.
+
+Each provider request carries the immutable forwarding-row identifier as a
+Resend tag. Signed `sent`, `delivered`, `failed`, `suppressed`, `bounced`, and
+`complained` receipts are stored in a dedicated append-only provider-event
+ledger keyed by the Svix event ID. `deliveryStatus` is deliberately separate
+from the forwarding outbox `status`: provider acceptance completes the outbox,
+while a later delivery failure advances only the receipt snapshot and enqueues
+a durable, content-free alert. Every validated receipt class, including
+`failed` and `suppressed`, proves provider handling only when the row already
+records a real prepared attempt; it therefore settles that outbox to `SENT`
+without weakening the distinct delivery failure. Exact webhook retries are
+no-ops, older events cannot regress the snapshot, and a tagged row that is not
+visible yet returns a retryable response instead of acknowledging and losing
+the receipt.
+
+Read copies contain a bounded site name, slug, original sender/subject, and a
+bounded plain-text message body. Raw inbound HTML is never rendered. The copy is
+visibly marked read-only and deliberately has no `Reply-To` or threading header:
+reply from the admin outreach panel so the operator workflow stays authoritative.
+Dispatcher output and application logs contain aggregate outcomes, row IDs, and
+generic failure codes only—never the destination, subject, message body, or raw
+provider response. The code path and provider acceptance do not prove personal
+inbox receipt; record that evidence separately after an authorized deployment.
+
 Before approving a release, run the read-only preflight inside the exact
 candidate image with its deployment env:
 
@@ -234,9 +280,12 @@ endpoint. Alert draining is deliberately isolated in
 `cornershopdev-operator-alerts.timer`, which runs every minute and processes at
 most five rows per invocation. Five worst-case five-second delivery timeouts
 consume 25 seconds inside its 45-second service limit; a saturated alert queue
-therefore cannot delay or terminate the independent public health check. Both
-timers use the existing host and providers; they create no separate billable
-monitoring service.
+therefore cannot delay or terminate the independent public health check.
+Inbound read-copy draining is separately isolated in
+`cornershopdev-inbound-forwards.timer`. It runs every minute and processes at
+most five rows; five worst-case eight-second provider timeouts remain inside its
+55-second service limit. All three timers use the existing host and providers;
+they create no separate billable monitoring service.
 
 Useful commands:
 
@@ -246,6 +295,9 @@ journalctl -u cornershopdev-public-health.service --since '30 minutes ago'
 systemctl status cornershopdev-operator-alerts.timer
 journalctl -u cornershopdev-operator-alerts.service --since '30 minutes ago'
 docker exec api-cornershop-dev bun run operator:dispatch-alerts
+systemctl status cornershopdev-inbound-forwards.timer
+journalctl -u cornershopdev-inbound-forwards.service --since '30 minutes ago'
+docker exec api-cornershop-dev bun run operator:dispatch-inbound-forwards
 ```
 
 The repository owner owns primary response; the release operator is backup.

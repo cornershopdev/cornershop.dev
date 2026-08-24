@@ -34,6 +34,7 @@ describe("outreach environment readiness", () => {
     expect(OUTREACH_MIGRATIONS).toEqual([
       "20260819120000_outreach_inbound_mailbox",
       "20260820200000_site_contact_privacy_and_catalog_availability",
+      "20260823100000_outreach_inbound_forward_outbox",
     ]);
   });
 
@@ -52,6 +53,7 @@ describe("outreach environment readiness", () => {
         appOrigin: true,
         sender: true,
         replyTo: true,
+        inboundForwardTarget: true,
       },
       missingOrInvalid: [],
       webhookEndpoint: "https://cornershop.dev/api/webhooks/resend",
@@ -118,6 +120,38 @@ describe("outreach environment readiness", () => {
     expect(readiness.missingOrInvalid).toContain(
       "RESEND_INBOUND_WEBHOOK_SECRET (present and distinct)",
     );
+  });
+
+  it("keeps read-copy forwarding optional but rejects an invalid configured target", () => {
+    expect(
+      evaluateOutreachEnvironment({
+        ...configuredEnvironment,
+        OUTREACH_INBOUND_FORWARD_TO: undefined,
+      }).checks.inboundForwardTarget,
+    ).toBe(true);
+    expect(
+      evaluateOutreachEnvironment({
+        ...configuredEnvironment,
+        OUTREACH_INBOUND_FORWARD_TO: " Operator@Example.test ",
+      }).checks.inboundForwardTarget,
+    ).toBe(true);
+
+    for (const target of [
+      "Operator <operator@example.test>",
+      "one@example.test,two@example.test",
+      "vincent+loop@restofront.com",
+    ]) {
+      const readiness = evaluateOutreachEnvironment({
+        ...configuredEnvironment,
+        OUTREACH_INBOUND_FORWARD_TO: target,
+      });
+      expect(readiness.ready).toBe(false);
+      expect(readiness.checks.inboundForwardTarget).toBe(false);
+      expect(readiness.missingOrInvalid).toContain(
+        "OUTREACH_INBOUND_FORWARD_TO (optional but valid)",
+      );
+      expect(JSON.stringify(readiness)).not.toContain(target);
+    }
   });
 
   it("requires the generic factory identity for claim-enabled SMB verticals", () => {
@@ -333,6 +367,30 @@ describe("production outreach deployment", () => {
 
     expect(requiredParameters).toContain("RESEND_WEBHOOK_SECRET");
     expect(requiredParameters).toContain("RESEND_INBOUND_WEBHOOK_SECRET");
+  });
+
+  it("pins the inbound forward outbox in the read-only schema preflight", async () => {
+    const preflight = await Bun.file(
+      new URL("../../scripts/preflight-outreach.ts", import.meta.url),
+    ).text();
+
+    for (const contract of [
+      `to_regclass('"OutreachInboundForward"')`,
+      `to_regclass('"OutreachInboundForward_outreachMessageId_key"')`,
+      `to_regclass('"OutreachInboundForward_idempotencyKey_key"')`,
+      `to_regclass('"OutreachInboundForward_providerMessageId_key"')`,
+      `to_regclass('"OutreachForwardProviderEvent"')`,
+      `to_regclass('"OutreachForwardProviderEvent_forwardId_occurredAt_idx"')`,
+      `to_regclass('"OutreachForwardEvent_providerMessageId_occurredAt_idx"')`,
+      "OutreachInboundForward_outreachMessageId_fkey",
+      "OutreachForwardProviderEvent_forwardId_fkey",
+      "firstProviderAttemptAt",
+      "deliveryStatus",
+      "providerEventAt",
+      "deliveryFailureCode",
+    ]) {
+      expect(preflight).toContain(contract);
+    }
   });
 });
 

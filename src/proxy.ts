@@ -17,6 +17,7 @@ import {
   requestHostname,
 } from "@/lib/hostnames";
 import {
+  LIVE_SITE_ORIGIN_HEADER,
   LIVE_SITE_SLUG_HEADER,
   LIVE_SITE_VERSION_HEADER,
   PUBLIC_SITE_VERSION_HEADER,
@@ -56,6 +57,7 @@ export async function proxy(request: NextRequest) {
   // Server Component request.
   upstreamHeaders.delete(LIVE_SITE_SLUG_HEADER);
   upstreamHeaders.delete(LIVE_SITE_VERSION_HEADER);
+  upstreamHeaders.delete(LIVE_SITE_ORIGIN_HEADER);
 
   // Container-local infrastructure calls do not carry a public hostname.
   // Caddy's on-demand TLS check uses the Docker service name, while health
@@ -206,8 +208,29 @@ function respondForCustomerHost(
 
   upstreamHeaders.set(LIVE_SITE_SLUG_HEADER, decision.slug);
   upstreamHeaders.set(LIVE_SITE_VERSION_HEADER, decision.versionId);
-  if (decision.kind === "public_api" || decision.kind === "opengraph") {
+  const hostname = requestHostname(request.headers);
+  if (!hostname) {
+    return new NextResponse("Not found", {
+      status: 404,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  }
+  upstreamHeaders.set(LIVE_SITE_ORIGIN_HEADER, `https://${hostname}`);
+  if (
+    decision.kind === "public_api" ||
+    decision.kind === "opengraph" ||
+    decision.kind === "robots" ||
+    decision.kind === "root_sitemap"
+  ) {
     return NextResponse.next({ request: { headers: upstreamHeaders } });
+  }
+  if (decision.kind === "blog_sitemap" || decision.kind === "rss") {
+    const filename =
+      decision.kind === "blog_sitemap" ? "sitemap.xml" : "rss.xml";
+    return NextResponse.rewrite(
+      new URL(`/preview/${decision.slug}/blog/${filename}`, request.url),
+      { request: { headers: upstreamHeaders } },
+    );
   }
   const destination =
     decision.kind === "blog"
