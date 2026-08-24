@@ -86,19 +86,33 @@ export default async function BlogIndexPage({ params }: PageProps) {
  * Same ISR-equivalent pattern as `getCachedPublishedSiteView`: content for a
  * published article list is cheap to recompute and must react to
  * publish/unpublish immediately, so the cache window is short and the tag is
- * what carries invalidation.
+ * what carries invalidation. The persistent cache serializes values, so dates
+ * cross that boundary as ISO strings and are revived before metadata/rendering.
  */
-function loadCachedArticles(
+async function loadCachedArticles(
   slug: string,
   versionId: string,
 ): Promise<PublishedArticle[]> {
   const cached = unstable_cache(
-    () => listPublishedArticles({ slug, versionId, limit: 50 }),
+    async () => {
+      const articles = await listPublishedArticles({
+        slug,
+        versionId,
+        limit: 50,
+      });
+      return articles.map((article) => ({
+        ...article,
+        publishedAt: article.publishedAt.toISOString(),
+      }));
+    },
     ["published-articles", slug],
     {
       revalidate: 30,
       tags: [articleCacheTagFor(slug)],
     },
   );
-  return cached();
+  return (await cached()).map((article) => ({
+    ...article,
+    publishedAt: new Date(article.publishedAt),
+  }));
 }

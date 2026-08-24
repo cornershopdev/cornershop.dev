@@ -105,18 +105,30 @@ export default async function ArticlePage({ params }: PageProps) {
 }
 
 /** Tag-invalidated mirror of the blog index cache; see that page's note. */
-function loadCachedArticle(
+async function loadCachedArticle(
   slug: string,
   versionId: string,
   articleSlug: string,
 ): Promise<PublishedArticle | null> {
   const cached = unstable_cache(
-    () => getPublishedArticle({ slug, versionId, articleSlug }),
+    async () => {
+      const article = await getPublishedArticle({
+        slug,
+        versionId,
+        articleSlug,
+      });
+      return article
+        ? { ...article, publishedAt: article.publishedAt.toISOString() }
+        : null;
+    },
     ["published-article", slug, articleSlug],
     {
       revalidate: 30,
       tags: [articleCacheTagFor(slug)],
     },
   );
-  return cached();
+  const article = await cached();
+  return article
+    ? { ...article, publishedAt: new Date(article.publishedAt) }
+    : null;
 }
