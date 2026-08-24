@@ -114,7 +114,11 @@ run_rollback_case() {
       grep -Fxq "rename ${previous} ${container}" "$log"
       grep -Fxq "start ${container}" "$log"
     else
-      if grep -Fq "start ${previous}" "$log"; then
+      if
+        grep -Fxq "rename ${previous} ${container}" "$log" ||
+        grep -Fxq "start ${container}" "$log" ||
+        grep -Fxq "reload" "$log"
+      then
         echo "Rollback restarted the predecessor without verified gates" >&2
         exit 1
       fi
