@@ -17,6 +17,11 @@ import {
   RESEND_OUTREACH_EVENT_TRANSITIONS,
   type ResendOutreachEventType,
 } from "@/lib/outreach-events";
+import {
+  recordResendInboundForwardEvent,
+  RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS,
+  type ResendInboundForwardEventType,
+} from "@/lib/outreach-inbound-forward-events";
 import { verifyResendWebhook } from "@/lib/resend-webhook";
 
 export const runtime = "nodejs";
@@ -28,16 +33,16 @@ export const runtime = "nodejs";
  * event types without notice.
  */
 const resendEventSchema = z.object({
-  type: z.string(),
+  type: z.string().min(1),
   created_at: z.string().datetime({ offset: true }),
   data: z.object({
-    email_id: z.string(),
-    tags: z.record(z.string(), z.string()).optional(),
+    email_id: z.string().min(1),
+    tags: z.record(z.string(), z.string().min(1)).optional(),
   }),
 });
 
 /**
- * Delivery-status event types this handler updates `OutreachMessage` from.
+ * Delivery-status events update the category-specific durable receipt ledger.
  * Inbound replies land on `/api/webhooks/resend/inbound`.
  */
 export async function POST(request: Request) {
@@ -149,6 +154,31 @@ export async function POST(request: Request) {
       });
     }
 
+    if (
+      event.data.tags?.category === "outreach_inbound_forward" &&
+      isTrackedInboundForwardEventType(event.type)
+    ) {
+      const result = await recordResendInboundForwardEvent({
+        eventId: svixId,
+        eventType: event.type,
+        occurredAt: new Date(event.created_at),
+        providerMessageId: event.data.email_id,
+        taggedInboundForwardId:
+          event.data.tags.outreach_inbound_forward_id,
+      });
+      if (!result.handled && result.reason === "not_found") {
+        return Response.json(
+          { error: "Inbound forward delivery reservation is not visible yet" },
+          { status: 503 },
+        );
+      }
+      return Response.json({
+        received: true,
+        handled: result.handled,
+        updated: result.updated,
+      });
+    }
+
     const taggedOutreachMessageId =
       event.data.tags?.category === "lead_outreach"
         ? event.data.tags.outreach_message_id
@@ -174,11 +204,10 @@ export async function POST(request: Request) {
       handled: result.handled,
       updated: result.updated,
     });
-  } catch (error) {
+  } catch {
     console.error("[resend-webhook] processing failed", {
       eventType: event.type,
-      emailId: event.data.email_id,
-      error: error instanceof Error ? error.message : "unknown",
+      eventId: svixId,
     });
     await captureOperatorAlert({
       kind: "OUTREACH_SEND_FAILURE",
@@ -199,7 +228,8 @@ function isTrackedEventType(value: string): value is ResendOutreachEventType {
   return (
     value in RESEND_OUTREACH_EVENT_TRANSITIONS ||
     value in RESEND_AUTH_EVENT_TRANSITIONS ||
-    value in RESEND_CLAIM_EVENT_TRANSITIONS
+    value in RESEND_CLAIM_EVENT_TRANSITIONS ||
+    value in RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS
   );
 }
 
@@ -209,4 +239,10 @@ function isTrackedAuthEventType(value: string): value is ResendAuthEventType {
 
 function isTrackedClaimEventType(value: string): value is ResendClaimEventType {
   return value in RESEND_CLAIM_EVENT_TRANSITIONS;
+}
+
+function isTrackedInboundForwardEventType(
+  value: string,
+): value is ResendInboundForwardEventType {
+  return value in RESEND_INBOUND_FORWARD_EVENT_TRANSITIONS;
 }

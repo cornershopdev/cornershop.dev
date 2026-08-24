@@ -114,6 +114,34 @@ describe("Resend inbound webhook", () => {
       error: "Inbound email body is not visible yet",
     });
   });
+
+  it("logs only generic metadata when persistence fails", async () => {
+    const previousConsoleError = console.error;
+    const consoleError = mock(() => undefined);
+    console.error = consoleError;
+    recordInbound.mockImplementationOnce(async () => {
+      throw new Error(
+        "private mailbox body and operator@example.test must not be logged",
+      );
+    });
+    try {
+      const response = await POST(signedInbound());
+
+      expect(response.status).toBe(500);
+      expect(consoleError).toHaveBeenCalledWith(
+        "[resend-inbound-webhook] processing failed",
+        {
+          emailId: "recv_1",
+          failure: "processing_failed",
+        },
+      );
+      const serialized = JSON.stringify(consoleError.mock.calls);
+      expect(serialized).not.toContain("private mailbox body");
+      expect(serialized).not.toContain("operator@example.test");
+    } finally {
+      console.error = previousConsoleError;
+    }
+  });
 });
 
 function signedInbound(

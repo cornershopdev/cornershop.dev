@@ -4,10 +4,12 @@ import { resolveVerticalConfig } from "@/lib/verticals/registry";
 import type { VerticalId } from "@/lib/verticals/types";
 import { configuredOutreachController } from "@/lib/electronic-outreach-eligibility";
 import { approvedNominatimBaseUrl } from "@/lib/lead-discovery-places";
+import { configuredOutreachInboundForwardTarget } from "@/lib/outreach-inbound-forward-policy";
 
 export const OUTREACH_MIGRATIONS = [
   "20260819120000_outreach_inbound_mailbox",
   "20260820200000_site_contact_privacy_and_catalog_availability",
+  "20260823100000_outreach_inbound_forward_outbox",
 ] as const;
 export const RESTOFRONT_OUTREACH_FROM =
   "Vincent from Restofrontapp <vincent@send.restofront.com>";
@@ -40,6 +42,7 @@ export type OutreachEnvironmentReadiness = {
     appOrigin: boolean;
     sender: boolean;
     replyTo: boolean;
+    inboundForwardTarget: boolean;
   };
   missingOrInvalid: string[];
   webhookEndpoint: string | null;
@@ -130,6 +133,7 @@ export function evaluateOutreachEnvironment(
     replyTo:
       verticals.length > 0 &&
       verticals.every((vertical) => vertical.replyToConfigured),
+    inboundForwardTarget: isOptionalInboundForwardTargetValid(env),
   };
   const variableByCheck = {
     database: "DATABASE_URL",
@@ -145,6 +149,7 @@ export function evaluateOutreachEnvironment(
     appOrigin: "NEXT_PUBLIC_APP_URL",
     sender: "VERTICAL_OR_FACTORY_EMAIL_FROM",
     replyTo: "VERTICAL_OR_FACTORY_EMAIL_REPLY_TO",
+    inboundForwardTarget: "OUTREACH_INBOUND_FORWARD_TO (optional but valid)",
   } satisfies Record<keyof typeof checks, string>;
   const missingOrInvalid = Object.entries(checks).flatMap(([name, ready]) =>
     ready ? [] : [variableByCheck[name as keyof typeof variableByCheck]],
@@ -158,6 +163,15 @@ export function evaluateOutreachEnvironment(
     inboundWebhookEndpoint,
     verticals,
   };
+}
+
+function isOptionalInboundForwardTargetValid(env: Environment): boolean {
+  try {
+    configuredOutreachInboundForwardTarget(env);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function hasRequiredResendDomains(
