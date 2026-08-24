@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
 import process from "node:process";
 import puppeteer from "puppeteer-core";
+import { browserPath } from "./browser-path.mjs";
 
 const port = Number(process.env.BRAND_FONT_AUDIT_PORT ?? 4174);
 const origin = `http://127.0.0.1:${port}`;
@@ -54,25 +54,6 @@ const audits = [
     ],
   },
 ];
-
-function browserPath() {
-  const candidates = [
-    process.env.BROWSER_PATH,
-    process.env.CHROME_PATH,
-    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-  ].filter(Boolean);
-  const executable = candidates.find((candidate) => existsSync(candidate));
-  if (!executable) {
-    throw new Error(
-      "No supported browser found. Set BROWSER_PATH to Brave or Chrome.",
-    );
-  }
-  return executable;
-}
 
 async function waitForServer() {
   const deadline = Date.now() + 30_000;

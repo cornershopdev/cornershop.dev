@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index 51922935456062fe004c4ea31be78aca3f3bfcb6..c036e7b4bad382ca31883ff96c20ef913c06e8f8 100644
+--- a/package.json
++++ b/package.json
+@@ -79,7 +79,7 @@
+     "debug": "4.4.3",
+     "devalue": "5.8.1",
+     "ms": "2.1.3",
+-    "nanoid": "5.1.6",
++    "nanoid": "5.1.16",
+     "seedrandom": "3.0.5",
+     "semver": "7.7.4",
+     "ulid": "~3.0.1",
