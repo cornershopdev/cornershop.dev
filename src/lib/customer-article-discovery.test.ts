@@ -7,6 +7,7 @@ import {
   buildCustomerRobots,
   buildCustomerRootSitemap,
   buildCustomerRss,
+  serializeCustomerArticleJsonLd,
   type CustomerDiscoveryArticle,
 } from "@/lib/customer-article-discovery";
 
@@ -254,6 +255,26 @@ describe("customer RSS and article identity", () => {
       });
     });
   }
+
+  it("serializes the rendered public JSON-LD sink without script breakouts", () => {
+    const hostileName = "</script><script>alert(1)</script>\u2028shop\u2029";
+    const serialized = serializeCustomerArticleJsonLd({
+      origin: customerOrigins[0]!,
+      site: { ...site, name: hostileName },
+      article: articles[0]!,
+    });
+
+    expect(serialized).not.toContain("<");
+    expect(serialized).not.toContain("\u2028");
+    expect(serialized).not.toContain("\u2029");
+    expect(serialized).toContain("\\u003c/script>");
+    expect(serialized).toContain("\\u2028");
+    expect(serialized).toContain("\\u2029");
+    expect(JSON.parse(serialized)).toMatchObject({
+      author: { name: hostileName },
+      publisher: { name: hostileName },
+    });
+  });
 });
 
 function assertCustomerUrls(origin: string, urls: string[]): void {

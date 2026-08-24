@@ -15,9 +15,10 @@ readonly container="api-cornershop-dev"
 readonly candidate="${container}-candidate"
 readonly previous="${container}-previous"
 readonly deployed_sha="${image_name#cornershopdev:}"
-readonly expected_bootstrap_sha256="257af17d1b20743948bb5d674d8dc12675bf45e47c697f987ed596bdcf802532"
+readonly expected_bootstrap_sha256="e9634ec4452851279a933eb0e423b1239bebdc84c87f0bf9ef9a9ac4bef375f5"
 readonly expected_caddy_fragment_sha256="9f0bb5f0c1d9cc0e4b341b2795c6c63563aff918c4e47a8570fcecc23ec72b70"
 readonly expected_host_launcher_sha256="75aa0e06cf621dd7c9c742b6a73e45a1d8c23dc7720feab08547253f1e934abc"
+readonly article_gate_body="Article mutations are temporarily gated for a safe release."
 
 install -d -m 700 /etc/cornershopdev /var/lib/cornershopdev
 environment_file="/etc/cornershopdev/production.env"
@@ -28,6 +29,88 @@ caddy_fragment_file="$(mktemp /var/lib/cornershopdev/Caddyfile.XXXXXX.fragment)"
 host_launcher_file="$(mktemp /var/lib/cornershopdev/launcher.XXXXXX.sh)"
 trap 'rm -f "$temporary_environment" "$artifact_file" "$bootstrap_file" "$caddy_fragment_file" "$host_launcher_file"' EXIT
 umask 077
+
+reload_caddy() {
+  docker exec shipshit-caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null
+}
+
+set_article_edge_gate() {
+  local state="$1"
+  if [[ "$state" != "closed" && "$state" != "open" ]]; then
+    echo "Article edge gate state must be closed or open" >&2
+    return 2
+  fi
+  local caddyfile="/etc/caddy/Caddyfile"
+  local stripped
+  local candidate_config
+  stripped="$(mktemp /etc/caddy/Caddyfile.article-stripped.XXXXXX)"
+  candidate_config="$(mktemp /etc/caddy/Caddyfile.article-candidate.XXXXXX)"
+  awk '
+    /^[[:space:]]*# BEGIN ARTICLE MUTATION GATE$/ { gate = 1; next }
+    /^[[:space:]]*# END ARTICLE MUTATION GATE$/ { gate = 0; next }
+    !gate { print }
+  ' "$caddyfile" >"$stripped"
+  awk -v state="$state" -v body="$article_gate_body" '
+    /^# BEGIN CORNERSHOPDEV$/ { managed = 1 }
+    /^# END CORNERSHOPDEV$/ { managed = 0 }
+    {
+      print
+      if (
+        state == "closed" && managed &&
+        ($0 == "api.cornershop.dev {" || $0 == "https:// {")
+      ) {
+        print "\t# BEGIN ARTICLE MUTATION GATE"
+        print "\t@articleMutations {"
+        print "\t\tmethod POST"
+        print "\t\tpath /api/sites/*/articles /api/sites/*/articles/generate"
+        print "\t}"
+        print "\trespond @articleMutations \"" body "\" 503"
+        print "\t# END ARTICLE MUTATION GATE"
+      }
+    }
+  ' "$stripped" >"$candidate_config"
+  local container_candidate="/etc/caddy/.cornershopdev-article-gate.Caddyfile"
+  if ! docker cp "$candidate_config" "shipshit-caddy:$container_candidate"; then
+    rm -f "$stripped" "$candidate_config"
+    return 1
+  fi
+  if ! docker exec shipshit-caddy caddy validate --config "$container_candidate"; then
+    docker exec shipshit-caddy rm -f "$container_candidate" || true
+    rm -f "$stripped" "$candidate_config"
+    return 1
+  fi
+  docker exec shipshit-caddy rm -f "$container_candidate" || true
+  cat "$candidate_config" >"$caddyfile"
+  chmod 644 "$caddyfile"
+  rm -f "$stripped" "$candidate_config"
+  reload_caddy
+}
+
+verify_article_edge_gate() {
+  local expected_state="$1"
+  local response
+  for origin in "https://api.cornershop.dev" "https://cornershop.dev"; do
+    response="$(
+      curl --silent --show-error --max-time 10 \
+        --request POST \
+        --header 'Content-Type: application/json' \
+        --data '{"count":1}' \
+        --write-out $'\n%{http_code}' \
+        "${origin}/api/sites/__article-rollout__/articles/generate"
+    )"
+    local status="${response##*$'\n'}"
+    local body="${response%$'\n'*}"
+    if [[ "$expected_state" == "closed" ]]; then
+      if [[ "$status" != "503" || "$body" != "$article_gate_body" ]]; then
+        echo "Article edge gate did not close ${origin}" >&2
+        return 1
+      fi
+    elif [[ "$status" == "503" && "$body" == "$article_gate_body" ]]; then
+      echo "Article edge gate remained closed on ${origin}" >&2
+      return 1
+    fi
+  done
+}
 
 required_parameters=(
   AWS_REGION
@@ -176,30 +259,6 @@ aws s3 cp "$artifact_uri" "$artifact_file" --region us-west-1 --only-show-errors
 gzip -dc "$artifact_file" | docker load >/dev/null
 docker image inspect "$image_name" >/dev/null
 
-# Run from the reviewed image before its entrypoint can apply migrations. This
-# uses only predecessor-schema columns and blocks a chargeable legacy Checkout
-# from being stranded by the migration. Remediation is an explicit operator
-# procedure after the matching Stripe Session has been expired.
-docker run --rm \
-  --network shipshit \
-  --env-file "$environment_file" \
-  --entrypoint bun \
-  "$image_name" \
-  run operator:preflight-first-customer-migration \
-  --environment production \
-  --mode check \
-  --execute >/dev/null
-
-docker rm -f "$candidate" >/dev/null 2>&1 || true
-docker run -d \
-  --name "$candidate" \
-  --network shipshit \
-  --env-file "$environment_file" \
-  --restart no \
-  --memory 768m \
-  --cpus 1 \
-  "$image_name" >/dev/null
-
 wait_for_health() {
   # `container` is a script-wide readonly; a local of the same name would abort
   # the function under `set -u` on bash < 5 with "readonly variable".
@@ -217,6 +276,124 @@ wait_for_health() {
   return 1
 }
 
+run_article_rollout() {
+  local action="$1"
+  docker run --rm \
+    --network shipshit \
+    --env-file "$environment_file" \
+    --entrypoint bun \
+    "$image_name" \
+    run operator:article-rollout --action "$action"
+}
+
+wait_for_article_quiescence() {
+  for _ in $(seq 1 120); do
+    if run_article_rollout check >/dev/null 2>&1; then return 0; fi
+    sleep 5
+  done
+  run_article_rollout check
+  return 1
+}
+
+article_rollout_active=0
+rollback_article_rollout() {
+  local failure_status="${1:-1}"
+  trap - ERR
+  set +e
+  local edge_gate_verified=0
+  local database_gate_verified=0
+  if [[ "$article_rollout_active" == 1 ]]; then
+    echo "Article rollout failed; retaining both mutation gates" >&2
+    if set_article_edge_gate closed && verify_article_edge_gate closed; then
+      edge_gate_verified=1
+    fi
+    if run_article_rollout close >/dev/null; then
+      database_gate_verified=1
+    fi
+  fi
+  docker rm -f "$candidate" >/dev/null 2>&1
+  if
+    [[ "$article_rollout_active" == 1 ]] &&
+    [[ "$edge_gate_verified" != 1 || "$database_gate_verified" != 1 ]]
+  then
+    echo "Article gates could not be verified; leaving application containers stopped" >&2
+    docker stop "$container" >/dev/null 2>&1
+    docker stop "$previous" >/dev/null 2>&1
+    return "$failure_status"
+  fi
+  if docker inspect "$previous" >/dev/null 2>&1; then
+    docker rm -f "$container" >/dev/null 2>&1
+    docker rename "$previous" "$container"
+    docker start "$container" >/dev/null
+    reload_caddy
+  fi
+  return "$failure_status"
+}
+
+# Close both public article mutation routes before any schema change. The
+# database setting exists on the predecessor schema and is also asserted by the
+# expand migration, so a candidate or rollback cannot reopen itself.
+set_article_edge_gate closed
+verify_article_edge_gate closed
+article_rollout_active=1
+trap 'rollback_article_rollout $?' ERR
+run_article_rollout close >/dev/null
+echo "release-state article-mutations-gated sha=${deployed_sha}"
+
+# Run from the reviewed image before its entrypoint can apply migrations. This
+# uses only predecessor-schema columns and blocks a chargeable legacy Checkout
+# from being stranded by the migration. Remediation is an explicit operator
+# procedure after the matching Stripe Session has been expired.
+docker run --rm \
+  --network shipshit \
+  --env-file "$environment_file" \
+  --entrypoint bun \
+  "$image_name" \
+  run operator:preflight-first-customer-migration \
+  --environment production \
+  --mode check \
+  --execute >/dev/null
+
+docker run --rm \
+  --network shipshit \
+  --env-file "$environment_file" \
+  --entrypoint bun \
+  "$image_name" \
+  run db:migrate:deploy
+echo "release-state migrations-applied sha=${deployed_sha}"
+
+# The predecessor remains alive behind the edge gate while its already-bound
+# work drains. Workflow run state is authoritative; passive timestamps never
+# participate. Graphile flow/step jobs must be absent too.
+wait_for_article_quiescence
+echo "release-state article-workflow-drained sha=${deployed_sha}"
+
+docker rm -f "$previous" >/dev/null 2>&1 || true
+if docker inspect "$container" >/dev/null 2>&1; then
+  docker stop "$container" >/dev/null
+  docker rename "$container" "$previous"
+fi
+run_article_rollout check >/dev/null
+echo "release-state predecessor-worker-stopped sha=${deployed_sha}"
+
+docker run --rm \
+  --network shipshit \
+  --env-file "$environment_file" \
+  --entrypoint bun \
+  "$image_name" \
+  run workflow:migrate
+
+docker rm -f "$candidate" >/dev/null 2>&1 || true
+docker run -d \
+  --name "$candidate" \
+  --network shipshit \
+  --env-file "$environment_file" \
+  --env CORNERSHOP_SKIP_STARTUP_MIGRATIONS=true \
+  --restart no \
+  --memory 768m \
+  --cpus 1 \
+  "$image_name" >/dev/null
+
 wait_for_health "$candidate"
 candidate_image="$(docker inspect --format '{{.Config.Image}}' "$candidate")"
 if [[ "$candidate_image" != "$image_name" ]]; then
@@ -224,7 +401,8 @@ if [[ "$candidate_image" != "$image_name" ]]; then
   exit 1
 fi
 docker exec "$candidate" bun run db:migrate:status
-echo "release-state migrations-applied sha=${deployed_sha}"
+docker exec "$candidate" bun run operator:article-rollout --action check >/dev/null
+echo "release-state article-candidate-verified sha=${deployed_sha}"
 docker exec "$candidate" \
   bun run operator:preflight-outreach --environment production
 echo "release-state outreach-configured sha=${deployed_sha}"
@@ -235,41 +413,29 @@ echo "release-state wildcard-dns-ready sha=${deployed_sha}"
 # matches the approved founding offer. It is intentionally separate from the
 # five-second health probe so normal readiness never hammers Stripe.
 docker exec "$candidate" bun run operator:preflight-stripe --mode live >/dev/null
-docker rm -f "$previous" >/dev/null 2>&1 || true
-if docker inspect "$container" >/dev/null 2>&1; then
-  docker stop "$container" >/dev/null
-  docker rename "$container" "$previous"
-fi
 docker rename "$candidate" "$container"
 docker update --restart unless-stopped "$container" >/dev/null
 
-reload_caddy() {
-  docker exec shipshit-caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null
-}
-
 if ! reload_caddy || ! wait_for_health "$container"; then
   echo "Deployment failed after cutover; rolling back" >&2
-  docker rm -f "$container" >/dev/null 2>&1 || true
-  if docker inspect "$previous" >/dev/null 2>&1; then
-    docker rename "$previous" "$container"
-    docker start "$container" >/dev/null
-    reload_caddy
-  fi
-  exit 1
+  false
 fi
 
 if ! docker exec "$container" \
   bun run operator:preflight-platform-edge --phase tls; then
   echo "Platform TLS preflight failed after cutover; rolling back" >&2
-  docker rm -f "$container" >/dev/null 2>&1 || true
-  if docker inspect "$previous" >/dev/null 2>&1; then
-    docker rename "$previous" "$container"
-    docker start "$container" >/dev/null
-    reload_caddy
-  fi
-  exit 1
+  false
 fi
 echo "release-state platform-tls-ready sha=${deployed_sha}"
+
+# Open the application setting first, then the edge. If either operation fails,
+# the ERR handler recloses both and any predecessor rollback remains gated.
+docker exec "$container" bun run operator:article-rollout --action open >/dev/null
+set_article_edge_gate open
+verify_article_edge_gate open
+article_rollout_active=0
+trap - ERR
+echo "release-state article-mutations-open sha=${deployed_sha}"
 
 echo "release-state production-deployed sha=${deployed_sha}"
 

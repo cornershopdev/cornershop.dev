@@ -5,6 +5,10 @@ import {
   getSiteAccess,
 } from "@/lib/authorization";
 import { articleCacheTagFor } from "@/lib/articles/public-articles";
+import {
+  ARTICLE_MUTATION_GATE_REASON,
+  areArticleMutationsGated,
+} from "@/lib/articles/mutation-gate";
 import { getDb } from "@/lib/db";
 import { isSameOriginMutation } from "@/lib/request-origin";
 import { revalidateTag } from "next/cache";
@@ -53,6 +57,12 @@ export async function POST(
   const { slug } = await params;
   const access = await getSiteAccess(slug);
   if (!access.ok) return accessFailureResponse(access);
+  if (await areArticleMutationsGated()) {
+    return Response.json(
+      { error: ARTICLE_MUTATION_GATE_REASON },
+      { status: 503 },
+    );
+  }
 
   const parsed = actionSchema.safeParse(
     await request.json().catch(() => null),

@@ -42,6 +42,26 @@ export function resolveVerticalConfig(id: VerticalId): ErasedVerticalConfig {
   return registry[id];
 }
 
+/**
+ * Applies the same catalog visibility capability as the storefront renderer.
+ * Stored attribute bags are parsed through the owning vertical first; malformed
+ * legacy/direct-DB values fail closed instead of reaching a vertical predicate.
+ */
+export function isVerticalCatalogItemVisible(
+  id: VerticalId,
+  item: { available: boolean | null; attributes: unknown },
+): boolean {
+  const config = resolveVerticalConfig(id);
+  const parsedAttributes = config.itemAttributesSchema.safeParse(item.attributes);
+  if (!parsedAttributes.success) return false;
+  return (
+    config.presentation.isItemVisible?.({
+      available: item.available,
+      attributes: parsedAttributes.data,
+    }) ?? item.available !== false
+  );
+}
+
 export function listVerticalIds(): VerticalId[] {
   return Object.keys(registry) as VerticalId[];
 }

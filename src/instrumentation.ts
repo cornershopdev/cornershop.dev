@@ -25,6 +25,11 @@ export async function register() {
     process.env.DATABASE_URL &&
     process.env.WORKFLOW_ENABLED === "true"
   ) {
+    const { startArticleBatchDispatcher } = await import(
+      "@/lib/articles/article-batch-runtime"
+    );
+    startArticleBatchDispatcher();
+
     const { startSourceMonitoringScheduler } = await import(
       "@/lib/source-monitoring-runtime"
     );

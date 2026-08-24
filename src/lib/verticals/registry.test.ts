@@ -11,6 +11,7 @@ import { foodRetailConfig } from "@/lib/verticals/food-retail/config";
 import { localServiceConfig } from "@/lib/verticals/local-service/config";
 import {
   isVerticalClaimEnabled,
+  isVerticalCatalogItemVisible,
   isVerticalPublicationEnabled,
   isVerticalPubliclyAccessible,
   isVerticalPubliclyLaunched,
@@ -48,6 +49,39 @@ describe("vertical registry", () => {
     for (const id of listVerticalIds()) {
       expect(resolveVerticalConfig(id).id).toBe(id);
     }
+  });
+
+  it("shares storefront catalog visibility and fails closed on malformed attributes", () => {
+    expect(
+      isVerticalCatalogItemVisible(Vertical.RESTAURANT, {
+        available: false,
+        attributes: {},
+      }),
+    ).toBe(false);
+    expect(
+      isVerticalCatalogItemVisible(Vertical.RESTAURANT, {
+        available: null,
+        attributes: {},
+      }),
+    ).toBe(true);
+    expect(
+      isVerticalCatalogItemVisible(Vertical.FOOD_RETAIL, {
+        available: true,
+        attributes: { visible: false },
+      }),
+    ).toBe(false);
+    expect(
+      isVerticalCatalogItemVisible(Vertical.FOOD_RETAIL, {
+        available: false,
+        attributes: { visible: true },
+      }),
+    ).toBe(true);
+    expect(
+      isVerticalCatalogItemVisible(Vertical.RESTAURANT, {
+        available: true,
+        attributes: { dietaryLabels: "not-an-array" },
+      }),
+    ).toBe(false);
   });
 
   it("requires one vertical-specific lead discovery adapter per enum entry", () => {

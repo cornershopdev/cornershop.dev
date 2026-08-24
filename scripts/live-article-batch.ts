@@ -11,11 +11,16 @@ async function main() {
   const { getDb } = await import("../src/lib/db");
   const {
     loadGenerationInputs,
-    generateBatchDrafts,
+    generateBatchPlans,
     persistArticleBatch,
     articleGenerationConfigured,
+    beginArticleBatch,
+    closeArticleBatch,
   } = await import("../src/lib/articles/generation");
-  const { checkArticleDraft } = await import(
+  const { reserveArticleBatch } = await import(
+    "../src/lib/articles/start-batch"
+  );
+  const { checkArticlePlan, renderArticlePlan } = await import(
     "../src/lib/articles/composer"
   );
 
@@ -114,38 +119,84 @@ async function main() {
   const inputs = await loadGenerationInputs(site.id);
   if (!inputs.ok) throw new Error(inputs.reason);
   console.log(
-    `facts: ${inputs.facts.catalogItemNames.length} items, locale ${inputs.facts.locale}, recent topics: [${inputs.recentTopicKeys}]`,
+    `facts: ${inputs.facts.catalogItems.length} items, locale ${inputs.facts.locale}, recent topics: [${inputs.recentTopicKeys}]`,
   );
 
-  console.log("calling the model…");
-  const started = Date.now();
-  const drafts = await generateBatchDrafts({
-    facts: inputs.facts,
-    recentTopicKeys: inputs.recentTopicKeys,
-    count: 4,
-  });
-  console.log(`model returned ${drafts.length} drafts in ${Date.now() - started}ms`);
-
-  for (const draft of drafts) {
-    const problems = checkArticleDraft(draft, inputs.facts);
-    console.log(
-      `  [${draft.topicKey}] "${draft.title}" (${draft.bodyMarkdown.length} chars) → ${
-        problems.length ? `REJECTED: ${problems.join("; ")}` : "accepted"
-      }`,
-    );
-  }
-
-  const persisted = await persistArticleBatch({
+  const admission = await reserveArticleBatch({
     siteId: site.id,
     requestedBy: "live-proof-script",
-    facts: inputs.facts,
-    model: process.env.OPENROUTER_TEXT_MODEL ?? "openrouter/auto",
-    drafts,
+    count: 4,
   });
+  if (!admission.ok) throw new Error(admission.reason);
 
-  console.log(
-    `\nbatch ${persisted.batchId}: requested ${drafts.length}, persisted ${persisted.producedCount}`,
-  );
+  let knownRejectedCount = 0;
+  try {
+    const reservation = await beginArticleBatch(admission.batchId);
+    if (!reservation) {
+      throw new Error("article batch reservation could not start");
+    }
+    console.log("calling the model…");
+    const started = Date.now();
+    const generated = await generateBatchPlans({
+      facts: inputs.facts,
+      recentTopicKeys: inputs.recentTopicKeys,
+      count: reservation.requestedCount,
+    });
+    knownRejectedCount = generated.rejectedCount;
+    if (generated.status === "SKIPPED") {
+      await closeArticleBatch({
+        batchId: admission.batchId,
+        status: "SKIPPED",
+        statusReason: generated.statusReason,
+      });
+      throw new Error("No supportable article topics were available");
+    }
+    console.log(
+      `model returned ${generated.plans.length} plans in ${Date.now() - started}ms`,
+    );
+    if (!generated.plans.length) {
+      await closeArticleBatch({
+        batchId: admission.batchId,
+        status: generated.rejectedCount > 0 ? "REJECTED" : "ZERO_OUTPUT",
+        statusReason:
+          generated.rejectedCount > 0
+            ? "INVALID_MODEL_OUTPUT"
+            : "MODEL_RETURNED_ZERO_DRAFTS",
+        rejectedCount: generated.rejectedCount,
+      });
+      throw new Error("The model returned no persistable article plans");
+    }
+
+    for (const plan of generated.plans) {
+      const problems = checkArticlePlan(plan, inputs.facts);
+      const rendered = renderArticlePlan(plan, inputs.facts);
+      console.log(
+        `  [${plan.topicKey}] ${plan.templateKey} → ${
+          problems.length ? `REJECTED: ${problems.join("; ")}` : "accepted"
+        }${rendered.ok ? `; preview title "${rendered.draft.title}"` : ""}`,
+      );
+    }
+
+    const persisted = await persistArticleBatch({
+      batchId: admission.batchId,
+      siteId: site.id,
+      model: process.env.OPENROUTER_TEXT_MODEL ?? "openrouter/auto",
+      plans: generated.plans,
+      rejectedCount: generated.rejectedCount,
+    });
+
+    console.log(
+      `\nbatch ${persisted.batchId}: requested ${reservation.requestedCount}, persisted ${persisted.producedCount}, rejected ${persisted.rejectedCount}`,
+    );
+  } catch (error) {
+    await closeArticleBatch({
+      batchId: admission.batchId,
+      status: "FAILED",
+      statusReason: "LIVE_SCRIPT_FAILED",
+      rejectedCount: knownRejectedCount,
+    });
+    throw error;
+  }
   await db.$disconnect?.();
 }
 

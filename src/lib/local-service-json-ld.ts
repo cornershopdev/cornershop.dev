@@ -1,4 +1,5 @@
 import type { SiteDraftView } from "@/lib/site-draft";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 const schemaTypes = {
   plumber: "Plumber",
@@ -193,10 +194,7 @@ function schemaOpeningDays(value: string): string | null {
 }
 
 export function serializeLocalServiceJsonLd(draft: SiteDraftView): string {
-  return JSON.stringify(buildLocalServiceJsonLd(draft)).replaceAll(
-    "<",
-    "\\u003c",
-  );
+  return serializeJsonLd(buildLocalServiceJsonLd(draft));
 }
 
 function record(value: unknown): Record<string, unknown> {
