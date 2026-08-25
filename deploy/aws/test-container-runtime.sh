@@ -74,6 +74,10 @@ if ! docker exec "$container" test -f /app/scripts/dispatch-inbound-forwards.ts;
   echo "Expected the inbound read-copy dispatcher in the candidate image" >&2
   exit 1
 fi
+if ! docker exec "$container" test -f /app/scripts/article-rollout.ts; then
+  echo "Expected the article rollout gate in the candidate image" >&2
+  exit 1
+fi
 if ! docker exec --env OUTREACH_INBOUND_FORWARD_TO= "$container" \
   bun run operator:dispatch-inbound-forwards >/dev/null; then
   echo "Expected the disabled inbound read-copy dispatcher to start safely" >&2
