@@ -18,6 +18,7 @@ import { RestaurantThemeRenderer } from "@/components/restaurant-themes/restaura
 import { RestaurantStructuredData } from "@/components/restaurant-themes/shared";
 import { SiteAnalytics } from "@/components/site-analytics";
 import { SiteBrand, SourceNavigation } from "@/components/site-brand";
+import { StorefrontBlogNav } from "@/components/storefront-blog-nav";
 import { SitePhotoGallery } from "@/components/site-photo-gallery";
 import { Vertical } from "@/generated/prisma/enums";
 import { resolveBookingEmbed } from "@/lib/booking-embed";
@@ -54,6 +55,7 @@ type SiteRendererProps = {
   availableLocales?: string[];
   analyticsEnabled?: boolean;
   theme?: SiteThemeView;
+  blogHref?: string | null;
 };
 
 export function SiteRenderer({
@@ -65,6 +67,7 @@ export function SiteRenderer({
   availableLocales = [draft.defaultLocale],
   analyticsEnabled = false,
   theme,
+  blogHref,
 }: SiteRendererProps) {
   const config = resolveVerticalConfig(vertical);
   const dictionary = getSiteDictionary(config, locale);
@@ -92,6 +95,7 @@ export function SiteRenderer({
           dictionary={dictionary}
           embedded={embedded}
           analyticsEnabled={analyticsEnabled}
+          blogHref={blogHref}
         />
       );
     }
@@ -215,6 +219,12 @@ export function SiteRenderer({
           )}
         />
         <div className="contents sm:flex sm:shrink-0 sm:items-center sm:gap-2">
+          <StorefrontBlogNav
+            href={blogHref}
+            isLiveSurface={analyticsEnabled}
+            label={dictionary.blogNav}
+            className={immersiveHero ? "text-white" : undefined}
+          />
           {localeBasePath && availableLocales.length > 1 ? (
             <nav
               aria-label={dictionary.language}

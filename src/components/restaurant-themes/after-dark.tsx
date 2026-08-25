@@ -7,6 +7,7 @@ import {
   sourceBrandPalette,
   themeStyle,
   ThemeAnalytics,
+  ThemeBlogNav,
   ThemeBusinessHours,
   ThemeContact,
   ThemeExternalAction,
@@ -27,6 +28,7 @@ export function AfterDarkTheme({
   dictionary,
   embedded = false,
   analyticsEnabled = false,
+  blogHref,
 }: RestaurantThemeRendererProps) {
   const booking = draft.integrations.find(
     (integration) =>
@@ -76,6 +78,11 @@ export function AfterDarkTheme({
               defaultLocale={draft.defaultLocale}
               label={dictionary.language}
               className="border-white/30"
+            />
+            <ThemeBlogNav
+              href={blogHref}
+              enabled={analyticsEnabled}
+              label={dictionary.blogNav}
             />
             {eventLink ? (
               <ThemeExternalAction

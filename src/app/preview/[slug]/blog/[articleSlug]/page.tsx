@@ -4,11 +4,13 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { ArticleMarkdown } from "@/components/article-markdown";
+import { CustomerArticleChrome } from "@/components/customer-article-chrome";
 import {
   articleCacheTagFor,
   getPublishedArticle,
   type PublishedArticle,
 } from "@/lib/articles/public-articles";
+import { approvedArticleDestinations } from "@/lib/articles/safe-article-href";
 import {
   buildCustomerArticleMetadata,
   serializeCustomerArticleJsonLd,
@@ -72,35 +74,50 @@ export default async function ArticlePage({ params }: PageProps) {
   });
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-6 py-16">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLd }}
-      />
-      <article>
-        <header>
-          <h1 className="text-3xl font-semibold">{article.title}</h1>
-          <time
-            dateTime={article.publishedAt.toISOString()}
-            className="mt-2 block text-sm opacity-60"
+    <CustomerArticleChrome
+      draft={site.draft}
+      vertical={site.vertical}
+      locale={site.draft.defaultLocale}
+      analyticsEnabled
+    >
+      <main className="mx-auto w-full max-w-2xl px-6 py-16">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd }}
+        />
+        <article>
+          <header>
+            <h1 className="text-3xl font-semibold">{article.title}</h1>
+            <time
+              dateTime={article.publishedAt.toISOString()}
+              className="mt-2 block text-sm opacity-60"
+            >
+              {article.publishedAt.toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </time>
+          </header>
+          <div className="mt-8">
+            <ArticleMarkdown
+              markdown={article.bodyMarkdown}
+              approvedDestinations={approvedArticleDestinations(
+                site.draft.integrations,
+              )}
+            />
+          </div>
+        </article>
+        <p className="mt-12">
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
           >
-            {article.publishedAt.toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </time>
-        </header>
-        <div className="mt-8">
-          <ArticleMarkdown markdown={article.bodyMarkdown} />
-        </div>
-      </article>
-      <p className="mt-12">
-        <Link href="/" className="underline underline-offset-4">
-          Back to the site
-        </Link>
-      </p>
-    </main>
+            Back to the site
+          </Link>
+        </p>
+      </main>
+    </CustomerArticleChrome>
   );
 }
 

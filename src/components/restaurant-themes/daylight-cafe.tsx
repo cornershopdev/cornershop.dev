@@ -6,6 +6,7 @@ import {
   sourceBrandPalette,
   themeStyle,
   ThemeAnalytics,
+  ThemeBlogNav,
   ThemeBusinessHours,
   ThemeContact,
   ThemeExternalAction,
@@ -26,6 +27,7 @@ export function DaylightCafeTheme({
   dictionary,
   embedded = false,
   analyticsEnabled = false,
+  blogHref,
 }: RestaurantThemeRendererProps) {
   const ordering = draft.integrations.find(
     (integration) =>
@@ -64,6 +66,11 @@ export function DaylightCafeTheme({
             availableLocales={availableLocales}
             defaultLocale={draft.defaultLocale}
             label={dictionary.language}
+          />
+          <ThemeBlogNav
+            href={blogHref}
+            enabled={analyticsEnabled}
+            label={dictionary.blogNav}
           />
           {ordering ? (
             <ThemeExternalAction

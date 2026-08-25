@@ -9,6 +9,7 @@ import {
   previewMetadata,
 } from "@/lib/preview-metadata";
 import { getSiteLocales, localizeSiteDraft } from "@/lib/site-draft";
+import { resolveStorefrontBlogHref } from "@/lib/articles/public-articles";
 import { liveSiteVersionId } from "@/lib/site-surface";
 import {
   findSiteView,
@@ -58,9 +59,12 @@ export async function generateMetadata({
 export default async function LocalizedPreviewPage({ params }: PageProps) {
   const { slug, locale } = await params;
   const versionId = liveSiteVersionId(await headers(), slug);
-  const site = versionId
-    ? await getCachedPublishedSiteView(slug, versionId)
-    : await findSiteView(slug);
+  const [site, blogHref] = await Promise.all([
+    versionId
+      ? getCachedPublishedSiteView(slug, versionId)
+      : findSiteView(slug),
+    resolveStorefrontBlogHref({ slug, versionId }),
+  ]);
   if (!site) notFound();
   const isLiveSurface = versionId !== null;
   const locales = getSiteLocales(site.draft);
@@ -75,6 +79,7 @@ export default async function LocalizedPreviewPage({ params }: PageProps) {
       localeBasePath={isLiveSurface ? "/" : `/preview/${slug}`}
       availableLocales={locales}
       analyticsEnabled={isLiveSurface}
+      blogHref={blogHref}
     />
   );
 }

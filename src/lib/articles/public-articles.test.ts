@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
+mock.module("next/cache", () => ({
+  unstable_cache: <T extends (...args: never[]) => unknown>(callback: T): T =>
+    callback,
+}));
 
 type ArticleRow = {
   slug: string;
@@ -16,6 +20,7 @@ let findFirstInput: unknown;
 let manyRows: ArticleRow[] = [];
 let firstRow: ArticleRow | null = null;
 let findManyCalls = 0;
+let findFirstCalls = 0;
 
 mock.module("@/lib/db", () => ({
   getDb: () => ({
@@ -26,6 +31,7 @@ mock.module("@/lib/db", () => ({
         return manyRows;
       },
       findFirst: async (input: unknown) => {
+        findFirstCalls += 1;
         findFirstInput = input;
         return firstRow;
       },
@@ -36,8 +42,10 @@ mock.module("@/lib/db", () => ({
 const {
   CUSTOMER_SITEMAP_ARTICLE_LIMIT,
   getPublishedArticle,
+  hasPublishedArticles,
   listPublishedArticles,
   listPublishedArticlesForSitemap,
+  resolveStorefrontBlogHref,
 } = await import("@/lib/articles/public-articles");
 
 const publishedAt = new Date("2026-08-20T10:00:00.000Z");
@@ -57,6 +65,7 @@ describe("public article exclusion", () => {
     manyRows = [];
     firstRow = null;
     findManyCalls = 0;
+    findFirstCalls = 0;
   });
 
   it("returns nothing and never queries without a proxy-attested version", async () => {
@@ -162,5 +171,51 @@ describe("public article exclusion", () => {
         articleSlug: row.slug,
       }),
     ).toBeNull();
+  });
+
+  it("never queries article existence without a proxy-attested version", async () => {
+    expect(
+      await hasPublishedArticles({
+        slug: "maison-levain",
+        versionId: null,
+      }),
+    ).toBe(false);
+    expect(findFirstCalls).toBe(0);
+    expect(await resolveStorefrontBlogHref({ slug: "maison-levain", versionId: null })).toBeNull();
+    expect(findFirstCalls).toBe(0);
+  });
+
+  it("exposes a live Blog href only when the attested version has published articles", async () => {
+    firstRow = row;
+    expect(
+      await hasPublishedArticles({
+        slug: "maison-levain",
+        versionId: "version_1",
+      }),
+    ).toBe(true);
+    expect(await resolveStorefrontBlogHref({
+      slug: "maison-levain",
+      versionId: "version_1",
+    })).toBe("/blog");
+    expect(findFirstInput).toMatchObject({
+      where: {
+        site: { slug: "maison-levain" },
+        status: "PUBLISHED",
+        publishedAt: { not: null },
+      },
+      select: { id: true },
+    });
+
+    firstRow = null;
+    expect(
+      await hasPublishedArticles({
+        slug: "maison-levain",
+        versionId: "version_1",
+      }),
+    ).toBe(false);
+    expect(await resolveStorefrontBlogHref({
+      slug: "maison-levain",
+      versionId: "version_1",
+    })).toBeNull();
   });
 });
