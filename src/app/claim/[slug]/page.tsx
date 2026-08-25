@@ -43,7 +43,12 @@ export default async function ClaimPage({
   return (
     <main className="min-h-screen">
       <header className="flex h-16 items-center gap-4 border-b px-5">
-        <Button render={<Link href="/create" />} variant="ghost" size="icon-sm">
+        <Button
+          render={<Link href="/create" aria-label="Back to create" />}
+          nativeButton={false}
+          variant="ghost"
+          size="icon-sm"
+        >
           <ArrowLeft />
         </Button>
         <Brand {...state.brand} />

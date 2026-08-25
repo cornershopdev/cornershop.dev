@@ -19,6 +19,9 @@ const nichePage = await Bun.file(
 const claimPage = await Bun.file(
   new URL("../../../app/claim/[slug]/page.tsx", import.meta.url),
 ).text();
+const claimLaunchOffer = await Bun.file(
+  new URL("../../claim-launch-offer.ts", import.meta.url),
+).text();
 const checkoutRoute = await Bun.file(
   new URL("../../../app/api/checkout/route.ts", import.meta.url),
 ).text();
@@ -94,7 +97,8 @@ describe("beauty lifecycle contract", () => {
   });
 
   it("keeps claim invitations and checkout fail-closed for beauty", () => {
-    expect(claimPage).toContain("isVerticalClaimEnabled(site.vertical)");
+    expect(claimPage).toContain("claimPageState");
+    expect(claimLaunchOffer).toContain("isVerticalClaimEnabled(site.vertical)");
     expect(checkoutRoute).toContain(
       "isVerticalClaimEnabled(invitation.vertical)",
     );

@@ -13,6 +13,7 @@ import { sampleFoodRetailDraft } from "@/lib/verticals/food-retail/fixtures";
 import { foodRetailMarketing } from "@/lib/verticals/food-retail/marketing";
 import { sampleLocalServiceSiteDraft } from "@/lib/verticals/local-service/fixtures";
 import { localServiceMarketing } from "@/lib/verticals/local-service/marketing";
+import { beautyMarketing } from "@/lib/verticals/beauty/marketing";
 import { restaurantMarketing } from "@/lib/verticals/restaurant/marketing";
 import type { VerticalMarketing } from "@/lib/verticals/types";
 
@@ -101,6 +102,7 @@ describe("claim launch offer mapping", () => {
     expect(resolveClaimLaunchOffer(wrongPriceMarketing())).toBeNull();
     expect(resolveClaimLaunchOffer(unnamedPlanMarketing())).toBeNull();
     expect(resolveClaimLaunchOffer(blankEmailMarketing())).toBeNull();
+    expect(resolveClaimLaunchOffer(beautyMarketing)).toBeNull();
     expect(
       resolveClaimLaunchOffer(wrongPriceMarketing(restaurantMarketing)),
     ).toBeNull();
@@ -112,6 +114,7 @@ describe("claim launch offer mapping", () => {
     expect(claimPanel).toContain("plan: offer.planId");
     expect(claimPanel).toContain("offer.emailPlaceholder");
     expect(claimPanel).toContain('role="alert"');
+    expect(claimPanel).toContain('role="status"');
     expect(claimPanel).toContain('id={errorSummaryId}');
     expect(claimPanel).toContain("<form onSubmit={submit}");
     expect(claimPanel).toContain('type="submit"');
@@ -178,25 +181,34 @@ describe("claim page route state", () => {
 function wrongPriceMarketing(
   base: VerticalMarketing = foodRetailMarketing,
 ): VerticalMarketing {
-  const [plan] = base.pricing.plans;
+  const pricing = requirePricing(base);
+  const [plan] = pricing.plans;
   return {
     ...base,
     pricing: {
-      ...base.pricing,
+      ...pricing,
       plans: [{ ...plan, price: "$25" }],
     },
   };
 }
 
 function unnamedPlanMarketing(): VerticalMarketing {
-  const [plan] = localServiceMarketing.pricing.plans;
+  const pricing = requirePricing(localServiceMarketing);
+  const [plan] = pricing.plans;
   return {
     ...localServiceMarketing,
     pricing: {
-      ...localServiceMarketing.pricing,
+      ...pricing,
       plans: [{ ...plan, name: "Starter" }],
     },
   };
+}
+
+function requirePricing(marketing: VerticalMarketing) {
+  if (!marketing.pricing) {
+    throw new Error("expected a priced marketing fixture");
+  }
+  return marketing.pricing;
 }
 
 function blankEmailMarketing(): VerticalMarketing {

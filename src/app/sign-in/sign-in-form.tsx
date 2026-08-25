@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, LoaderCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { SignInCopy } from "@/lib/sign-in-surface";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,12 @@ export function SignInForm({
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!sent) return;
+    headingRef.current?.focus();
+  }, [sent]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,6 +62,8 @@ export function SignInForm({
         {sent ? <Check className="size-5" /> : <Mail className="size-5" />}
       </span>
       <h1
+        ref={headingRef}
+        tabIndex={sent ? -1 : undefined}
         className={cn(
           "mt-5 leading-none tracking-[-0.045em]",
           inverse
@@ -64,28 +73,38 @@ export function SignInForm({
       >
         {sent ? "Check your inbox." : copy.title}
       </h1>
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+      <p
+        className="mt-4 text-sm leading-6 text-muted-foreground"
+        role={sent ? "status" : undefined}
+        aria-live={sent ? "polite" : undefined}
+      >
         {sent
           ? `If an account exists for ${email}, a secure sign-in link should arrive shortly.`
           : copy.description}
       </p>
       {!sent ? (
-        <form onSubmit={submit} className="mt-7 space-y-3">
-          <Input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder={copy.emailPlaceholder}
-            className="h-11"
-            required
-          />
-          {error ? (
-            <p className="rounded-lg bg-destructive/8 px-3 py-2 text-xs text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <Button type="submit" className="h-11 w-full" disabled={loading}>
-            {loading ? <LoaderCircle className="animate-spin" /> : null}
+        <form onSubmit={submit} className="mt-7 space-y-3" aria-busy={loading}>
+          <Field label="Email" controlId="sign-in-email" error={error}>
+            <Input
+              type="email"
+              name="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder={copy.emailPlaceholder}
+              className="h-11"
+              required
+            />
+          </Field>
+          <Button
+            type="submit"
+            className="h-11 w-full"
+            disabled={loading}
+            aria-busy={loading}
+          >
+            {loading ? (
+              <LoaderCircle className="animate-spin" aria-hidden="true" />
+            ) : null}
             Email me a secure link
             {!loading ? <ArrowRight /> : null}
           </Button>

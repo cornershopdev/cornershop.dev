@@ -98,6 +98,8 @@ describe("claim panel offer identity", () => {
     });
 
     expect(html).toContain("Payment received. Finalizing the owner account");
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
     expect(html).not.toContain("Claiming is unavailable");
     expect(html).not.toContain("Verify ownership by email");
   });
