@@ -46,6 +46,26 @@ describe("release integration contract", () => {
     }
   });
 
+  it("keeps production Redis on the required external managed service", async () => {
+    const deployScript = await readRepoFile("deploy/aws/deploy.sh");
+    expect(deployScript).toMatch(/required_parameters=\([\s\S]*?REDIS_URL/);
+    expect(deployScript).not.toContain("cornershopdev-redis-data");
+    expect(deployScript).not.toContain("redis:7.4-alpine");
+  });
+
+  it("keeps the host article-gate awk condition portable", async () => {
+    const deployScript = await readRepoFile("deploy/aws/deploy.sh");
+    expect(deployScript).not.toMatch(/if \(\s*\n/);
+  });
+
+  it("ships the article rollout operator used by production deploys", async () => {
+    const dockerfile = await readRepoFile("Dockerfile");
+    expect(dockerfile).toContain("bun build scripts/article-rollout.ts");
+    expect(dockerfile).toContain(
+      "--outfile=.operator-scripts/article-rollout.ts",
+    );
+  });
+
   it("keeps the browser journey as a production deploy dependency", async () => {
     const ci = await readRepoFile(".github/workflows/ci.yml");
     expect(ci).toMatch(

@@ -14,7 +14,7 @@ encrypted SSM parameters on the EC2 host.
 | --------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | PostgreSQL      | Dedicated database and login on the existing private RDS instance                                | `DATABASE_URL`                                                                           |
 | Workflow        | PostgreSQL World with a Cornershopdev job prefix and bounded concurrency                         | `WORKFLOW_*`                                                                             |
-| Redis           | Dedicated container and persistent Docker volume, not published to the host                      | `REDIS_URL`                                                                              |
+| Redis           | Dedicated private ElastiCache replication group with TLS, authentication, and encryption at rest | `REDIS_URL`                                                                              |
 | Images          | Private versioned S3 bucket served through CloudFront OAC                                        | `AWS_REGION`, `S3_BUCKET`, `S3_PUBLIC_BASE_URL`                                          |
 | Billing         | Stripe Checkout, signed webhooks, and Customer Portal                                            | `STRIPE_*`, `CLAIM_TOKEN_SECRET`                                                         |
 | Operator alerts | Durable PostgreSQL outbox delivered through Resend                                               | `OPERATOR_ALERT_EMAILS`, `RESEND_API_KEY`                                                |

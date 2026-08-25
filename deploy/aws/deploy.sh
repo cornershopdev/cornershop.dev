@@ -55,10 +55,7 @@ set_article_edge_gate() {
     /^# END CORNERSHOPDEV$/ { managed = 0 }
     {
       print
-      if (
-        state == "closed" && managed &&
-        ($0 == "api.cornershop.dev {" || $0 == "https:// {")
-      ) {
+      if (state == "closed" && managed && ($0 == "api.cornershop.dev {" || $0 == "https:// {")) {
         print "\t# BEGIN ARTICLE MUTATION GATE"
         print "\t@articleMutations {"
         print "\t\tmethod POST"
@@ -236,24 +233,6 @@ chmod 500 "$bootstrap_file" "$host_launcher_file"
 echo "release-state caddy-configured sha=${deployed_sha}"
 
 docker network inspect shipshit >/dev/null
-docker volume create cornershopdev-redis-data >/dev/null
-if ! docker inspect cornershopdev-redis >/dev/null 2>&1; then
-  docker run -d \
-    --name cornershopdev-redis \
-    --network shipshit \
-    --restart unless-stopped \
-    --memory 128m \
-    --cpus 0.25 \
-    --volume cornershopdev-redis-data:/data \
-    redis:7.4-alpine \
-    redis-server \
-    --appendonly yes \
-    --appendfsync everysec \
-    --maxmemory 96mb \
-    --maxmemory-policy noeviction >/dev/null
-elif [[ "$(docker inspect --format '{{.State.Running}}' cornershopdev-redis)" != "true" ]]; then
-  docker start cornershopdev-redis >/dev/null
-fi
 
 aws s3 cp "$artifact_uri" "$artifact_file" --region us-west-1 --only-show-errors
 gzip -dc "$artifact_file" | docker load >/dev/null
