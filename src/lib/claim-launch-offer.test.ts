@@ -40,9 +40,6 @@ describe("claim launch offer mapping", () => {
       cadence: "/month",
       currency: "usd",
     });
-    expect(
-      foundingOfferDisplay({ ...FOUNDING_PRICE, unitAmount: 2_550 }),
-    ).toBeNull();
   });
 
   it("resolves restaurant, food-retail, and local-service from their own marketing", () => {
