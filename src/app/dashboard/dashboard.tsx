@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -66,7 +66,7 @@ import {
 } from "@/lib/owner-operations";
 import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import { listRestaurantThemeManifests } from "@/lib/site-themes/restaurant/registry";
-import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring";
+import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring-diff";
 import {
   parseRestaurantThemeSelection,
   restoreAutomaticRestaurantTheme,
@@ -92,6 +92,11 @@ import {
   validateRestaurantMenuDraft,
   type RestaurantMenuMutation,
 } from "@/lib/restaurant-menu-editor";
+import {
+  OwnerDraftDirtyGuard,
+  ownerDraftNavigationProps,
+  useOwnerDraftDirtyState,
+} from "@/lib/owner-draft-dirty-state";
 
 
 /**
@@ -130,24 +135,26 @@ export function Dashboard({
   platformUrl: string;
   ownerOperations?: VerticalOwnerOperations;
 }) {
-  const [draft, setDraftState] = useState(initialDraft);
-  const draftRef = useRef(initialDraft);
-  const [persistedDraft, setPersistedDraft] = useState(initialDraft);
-  function setDraft(
-    next:
-      | RestaurantDraft
-      | ((current: RestaurantDraft) => RestaurantDraft),
-  ) {
-    const resolved = typeof next === "function" ? next(draftRef.current) : next;
-    draftRef.current = resolved;
-    setDraftState(resolved);
-  }
+  const {
+    draft,
+    baseline,
+    revision: savedRevision,
+    dirty,
+    draftRef,
+    setDraft,
+    applyAuxiliary,
+    setRevision,
+    beginSave,
+    acknowledgeSave,
+    adoptServerDraft,
+  } = useOwnerDraftDirtyState(initialDraft, initialDraftRevision);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [savedRevision, setSavedRevision] = useState(initialDraftRevision);
-  const handlePhotoRevision = useCallback((revision: number) => {
-    setSavedRevision(revision);
-  }, []);
+  const handlePhotoRevision = useCallback(
+    (revision: number) => {
+      setRevision(revision);
+    },
+    [setRevision],
+  );
   const handlePhotoHeroChange = useCallback(
     (
       hero: {
@@ -156,14 +163,14 @@ export function Dashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       } | null,
     ) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         heroImageUrl: hero?.url ?? null,
         heroOriginalImageUrl: hero?.originalUrl ?? null,
         heroImageProvenance: hero?.provenance ?? null,
       }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoGalleryChange = useCallback(
     (
@@ -173,9 +180,9 @@ export function Dashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       }>,
     ) => {
-      setDraft((current) => ({ ...current, galleryImages }));
+      applyAuxiliary((current) => ({ ...current, galleryImages }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoCatalogChange = useCallback(
     (change: {
@@ -185,7 +192,7 @@ export function Dashboard({
       originalUrl: string | null;
       provenance: "official" | "owner" | "permissioned-ugc" | null;
     }) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         menuSections: current.menuSections.map((section, sectionIndex) =>
           sectionIndex !== change.sectionIndex
@@ -206,7 +213,7 @@ export function Dashboard({
         ),
       }));
     },
-    [],
+    [applyAuxiliary],
   );
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -274,7 +281,8 @@ export function Dashboard({
   );
 
   async function save(): Promise<number | null> {
-    const requestedDraft = structuredClone(draftRef.current);
+    const submitted = beginSave();
+    const requestedDraft = structuredClone(submitted.submittedDraft);
     const validationIssues = validateRestaurantMenuDraft(requestedDraft);
     const integrationIssues = validateRestaurantIntegrations(requestedDraft);
     setMenuValidationIssues(validationIssues);
@@ -293,19 +301,18 @@ export function Dashboard({
       return null;
     }
     setSaving(true);
-    setSaved(false);
     setPublishError(null);
     setMenuSaveError(null);
     setIntegrationSaveError(null);
     try {
-      let persistedRevision = savedRevision;
+      let persistedRevision = submitted.expectedRevision;
       if (!demo) {
-        const response = await fetch(`/api/sites/${draft.slug}`, {
+        const response = await fetch(`/api/sites/${requestedDraft.slug}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...requestedDraft,
-            expectedRevision: savedRevision,
+            expectedRevision: submitted.expectedRevision,
           }),
         });
         const result = (await response.json()) as {
@@ -319,22 +326,22 @@ export function Dashboard({
         if (!Number.isInteger(result.revision) || result.revision === undefined) {
           throw new Error("Save response did not include a draft revision");
         }
-        setSavedRevision(result.revision);
         persistedRevision = result.revision;
       }
-      setPersistedDraft(requestedDraft);
-      if (
-        JSON.stringify(draftRef.current) !== JSON.stringify(requestedDraft)
-      ) {
+      const acknowledged = acknowledgeSave({
+        submittedDraft: requestedDraft,
+        persistedDraft: requestedDraft,
+        submittedMutationVersion: submitted.submittedMutationVersion,
+        savedRevision: persistedRevision,
+      });
+      if (acknowledged.hadNewerEdits) {
         const message =
           "New edits were made while saving. Save them before publishing.";
-        setSaved(false);
         setPublishError(message);
         setMenuSaveError(message);
         setIntegrationSaveError(message);
         return null;
       }
-      setSaved(true);
       setThemeDirty(false);
       setMenuDirty(false);
       setIntegrationDirty(false);
@@ -441,7 +448,6 @@ export function Dashboard({
       themeId,
     );
     setDraft((current) => ({ ...current, themeSelection: selection }));
-    setSaved(false);
     setThemeDirty(true);
     markDraftUnpublished();
     setPublishError(null);
@@ -454,7 +460,6 @@ export function Dashboard({
         current.designProfile,
       ),
     }));
-    setSaved(false);
     setThemeDirty(true);
     markDraftUnpublished();
     setPublishError(null);
@@ -474,7 +479,6 @@ export function Dashboard({
       const next = applyRestaurantMenuMutation(draft, mutation);
       setDraft(next);
       setMenuDirty(true);
-      setSaved(false);
       setMenuSaveError(null);
       setMenuValidationIssues(validateRestaurantMenuDraft(next));
     } catch (error) {
@@ -491,7 +495,6 @@ export function Dashboard({
     const next = updateRestaurantTranslation(draft, locale, updater);
     setDraft(next);
     setMenuDirty(true);
-    setSaved(false);
     setMenuSaveError(null);
     setMenuValidationIssues(validateRestaurantMenuDraft(next));
   }
@@ -501,7 +504,6 @@ export function Dashboard({
       const next = markRestaurantTranslationReviewed(draft, locale);
       setDraft(next);
       setMenuDirty(true);
-      setSaved(false);
       setMenuSaveError(null);
       setMenuValidationIssues([]);
     } catch {
@@ -550,17 +552,17 @@ export function Dashboard({
         draftRef.current,
         regenerated,
       );
-      setPersistedDraft(structuredClone(regenerated));
-      setDraft(reconciled.draft);
-      setSavedRevision(result.revision);
+      adoptServerDraft({
+        draft: reconciled.draft,
+        baseline: regenerated,
+        revision: result.revision,
+      });
       if (reconciled.preservedClientEdits) {
-        setSaved(false);
         setMenuValidationIssues(validateRestaurantMenuDraft(reconciled.draft));
         setIntegrationValidationIssues(
           validateRestaurantIntegrations(reconciled.draft),
         );
       } else {
-        setSaved(true);
         setMenuDirty(false);
         setIntegrationDirty(false);
         setMenuValidationIssues([]);
@@ -583,7 +585,6 @@ export function Dashboard({
     setDraft(previous);
     setMenuUndoStack((current) => current.slice(0, -1));
     setMenuDirty(true);
-    setSaved(false);
     setMenuSaveError(null);
     setMenuValidationIssues([]);
   }
@@ -594,18 +595,23 @@ export function Dashboard({
   }) {
     const acceptedServerDraft = restaurantDraftSchema.parse(input.draft);
     const reconciled = reconcileAcceptedSourceMonitoringDraft(
-      persistedDraft,
+      baseline,
       draftRef.current,
       acceptedServerDraft,
     );
-    setPersistedDraft(acceptedServerDraft);
-    setDraft(reconciled.draft);
-    setSavedRevision(input.revision);
-    setSaved(!reconciled.preservedClientEdits);
+    adoptServerDraft({
+      draft: reconciled.draft,
+      baseline: acceptedServerDraft,
+      revision: input.revision,
+    });
     setMenuValidationIssues(validateRestaurantMenuDraft(reconciled.draft));
     setIntegrationValidationIssues(
       validateRestaurantIntegrations(reconciled.draft),
     );
+    if (!reconciled.preservedClientEdits) {
+      setMenuDirty(false);
+      setIntegrationDirty(false);
+    }
   }
 
   function mutateIntegration(
@@ -622,7 +628,6 @@ export function Dashboard({
       const next = applyRestaurantIntegrationMutation(draft, mutation);
       setDraft(next);
       setIntegrationDirty(true);
-      setSaved(false);
       setIntegrationSaveError(null);
       setIntegrationValidationIssues(
         validateRestaurantIntegrations(next),
@@ -650,7 +655,6 @@ export function Dashboard({
     );
     setDraft(next);
     setIntegrationDirty(true);
-    setSaved(false);
     setIntegrationSaveError(null);
     setIntegrationValidationIssues(
       validateRestaurantIntegrations(next),
@@ -662,7 +666,6 @@ export function Dashboard({
       const next = markRestaurantTranslationReviewed(draft, locale);
       setDraft(next);
       setIntegrationDirty(true);
-      setSaved(false);
       setIntegrationSaveError(null);
       setIntegrationValidationIssues([]);
     } catch {
@@ -678,13 +681,13 @@ export function Dashboard({
     setDraft(previous);
     setIntegrationUndoStack((current) => current.slice(0, -1));
     setIntegrationDirty(true);
-    setSaved(false);
     setIntegrationSaveError(null);
     setIntegrationValidationIssues([]);
   }
 
   return (
-    <main className="min-h-screen bg-[#f3f1eb]">
+    <OwnerDraftDirtyGuard dirty={dirty}>
+    <main className="min-h-screen bg-[#f3f1eb]" {...ownerDraftNavigationProps(dirty)}>
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
         <div className="flex items-center gap-5">
           <Brand {...brand} />
@@ -724,7 +727,7 @@ export function Dashboard({
             disabled={saving || publishing}
           >
             {saving ? <LoaderCircle className="animate-spin" /> : <Save />}
-            {saved ? "Saved" : "Save"}
+            {dirty ? "Save" : "Saved"}
           </Button>
           <Button
             size="sm"
@@ -976,10 +979,7 @@ export function Dashboard({
                 initial={sourceMonitoring}
                 demo={demo}
                 draftRevision={savedRevision}
-                hasUnsavedChanges={
-                  JSON.stringify(draft) !==
-                  JSON.stringify(persistedDraft)
-                }
+                hasUnsavedChanges={dirty}
                 onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
               />
             </TabsContent>
@@ -1340,6 +1340,7 @@ export function Dashboard({
         </div>
       </Tabs>
     </main>
+    </OwnerDraftDirtyGuard>
   );
 }
 

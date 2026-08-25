@@ -5,12 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  confirmDiscardUnsavedOwnerEdits,
+  useOwnerUnsavedEdits,
+} from "@/lib/owner-draft-dirty-state";
 
 export function AccountActions({ canSwitch }: { canSwitch: boolean }) {
   const router = useRouter();
+  const dirty = useOwnerUnsavedEdits();
   const [pending, setPending] = useState(false);
 
   async function logout() {
+    if (!confirmDiscardUnsavedOwnerEdits(dirty)) return;
     setPending(true);
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
@@ -26,7 +32,16 @@ export function AccountActions({ canSwitch }: { canSwitch: boolean }) {
   return (
     <div className="flex items-center gap-2">
       {canSwitch ? (
-        <Button render={<Link href="/workspace/select" />} variant="outline" size="sm">
+        <Button
+          render={<Link href="/workspace/select" />}
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            if (!confirmDiscardUnsavedOwnerEdits(dirty)) {
+              event.preventDefault();
+            }
+          }}
+        >
           Switch workspace
         </Button>
       ) : null}

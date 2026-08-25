@@ -138,8 +138,17 @@ describe("shared owner paid operations surface", () => {
       expect(html).toContain("Version 3");
       expect(html).toContain("Rollback");
       expect(html).toContain("Use your own domain (optional)");
-      expect(html).toContain("Source monitoring is not ready for this workspace yet.");
-      expect(html).toContain("The photo library is not ready for this workspace yet.");
+      expect(html).toContain("Changes wait for your approval.");
+      expect(html).not.toContain(
+        "Source monitoring is not ready for this workspace yet.",
+      );
+      expect(html).not.toContain(
+        "The photo library is not ready for this workspace yet.",
+      );
+      expect(html).toContain("Approved-source intake");
+      expect(html).not.toContain("Approved product image URL");
+      expect(html).not.toContain("Project image URL");
+      expect(html).not.toContain("Choose image source");
       expect(html).not.toContain("Restofront");
       expect(html).not.toContain("restaurant.com");
     }
@@ -172,5 +181,53 @@ describe("shared owner paid operations surface", () => {
     );
     expect(html).not.toContain("Last source check");
     expect(restaurantOwnerOperations.sourceMonitoring).toBe("enabled");
+  });
+
+  it("keeps the shared monitoring panel fail-closed when the registry disables it", () => {
+    const html = renderToStaticMarkup(
+      <FoodRetailDashboard
+        email="owner@example.com"
+        brand={FACTORY_BRAND}
+        initialDraft={sampleFoodRetailDraft}
+        initialRevision={7}
+        initiallyPublished
+        canSwitchWorkspace={false}
+        platformUrl="https://bakery.cornershop.dev"
+        billingAccess={activeBilling}
+        publicationHistory={history}
+        ownerOperations={{
+          ...foodRetailOwnerOperations,
+          sourceMonitoring: "not-yet",
+        }}
+      />,
+    );
+    expect(html).toContain(
+      "Source monitoring is not ready for this workspace yet.",
+    );
+    expect(html).not.toContain("Changes wait for your approval.");
+  });
+
+  it("keeps the shared photo library fail-closed when the registry disables it", () => {
+    const html = renderToStaticMarkup(
+      <FoodRetailDashboard
+        email="owner@example.com"
+        brand={FACTORY_BRAND}
+        initialDraft={sampleFoodRetailDraft}
+        initialRevision={7}
+        initiallyPublished
+        canSwitchWorkspace={false}
+        platformUrl="https://bakery.cornershop.dev"
+        billingAccess={activeBilling}
+        publicationHistory={history}
+        ownerOperations={{
+          ...foodRetailOwnerOperations,
+          photoLibrary: "not-yet",
+        }}
+      />,
+    );
+    expect(html).toContain(
+      "The photo library is not ready for this workspace yet.",
+    );
+    expect(html).not.toContain("Approved-source intake");
   });
 });

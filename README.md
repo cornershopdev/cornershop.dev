@@ -3,12 +3,49 @@
 Cornershopdev is a multi-vertical local-business website factory. Each
 configured niche supplies its own discovery queries, catalog/conversion
 signals, content schema, preview generator, storefront identity, and provider
-adapters. A business keeps the operational tools it already uses, reviews a
-private prefilled preview, claims it, subscribes, then connects its domain.
+adapters. A business keeps the operational tools it already uses and reviews a
+private prefilled preview. Claim, subscription, custom domains, monitoring,
+leads, and articles are per-vertical capabilities, not a universal lifecycle.
+
+## Vertical capabilities
+
+These axes are independent. Factory visibility is not a standalone niche
+launch. A claim mode is not owner publish. Rendering an already-published
+snapshot is not the same as creating one. Custom domains, source monitoring,
+leads, and articles are owner-operation flags resolved through
+`resolveOwnerOperations` and fail closed against claim and publication-mutation
+gates.
+
+| Vertical | Factory visibility | Standalone launch | Claim mode | Owner mutation | Platform publication | Custom domains | Monitoring | Leads | Articles |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Restaurant | public | launched | niche | enabled | enabled | enabled | enabled | enabled | enabled |
+| Beauty | public | unlaunched | disabled | unsupported | enabled | unsupported | unsupported | unsupported | unsupported |
+| Food Retail | private | unlaunched | factory | enabled | enabled | enabled | enabled | not-yet | not-yet |
+| Local Service | private | unlaunched | factory | enabled | enabled | enabled | enabled | not-yet | not-yet |
+
+- **Factory visibility** — `marketing.publiclyAccessible`: the shared
+  `/niche/[vertical]` route.
+- **Standalone launch** — `verticalLaunchReadiness`: public access, canonical
+  domain, matching routed hostname, and verified niche sender.
+- **Claim mode** — `disabled`, `factory` (Cornershopdev sender and
+  `<slug>.cornershop.dev`), or `niche` (the vertical's own domain and sender).
+- **Owner mutation** — publish and rollback. Requires
+  `publicationMutationEnabled` and a supported owner-review dashboard.
+- **Platform publication** — `publicationEnabled`: already-published snapshots
+  may still render when owners cannot create new ones.
+- **Custom domains / Monitoring / Leads / Articles** — owner-operation states
+  (`enabled`, `not-yet`, `gated`, `unsupported`).
+
+Restaurant, Food Retail, and Local Service also enable billing, publication
+history, workspace switching, and the reviewed photo library. Beauty leaves
+every paid owner operation unsupported. It is a non-chargeable factory
+preview, not a sellable niche.
 
 ## Product flow
 
-1. Paste a restaurant URL or name.
+Shared import path, used by every registered vertical:
+
+1. Paste a source URL or name into that vertical's intake.
 2. Import public website content with SSRF-safe fetching and bounded HTML reads.
 3. Deterministically recover structured business facts, hours, bounded catalog
    candidates, relevant navigation, authentic source assets, and field-level
@@ -16,20 +53,36 @@ private prefilled preview, claims it, subscribes, then connects its domain.
 4. Recover source logos/favicons and CSS/meta brand colours, repairing contrast
    where necessary before the palette reaches a renderer.
 5. Detect the source language and preserve it as canonical. When OpenRouter is
-   configured, generate a complete English translation in the structured pass.
-6. Preserve first-party photography and optionally enhance exposure, colour, crop, noise, and clarity without changing the food or venue.
+   configured, generate a complete English translation in the structured pass
+   unless the vertical is `deterministic-only`.
+6. Preserve first-party photography and optionally enhance exposure, colour,
+   crop, noise, and clarity without changing material scene content. Each
+   vertical lists its own forbidden elements.
 7. Save a private preview through a durable PostgreSQL-backed Workflow.
-8. Verify ownership through a one-time business-domain email invitation or a concierge-approved owner email.
-9. Claim the restaurant through invitation-bound Stripe Checkout; the completed checkout creates the prefilled owner account.
-10. Authorize the restaurant domain for on-demand TLS and show the exact DNS records.
-11. Monitor and maintain the menu, imagery, and external links from the dashboard.
+
+What happens after preview depends on the matrix above:
+
+- **Restaurant (`niche`)** — verify ownership through a one-time
+  business-domain email invitation or a concierge-approved owner email; claim
+  through invitation-bound Stripe Checkout; authorize a custom domain for
+  on-demand TLS; monitor the menu, imagery, and links; review first-party
+  booking leads; publish articles.
+- **Food Retail and Local Service (`factory`)** — an approved preview can
+  claim the shared $49 Cornershopdev plan and publish on
+  `<slug>.cornershop.dev`. Custom domains and source monitoring are enabled.
+  Owner analytics, lead inbox, and articles are not-yet.
+- **Beauty (`disabled`)** — the factory `/niche/beauty` preview stays
+  non-chargeable. Claim, owner mutation, billing, custom domains, monitoring,
+  leads, and articles are unsupported.
 
 ## Customer workspace and operator console
 
-Each claimed site has a tenant-scoped `/dashboard` workspace. Owners can edit
-their site, connect a domain, review first-party booking leads, and move each
-request from `NEW` to `CONTACTED` or `CLOSED`. Contact details are returned only
-after the session is revalidated against that site's organization membership.
+Each claimed site has a tenant-scoped `/dashboard` workspace. Owners only get
+the operations their vertical enables. Contact details are returned only after
+the session is revalidated against that site's organization membership.
+Restaurant can review first-party booking leads and move each request from
+`NEW` to `CONTACTED` or `CLOSED`. Food Retail and Local Service do not expose
+a lead inbox yet. Beauty has no owner-review dashboard.
 
 `/admin` is the platform operator console. It requires both a database
 `SUPERADMIN` role and an email listed in `SUPERADMIN_EMAILS`. It shows signups,
@@ -67,12 +120,14 @@ paths, query strings, provider URLs, names, email addresses, phone numbers, or
 booking notes. A one-minute Redis limiter may use a transient hash derived from
 the connection address; it is not written to PostgreSQL.
 
-Booking requests remain the authoritative lead count, so a dropped analytics
-beacon cannot lose a real lead. The corresponding `LEAD_CREATED` event is
-server-owned and best effort. Client and operator workspaces expose 7, 30, and
-90-day distinct-visit, CTA-visitor, booking-lead, and conversion metrics.
-Raw analytics events are retained for 120 days and pruned daily under a
-PostgreSQL advisory lock.
+Booking requests remain the authoritative lead count for verticals that enable
+the lead inbox, so a dropped analytics beacon cannot lose a real lead. The
+corresponding `LEAD_CREATED` event is server-owned and best effort. Restaurant
+owner workspaces and the operator console expose 7, 30, and 90-day
+distinct-visit, CTA-visitor, booking-lead, and conversion metrics. Food Retail
+and Local Service mark owner analytics as not-yet; Beauty has no owner
+analytics. Raw analytics events are retained for 120 days and pruned daily
+under a PostgreSQL advisory lock.
 
 ## Restaurant themes
 
@@ -101,6 +156,14 @@ Heritage and fine-dining templates default to a clean text-led menu; casual,
 fresh, coastal, and bold concepts default to a small highlights gallery. Owners
 can show or hide the gallery from the dashboard without deleting any images.
 
+## Beauty vertical
+
+`BEAUTY` is a non-chargeable factory preview. `/niche/beauty` is publicly
+accessible, but it has no standalone domain or sender, and `claimMode` is
+`disabled`. Already-published snapshots remain renderable. Owner mutation,
+billing, custom domains, monitoring, leads, articles, and the photo library
+are unsupported. There is no owner-review dashboard.
+
 ## Food retail vertical
 
 `FOOD_RETAIL` is a bounded vertical for bakeries, pâtisseries, butchers,
@@ -120,12 +183,12 @@ adapter restores business identity, contact details, hours, products, prices,
 ordering links and factual product attributes from deterministic crawl output.
 Unsupported model claims remain empty or null.
 
-The vertical is registered for private studio imports and owner dashboards but
-is not publicly launched: its marketing hostnames are empty, its domain and
-sender are null, and its server-side publication and rollback capability is
-disabled. Private preview and owner review remain available.
-The implementation contract, test fixture, structured-data mapping and required
-domain/sender/production-config evidence are documented in
+The vertical is factory-claimable but not publicly launched: marketing
+hostnames are empty, domain and sender are null, and `publiclyAccessible` is
+false. Claim mode is `factory`. Already-published snapshots render, and owners
+with the food-retail dashboard may publish and roll back. Custom domains,
+source monitoring, and the photo library are enabled. Owner analytics, lead
+inbox, and articles are not-yet. See the capability matrix above and
 [`docs/verticals/food-retail.md`](docs/verticals/food-retail.md).
 
 ## Local-service vertical
@@ -143,9 +206,11 @@ evidence. Missing emergency coverage, credentials, insurance, trust claims,
 projects, prices, or availability remain unstated rather than being inferred.
 
 The vertical is registered for private imports, previews, and revision-safe
-owner editing. Public niche access, claiming, publication, and rollback remain
-disabled until a real domain, exact routed hostname, and matching verified
-sender configuration satisfy the launch-readiness gate. See
+owner editing. Factory claim, publication, custom domains, source monitoring,
+and the photo library are enabled. Public niche access and standalone launch
+stay closed until a real domain, exact routed hostname, and matching verified
+sender satisfy `verticalLaunchReadiness`. Owner analytics, lead inbox, and
+articles are not-yet. See the capability matrix above and
 [`docs/verticals/local-service.md`](docs/verticals/local-service.md).
 
 ## Internationalization
@@ -153,8 +218,8 @@ sender configuration satisfy the launch-readiness gate. See
 Site data uses one canonical source locale plus structured translation
 overlays. Prices, currencies, images, addresses, provider names, and external
 booking or ordering URLs remain shared, so translating a site cannot fork its
-operational data. Menu sections, menu items, descriptions, dietary labels, and
-link labels keep the same order and count in every locale.
+operational data. Catalog sections, items, descriptions, vertical-specific
+labels, and link labels keep the same order and count in every locale.
 If an existing provider URL already exposes a `lang` parameter, the rendered
 link updates only that preference while preserving the same provider and flow.
 
@@ -166,13 +231,16 @@ The canonical site is available at `/preview/[slug]`; translations use
 
 ## Stack
 
+Package majors below match `package.json`. Runtime image pins live in the
+Dockerfile.
+
 - Next.js 16 App Router and React 19
-- Bun 1.3.14 for installs, Prisma/Workflow migrations, and operator tooling;
+- Bun 1.4.0 for installs, Prisma/Workflow migrations, and operator tooling;
   pinned Node.js 24.19.0 LTS for Next.js builds and the production standalone
   server
 - Tailwind CSS v4 and shadcn/ui
 - Prisma 7 with PostgreSQL and the `pg` driver adapter
-- Vercel AI SDK 6 with OpenRouter for structured text generation and optional
+- Vercel AI SDK 7 with OpenRouter for structured text generation and optional
   source-photo enhancement
 - Workflow DevKit with its self-hosted PostgreSQL World
 - Amazon S3 and CloudFront for persistent enhanced derivatives
@@ -230,7 +298,7 @@ fails closed when it is absent or invalid.
 
 ### AI generation
 
-Restaurant crawling, same-origin page discovery, SSRF checks, and source
+Source crawling, same-origin page discovery, SSRF checks, and source
 reconstruction run locally without a model. JSON-LD, metadata, explicit contact
 links, semantic address markup, source navigation, logos/favicons, and CSS/meta
 colours are recovered with bounded parsers. Every accepted fact keeps its source
@@ -303,9 +371,11 @@ reaches the live site only after the owner publishes again.
 
 Allowed edits are exposure, white balance, highlight and shadow recovery,
 denoising, sharpness, resolution, straightening, subtle cropping, and removal of
-transient non-material distractions such as sensor dust. Ingredients, garnishes,
-portions, plating, tableware, people, architecture, and material scene elements
-must not be added, removed, replaced, moved, or regenerated. Only approved
+transient non-material distractions such as sensor dust. Material scene
+elements must not be added, removed, replaced, moved, or regenerated. Each
+vertical lists its own forbidden subjects — food and plating for restaurants,
+product and packaging for food retail, skin/hair/nail and treatment results
+for beauty. Only approved
 originals enter a rate- and concurrency-limited batch. Originals remain active
 until the owner approves the before/after derivative, and every approve, reject,
 selection, restore, failure, and cost result is audited. See
@@ -392,7 +462,8 @@ bun run operator:preflight-outreach --environment production
 The application records the hostname and returns the production A or CNAME
 target. After DNS resolves, the owner verifies it in the dashboard. Caddy issues
 TLS only when its authorization callback confirms that the domain is verified
-and belongs to a restaurant.
+and belongs to a claimed site. Custom-domain owner operations stay closed for
+verticals whose `customDomain` capability is not enabled.
 
 ### Production routing
 
@@ -420,9 +491,10 @@ this same container, where the rewrite fires again — an infinite loop.
 - AI output is validated with Zod before it enters the product.
 - Existing booking and ordering links are extracted from source material and override model-generated links.
 - Stripe webhooks verify the raw body signature.
-- Restaurant claims require a hashed, expiring invitation bound to one site,
-  intended email, and Stripe Checkout session. Raw invitation tokens are kept
-  in URL fragments so embedded preview assets cannot receive them as referrers.
+- Claims require a hashed, expiring invitation bound to one site, intended
+  email, and Stripe Checkout session, and only for verticals whose claim mode
+  is enabled. Raw invitation tokens are kept in URL fragments so embedded
+  preview assets cannot receive them as referrers.
 - Self-serve claims require the exact imported business email or an address on
   the exact source hostname. Ambiguous ownership requires a dual-gated
   superadmin approval from the operator console.
@@ -431,17 +503,22 @@ this same container, where the rewrite fires again — an infinite loop.
   acceptance, and rejection events are recorded without tokens or contact data.
 - Better Auth owns revocable, database-backed dashboard sessions behind a
   signed HTTP-only, same-site cookie.
-- Restaurant mutations require a session matching the restaurant slug.
-- Image enhancement and domain management require that same restaurant-scoped session.
+- Site mutations require a session matching the site slug and current
+  organization membership. Routes are vertical-aware: publish/rollback, domain
+  management, photo library, source monitoring, analytics, articles, and the
+  lead inbox still fail closed when that vertical's owner operation is not
+  enabled.
+- Image enhancement and domain management require that same site-scoped session.
 - Public preview generation is rate limited and fails closed in production.
 - Enhanced derivatives are persisted to private S3 storage and served through CloudFront while authentic originals and provenance remain available.
-- Arbitrary restaurant images load directly in the browser instead of through the Next.js image proxy.
+- Arbitrary site images load directly in the browser instead of through the Next.js image proxy.
 
 ## Useful routes
 
 - `/` — marketing and URL intake
+- `/niche/[vertical]` — factory niche page for publicly accessible verticals
 - `/create` — import and preview studio
-- `/claim/[slug]` — pricing and claim checkout
+- `/claim/[slug]` — pricing and claim checkout, when that vertical's claim mode is enabled
 - `/dashboard` — authenticated vertical-aware owner management
 - `/dashboard?demo=1` — local demo dashboard
 - `/admin` — dual-gated superadmin operator console
