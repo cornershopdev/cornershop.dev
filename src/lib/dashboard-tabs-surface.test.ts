@@ -66,12 +66,18 @@ describe("dashboard tab and settings surface", () => {
       "initialDraftRevision={ownerDraft?.revision ?? 0}",
     );
     expect(dashboardPage).toContain("initialRevision={loaded.revision}");
-    expect(dashboard).toContain("useState(initialDraftRevision)");
-    expect(dashboard).toContain("expectedRevision: savedRevision");
+    expect(dashboard).toContain(
+      "useOwnerDraftDirtyState(initialDraft, initialDraftRevision)",
+    );
+    expect(dashboard).toContain(
+      "expectedRevision: submitted.expectedRevision",
+    );
     expect(restaurantSaveRoute).toContain("saveAuthorizedSiteDraft");
     expect(ownerSiteSave).toContain('code: "EXPECTED_REVISION_REQUIRED"');
     expect(dashboard).toContain("expectedRevision: revisionToPublish");
-    expect(foodRetailDashboard).toContain("expectedRevision: revision");
+    expect(foodRetailDashboard).toContain(
+      "expectedRevision: submitted.expectedRevision",
+    );
     expect(restaurantPublishRoute).toContain('code: "DRAFT_REVISION_CONFLICT"');
   });
 
@@ -109,7 +115,7 @@ describe("dashboard tab and settings surface", () => {
     expect(dashboard).toContain(
       "body: JSON.stringify({ expectedRevision: requestedRevision })",
     );
-    expect(dashboard).toContain("setSavedRevision(result.revision)");
+    expect(dashboard).toContain("adoptServerDraft({");
     expect(translationRegenerationRoute).toContain(
       "expectedRevision: requestBody.data.expectedRevision",
     );

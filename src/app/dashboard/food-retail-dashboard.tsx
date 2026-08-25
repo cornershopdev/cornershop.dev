@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -65,9 +65,13 @@ import {
   hasUnreviewedFoodRetailTranslations,
   markFoodRetailTranslationReviewed,
   markFoodRetailTranslationsStale,
-  reconcileFoodRetailDraftAfterSave,
   updateFoodRetailTranslation,
 } from "@/lib/verticals/food-retail/editor";
+import {
+  OwnerDraftDirtyGuard,
+  ownerDraftNavigationProps,
+  useOwnerDraftDirtyState,
+} from "@/lib/owner-draft-dirty-state";
 import {
   foodRetailSiteDraftSchema,
   type FoodRetailSiteDraft,
@@ -98,19 +102,18 @@ export function FoodRetailDashboard({
   publicationHistory?: ClientPublicationHistoryItem[];
   sourceMonitoring?: SourceMonitoringDashboardDto;
 }) {
-  const [draft, setDraftState] = useState(initialDraft);
-  const draftRef = useRef(initialDraft);
-  const [persistedDraft, setPersistedDraft] = useState(initialDraft);
-  function setDraft(
-    next:
-      | FoodRetailSiteDraft
-      | ((current: FoodRetailSiteDraft) => FoodRetailSiteDraft),
-  ) {
-    const resolved = typeof next === "function" ? next(draftRef.current) : next;
-    draftRef.current = resolved;
-    setDraftState(resolved);
-  }
-  const [revision, setRevision] = useState(initialRevision);
+  const {
+    draft,
+    revision,
+    dirty,
+    draftRef,
+    setDraft,
+    applyAuxiliary,
+    setRevision,
+    beginSave,
+    acknowledgeSave,
+    acknowledgeSnapshot,
+  } = useOwnerDraftDirtyState(initialDraft, initialRevision);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -129,9 +132,12 @@ export function FoodRetailDashboard({
     OwnerIntegrationIssue[]
   >([]);
 
-  const handlePhotoRevision = useCallback((nextRevision: number) => {
-    setRevision(nextRevision);
-  }, []);
+  const handlePhotoRevision = useCallback(
+    (nextRevision: number) => {
+      setRevision(nextRevision);
+    },
+    [setRevision],
+  );
   const handlePhotoHeroChange = useCallback(
     (
       hero: {
@@ -140,14 +146,14 @@ export function FoodRetailDashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       } | null,
     ) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         heroImageUrl: hero?.url ?? null,
         heroOriginalImageUrl: hero?.originalUrl ?? null,
         heroImageProvenance: hero?.provenance ?? null,
       }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoGalleryChange = useCallback(
     (
@@ -157,9 +163,9 @@ export function FoodRetailDashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       }>,
     ) => {
-      setDraft((current) => ({ ...current, galleryImages }));
+      applyAuxiliary((current) => ({ ...current, galleryImages }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoCatalogChange = useCallback(
     (change: {
@@ -169,7 +175,7 @@ export function FoodRetailDashboard({
       originalUrl: string | null;
       provenance: "official" | "owner" | "permissioned-ugc" | null;
     }) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         catalogSections: current.catalogSections.map((section, sectionIndex) =>
           sectionIndex !== change.sectionIndex
@@ -190,7 +196,7 @@ export function FoodRetailDashboard({
         ),
       }));
     },
-    [],
+    [applyAuxiliary],
   );
 
   function updateSection(
@@ -340,7 +346,8 @@ export function FoodRetailDashboard({
   }
 
   async function saveDraft(): Promise<number | null> {
-    const submittedDraft = draft;
+    const submitted = beginSave();
+    const submittedDraft = submitted.submittedDraft;
     const ownerIssues = validateOwnerIntegrations(submittedDraft.integrations);
     const parsed = foodRetailSiteDraftSchema.safeParse(submittedDraft);
     if (ownerIssues.length > 0 || !parsed.success) {
@@ -359,12 +366,12 @@ export function FoodRetailDashboard({
     setIntegrationIssues([]);
     setNotice(null);
     try {
-      const response = await fetch(`/api/sites/${draft.slug}`, {
+      const response = await fetch(`/api/sites/${submittedDraft.slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...parsed.data,
-          expectedRevision: revision,
+          expectedRevision: submitted.expectedRevision,
         }),
       });
       const result = (await response.json()) as {
@@ -378,13 +385,13 @@ export function FoodRetailDashboard({
       ) {
         throw new Error("Save response did not include a draft revision");
       }
-      const hadNewerEdits = draftRef.current !== submittedDraft;
-      setDraft((current) =>
-        reconcileFoodRetailDraftAfterSave(submittedDraft, parsed.data, current),
-      );
-      if (!hadNewerEdits) setPersistedDraft(parsed.data);
-      setRevision(result.revision);
-      if (hadNewerEdits) {
+      const acknowledged = acknowledgeSave({
+        submittedDraft,
+        persistedDraft: parsed.data,
+        submittedMutationVersion: submitted.submittedMutationVersion,
+        savedRevision: result.revision,
+      });
+      if (acknowledged.hadNewerEdits) {
         setError(
           "New edits were made while saving. Save them before leaving this private preview.",
         );
@@ -471,15 +478,17 @@ export function FoodRetailDashboard({
     draft: unknown;
   }) {
     const accepted = foodRetailSiteDraftSchema.parse(input.draft);
-    setDraft(accepted);
-    setPersistedDraft(accepted);
-    setRevision(input.revision);
+    acknowledgeSnapshot(accepted, input.revision);
     setNotice("Source suggestion saved to the private draft.");
     setError(null);
   }
 
   return (
-    <div className="min-h-screen bg-muted/35 text-foreground">
+    <OwnerDraftDirtyGuard dirty={dirty}>
+    <div
+      className="min-h-screen bg-muted/35 text-foreground"
+      {...ownerDraftNavigationProps(dirty)}
+    >
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-5 py-4">
           <Brand {...brand} />
@@ -535,10 +544,10 @@ export function FoodRetailDashboard({
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={saving || publishing}
+                  disabled={saving || publishing || !dirty}
                   onClick={() => void saveDraft()}
                 >
-                  <Save /> {saving ? "Saving…" : "Save"}
+                  <Save /> {saving ? "Saving…" : dirty ? "Save" : "Saved"}
                 </Button>
                 <Button
                   disabled={saving || publishing}
@@ -575,9 +584,7 @@ export function FoodRetailDashboard({
               siteSlug={draft.slug}
               initial={sourceMonitoring}
               draftRevision={revision}
-              hasUnsavedChanges={
-                JSON.stringify(draft) !== JSON.stringify(persistedDraft)
-              }
+              hasUnsavedChanges={dirty}
               onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
             />
           ) : null}
@@ -1373,5 +1380,6 @@ export function FoodRetailDashboard({
         </div>
       </main>
     </div>
+    </OwnerDraftDirtyGuard>
   );
 }
