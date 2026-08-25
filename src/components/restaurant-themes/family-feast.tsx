@@ -6,6 +6,7 @@ import {
   sourceBrandPalette,
   themeStyle,
   ThemeAnalytics,
+  ThemeBlogNav,
   ThemeBusinessHours,
   ThemeContact,
   ThemeExternalAction,
@@ -26,6 +27,7 @@ export function FamilyFeastTheme({
   dictionary,
   embedded = false,
   analyticsEnabled = false,
+  blogHref,
 }: RestaurantThemeRendererProps) {
   const booking = draft.integrations.find(
     (integration) =>
@@ -69,6 +71,11 @@ export function FamilyFeastTheme({
             availableLocales={availableLocales}
             defaultLocale={draft.defaultLocale}
             label={dictionary.language}
+          />
+          <ThemeBlogNav
+            href={blogHref}
+            enabled={analyticsEnabled}
+            label={dictionary.blogNav}
           />
           {primaryAction ? (
             <ThemeExternalAction

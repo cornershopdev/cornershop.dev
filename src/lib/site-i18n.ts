@@ -43,6 +43,7 @@ const sharedSiteDictionary = {
     bookingRequestPreviewNotice: "This is a preview — requests are not sent.",
     bookingEmbedPreviewNotice: "Booking widget shown on the live site.",
     pickupHeading: "Pickup",
+    blogNav: "Blog",
   },
   fr: {
     bookingRequestName: "Votre nom",
@@ -62,6 +63,7 @@ const sharedSiteDictionary = {
     bookingEmbedPreviewNotice:
       "Widget de réservation affiché sur le site en ligne.",
     pickupHeading: "Retrait",
+    blogNav: "Blog",
   },
 } satisfies Record<string, Record<string, string>>;
 

@@ -15,6 +15,7 @@ import {
   previewMetadata,
 } from "@/lib/preview-metadata";
 import { getSiteLocales } from "@/lib/site-draft";
+import { resolveStorefrontBlogHref } from "@/lib/articles/public-articles";
 import { liveSiteVersionId } from "@/lib/site-surface";
 import {
   findSiteView,
@@ -54,9 +55,12 @@ export default async function ProSitePage({ params }: PageProps) {
   const { slug } = await params;
   if (!isCornershopProClient(slug)) notFound();
   const versionId = liveSiteVersionId(await headers(), slug);
-  const site = versionId
-    ? await getCachedPublishedSiteView(slug, versionId)
-    : await findSiteView(slug);
+  const [site, blogHref] = await Promise.all([
+    versionId
+      ? getCachedPublishedSiteView(slug, versionId)
+      : findSiteView(slug),
+    resolveStorefrontBlogHref({ slug, versionId }),
+  ]);
   if (!site || !isTrustedCornershopProSite(slug, site.draft)) notFound();
   const isLiveSurface = versionId !== null;
   return (
@@ -68,6 +72,7 @@ export default async function ProSitePage({ params }: PageProps) {
       localeBasePath={isLiveSurface ? "/" : proSiteBasePath(slug)}
       availableLocales={getSiteLocales(site.draft)}
       analyticsEnabled={isLiveSurface}
+      blogHref={blogHref}
     />
   );
 }

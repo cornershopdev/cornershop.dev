@@ -1,6 +1,7 @@
 import { ArrowUpRight, MapPin } from "lucide-react";
 import Link from "next/link";
 import { SiteAnalytics } from "@/components/site-analytics";
+import { StorefrontBlogNav } from "@/components/storefront-blog-nav";
 import { localizeIntegrationUrl } from "@/lib/site-i18n";
 import { localeHref } from "@/lib/site-surface";
 import { serializeRestaurantJsonLd } from "@/lib/restaurant-json-ld";
@@ -20,6 +21,7 @@ export type RestaurantThemeRendererProps = {
   dictionary: Record<string, string>;
   embedded?: boolean;
   analyticsEnabled?: boolean;
+  blogHref?: string | null;
 };
 
 export type RestaurantThemeRendererInputProps = Omit<
@@ -204,6 +206,27 @@ export function ThemeExternalAction({
       {integration.label}
       <ArrowUpRight className="size-4 shrink-0" />
     </a>
+  );
+}
+
+export function ThemeBlogNav({
+  href,
+  enabled,
+  label,
+  className,
+}: {
+  href?: string | null;
+  enabled: boolean;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <StorefrontBlogNav
+      href={href}
+      isLiveSurface={enabled}
+      label={label}
+      className={className}
+    />
   );
 }
 

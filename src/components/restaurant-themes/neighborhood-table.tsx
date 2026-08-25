@@ -6,6 +6,7 @@ import {
   sourceBrandPalette,
   themeStyle,
   ThemeAnalytics,
+  ThemeBlogNav,
   ThemeBusinessHours,
   ThemeContact,
   ThemeExternalAction,
@@ -26,6 +27,7 @@ export function NeighborhoodTableTheme({
   dictionary,
   embedded = false,
   analyticsEnabled = false,
+  blogHref,
 }: RestaurantThemeRendererProps) {
   const booking = draft.integrations.find(
     (integration) =>
@@ -63,6 +65,11 @@ export function NeighborhoodTableTheme({
             availableLocales={availableLocales}
             defaultLocale={draft.defaultLocale}
             label={dictionary.language}
+          />
+          <ThemeBlogNav
+            href={blogHref}
+            enabled={analyticsEnabled}
+            label={dictionary.blogNav}
           />
           {booking ? (
             <ThemeExternalAction

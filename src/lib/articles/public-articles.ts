@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { getDb } from "@/lib/db";
 import { previewCacheTagFor } from "@/lib/site-surface";
 
@@ -108,6 +109,39 @@ export async function listPublishedArticlesForSitemap(input: {
         ]
       : [],
   );
+}
+
+export async function hasPublishedArticles(input: {
+  slug: string;
+  versionId: string | null;
+}): Promise<boolean> {
+  if (!input.versionId) return false;
+  const row = await getDb().article.findFirst({
+    where: publishedArticleWhere(input.slug),
+    select: { id: true },
+  });
+  return Boolean(row);
+}
+
+/**
+ * Live renderer Blog href for an attested published version. Missing
+ * attestation, unpublished snapshots, and zero-article sites stay null so
+ * preview chrome cannot grow a Blog entry.
+ */
+export async function resolveStorefrontBlogHref(input: {
+  slug: string;
+  versionId: string | null;
+}): Promise<string | null> {
+  if (!input.versionId) return null;
+  const cached = unstable_cache(
+    () => hasPublishedArticles({ slug: input.slug, versionId: input.versionId }),
+    ["published-articles-exist", input.slug],
+    {
+      revalidate: 30,
+      tags: [articleCacheTagFor(input.slug)],
+    },
+  );
+  return (await cached()) ? "/blog" : null;
 }
 
 export async function getPublishedArticle(input: {
