@@ -23,6 +23,7 @@ import { nicheFontVariables } from "@/components/fonts/niche-font-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  isVerticalClaimEnabled,
   isVerticalPubliclyAccessible,
   listPublicVerticals,
   resolveVerticalBySlug,
@@ -140,6 +141,9 @@ export default async function NichePage({
   const { marketing } = resolveVerticalConfig(id);
   const slug = verticalSlug(id);
   const fontVariables = nicheFontVariables(id);
+  const acquisitionPricing = isVerticalClaimEnabled(id)
+    ? marketing.pricing
+    : undefined;
   // Every route out of this page carries the niche, so a lead is attached to the
   // vertical that produced it before the studio ever opens.
   const createHref = `/create?vertical=${slug}`;
@@ -149,7 +153,7 @@ export default async function NichePage({
       ? [{ href: "#themes", label: marketing.themeGallery.label }]
       : []),
     { href: "#features", label: "What stays yours" },
-    { href: "#pricing", label: "Pricing" },
+    ...(acquisitionPricing ? [{ href: "#pricing", label: "Pricing" }] : []),
   ];
   const formCopy = {
     vertical: slug,
@@ -388,90 +392,92 @@ export default async function NichePage({
           </div>
         </section>
 
-        <section
-          id="pricing"
-          className="mx-auto max-w-7xl px-5 py-24 lg:px-8 lg:py-32"
-        >
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              {marketing.pricing.eyebrow}
-            </p>
-            <h2 className="font-display mt-4 text-6xl leading-[0.92] tracking-[-0.045em]">
-              {marketing.pricing.headline}
-            </h2>
-            <p className="mt-5 text-muted-foreground">
-              {marketing.pricing.copy}
-            </p>
-          </div>
-          <div
-            className={`mx-auto mt-12 grid gap-5 ${
-              marketing.pricing.plans.length > 1
-                ? "max-w-4xl md:grid-cols-2"
-                : "max-w-xl"
-            }`}
+        {acquisitionPricing ? (
+          <section
+            id="pricing"
+            className="mx-auto max-w-7xl px-5 py-24 lg:px-8 lg:py-32"
           >
-            {marketing.pricing.plans.map((plan) => (
-              <div
-                key={plan.name}
-                className={
-                  plan.featured
-                    ? "rounded-3xl border border-primary/40 bg-primary p-7 text-primary-foreground shadow-xl"
-                    : "rounded-3xl border bg-card p-7"
-                }
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{plan.name}</p>
-                  {plan.badge ? (
-                    <Badge className="bg-white/15 text-white">
-                      {plan.badge}
-                    </Badge>
-                  ) : null}
-                </div>
-                <p className="mt-5 font-display text-6xl tracking-[-0.05em]">
-                  {plan.price}
-                  <span
-                    className={`font-sans text-sm tracking-normal ${
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                {acquisitionPricing.eyebrow}
+              </p>
+              <h2 className="font-display mt-4 text-6xl leading-[0.92] tracking-[-0.045em]">
+                {acquisitionPricing.headline}
+              </h2>
+              <p className="mt-5 text-muted-foreground">
+                {acquisitionPricing.copy}
+              </p>
+            </div>
+            <div
+              className={`mx-auto mt-12 grid gap-5 ${
+                acquisitionPricing.plans.length > 1
+                  ? "max-w-4xl md:grid-cols-2"
+                  : "max-w-xl"
+              }`}
+            >
+              {acquisitionPricing.plans.map((plan) => (
+                <div
+                  key={plan.name}
+                  className={
+                    plan.featured
+                      ? "rounded-3xl border border-primary/40 bg-primary p-7 text-primary-foreground shadow-xl"
+                      : "rounded-3xl border bg-card p-7"
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">{plan.name}</p>
+                    {plan.badge ? (
+                      <Badge className="bg-white/15 text-white">
+                        {plan.badge}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-5 font-display text-6xl tracking-[-0.05em]">
+                    {plan.price}
+                    <span
+                      className={`font-sans text-sm tracking-normal ${
+                        plan.featured ? "text-white/70" : "text-muted-foreground"
+                      }`}
+                    >
+                      {plan.cadence}
+                    </span>
+                  </p>
+                  <p
+                    className={`mt-3 text-sm ${
                       plan.featured ? "text-white/70" : "text-muted-foreground"
                     }`}
                   >
-                    {plan.cadence}
-                  </span>
-                </p>
-                <p
-                  className={`mt-3 text-sm ${
-                    plan.featured ? "text-white/70" : "text-muted-foreground"
-                  }`}
-                >
-                  {plan.copy}
-                </p>
-                <ul className="mt-7 space-y-3 text-sm">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2">
-                      <Check
-                        className={`size-4 ${
-                          plan.featured ? "" : "text-primary"
-                        }`}
-                      />{" "}
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  render={<Link href={createHref} />}
-                  nativeButton={false}
-                  variant={plan.featured ? "secondary" : "outline"}
-                  className={`mt-8 w-full ${
-                    plan.featured
-                      ? "bg-white text-primary hover:bg-white/90"
-                      : ""
-                  }`}
-                >
-                  Build a free preview
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
+                    {plan.copy}
+                  </p>
+                  <ul className="mt-7 space-y-3 text-sm">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2">
+                        <Check
+                          className={`size-4 ${
+                            plan.featured ? "" : "text-primary"
+                          }`}
+                        />{" "}
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    render={<Link href={createHref} />}
+                    nativeButton={false}
+                    variant={plan.featured ? "secondary" : "outline"}
+                    className={`mt-8 w-full ${
+                      plan.featured
+                        ? "bg-white text-primary hover:bg-white/90"
+                        : ""
+                    }`}
+                  >
+                    Build a free preview
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="paper-grid border-t">
           <div className="mx-auto flex max-w-5xl flex-col items-center px-5 py-24 text-center lg:py-32">

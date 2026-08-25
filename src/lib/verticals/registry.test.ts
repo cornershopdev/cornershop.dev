@@ -12,7 +12,9 @@ import { localServiceConfig } from "@/lib/verticals/local-service/config";
 import {
   isVerticalClaimEnabled,
   isVerticalCatalogItemVisible,
+  isVerticalOwnerReviewSupported,
   isVerticalPublicationEnabled,
+  isVerticalPublicationMutationEnabled,
   isVerticalPubliclyAccessible,
   isVerticalPubliclyLaunched,
   listMarketingVerticals,
@@ -351,13 +353,44 @@ describe("niche routing", () => {
     expect(isVerticalClaimEnabled(Vertical.BEAUTY)).toBe(false);
     expect(isVerticalClaimEnabled(Vertical.LOCAL_SERVICE)).toBe(true);
     expect(isVerticalClaimEnabled(Vertical.FOOD_RETAIL)).toBe(true);
+    for (const id of listVerticalIds()) {
+      if (isVerticalClaimEnabled(id)) {
+        expect(resolveVerticalConfig(id).marketing.pricing).toBeDefined();
+      }
+    }
   });
 
-  it("enables reviewed publication for every registered SMB vertical", () => {
+  it("keeps existing published snapshots renderable independently of owner mutation", () => {
     expect(isVerticalPublicationEnabled(Vertical.RESTAURANT)).toBe(true);
     expect(isVerticalPublicationEnabled(Vertical.BEAUTY)).toBe(true);
     expect(isVerticalPublicationEnabled(Vertical.LOCAL_SERVICE)).toBe(true);
     expect(isVerticalPublicationEnabled(Vertical.FOOD_RETAIL)).toBe(true);
+  });
+
+  it("does not enable owner publication mutation without a supported owner-review workflow", () => {
+    expect(isVerticalOwnerReviewSupported(Vertical.RESTAURANT)).toBe(true);
+    expect(isVerticalOwnerReviewSupported(Vertical.FOOD_RETAIL)).toBe(true);
+    expect(isVerticalOwnerReviewSupported(Vertical.LOCAL_SERVICE)).toBe(true);
+    expect(isVerticalOwnerReviewSupported(Vertical.BEAUTY)).toBe(false);
+
+    expect(isVerticalPublicationMutationEnabled(Vertical.RESTAURANT)).toBe(true);
+    expect(isVerticalPublicationMutationEnabled(Vertical.FOOD_RETAIL)).toBe(
+      true,
+    );
+    expect(isVerticalPublicationMutationEnabled(Vertical.LOCAL_SERVICE)).toBe(
+      true,
+    );
+    expect(isVerticalPublicationMutationEnabled(Vertical.BEAUTY)).toBe(false);
+    expect(beautyConfig.publicationMutationEnabled).toBe(false);
+
+    for (const id of listVerticalIds()) {
+      if (resolveVerticalConfig(id).publicationMutationEnabled) {
+        expect(isVerticalOwnerReviewSupported(id)).toBe(true);
+      }
+      if (!isVerticalOwnerReviewSupported(id)) {
+        expect(isVerticalPublicationMutationEnabled(id)).toBe(false);
+      }
+    }
   });
 
   it("keeps local service gated until public access, domain, routing and sender are real", () => {

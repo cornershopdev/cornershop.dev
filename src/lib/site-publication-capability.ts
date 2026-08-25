@@ -1,5 +1,5 @@
 import type { VerticalId } from "@/lib/verticals/types";
-import { isVerticalPublicationEnabled } from "@/lib/verticals/registry";
+import { isVerticalPublicationMutationEnabled } from "@/lib/verticals/registry";
 
 export const PUBLICATION_UNAVAILABLE_MESSAGE =
   "Publishing is not available for this vertical";
@@ -13,7 +13,7 @@ export class SitePublicationCapabilityError extends Error {
 
 /** Shared fail-closed assertion used by publish and rollback services. */
 export function assertVerticalPublicationEnabled(vertical: VerticalId): void {
-  if (!isVerticalPublicationEnabled(vertical)) {
+  if (!isVerticalPublicationMutationEnabled(vertical)) {
     throw new SitePublicationCapabilityError();
   }
 }
@@ -25,7 +25,7 @@ export function assertVerticalPublicationEnabled(vertical: VerticalId): void {
 export function publicationCapabilityFailureResponse(
   vertical: VerticalId,
 ): Response | null {
-  if (isVerticalPublicationEnabled(vertical)) return null;
+  if (isVerticalPublicationMutationEnabled(vertical)) return null;
   return Response.json(
     { error: PUBLICATION_UNAVAILABLE_MESSAGE },
     { status: 409 },

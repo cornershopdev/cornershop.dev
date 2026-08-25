@@ -38,7 +38,7 @@ describe("sign-in surface", () => {
       brand: beautyMarketing.brand,
       inverse: false,
       copy: {
-        title: "Open your salon.",
+        title: "Open your salon preview.",
         emailPlaceholder: "owner@salon.com",
         createHref: "/create?vertical=beauty",
       },

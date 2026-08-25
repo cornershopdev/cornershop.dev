@@ -88,13 +88,13 @@ const verticalCopy = {
     placeholder: "salon.com or salon name",
     opening: "Opening the salon",
     idlePrompt:
-      "Paste a website or salon name. The preview stays private until it is claimed and paid.",
+      "Paste a website or salon name. The preview stays private and is not chargeable.",
     recovering:
       "The shape is already here. We are recovering the real service list, imagery and existing links now.",
     emptyStatePrompt:
       "Start with a website or salon name. No account is needed to see the result.",
     claimHint:
-      "Review the services and existing links, then claim the founding plan to keep this site current.",
+      "Review the recovered services and booking links in this private preview.",
     catalogStage: "Recover services and prices",
     // No ordering or delivery: a salon has nothing to deliver, which is the same
     // reason `beauty/providers.ts` ships no hints for those integration types.
@@ -578,7 +578,7 @@ export function ImportStudio({
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 {isVerticalClaimEnabled(site.vertical)
                   ? copy.claimHint
-                  : "Claiming and checkout remain unavailable until this vertical has reviewed launch configuration."}
+                  : "This vertical is a non-chargeable private preview. Owner tools are not available yet."}
               </p>
               {externalPreviewAvailable ? (
                 <div className="mt-4 grid gap-2">
