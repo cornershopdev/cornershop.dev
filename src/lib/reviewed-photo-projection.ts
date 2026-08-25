@@ -1,4 +1,5 @@
 import type { ImageProvenance, PhotoUsage } from "@/generated/prisma/enums";
+import { isPlaceholderIntegrationHostname } from "@/lib/owner-integration";
 
 export type LibraryPhotoProjection = {
   originalUrl: string;
@@ -66,6 +67,22 @@ export function libraryPhotoMatchesUrl(
   return Boolean(url) && (photo.originalUrl === url || photo.enhancedUrl === url);
 }
 
+/**
+ * Owner-typed placeholder hosts (example.com / .net / .org). Historical
+ * imported photography — Unsplash fixtures, first-party HTTPS, local paths —
+ * must remain readable without living in the photo library yet.
+ */
+export function isInventedOwnerImageUrl(
+  value: string | null | undefined,
+): boolean {
+  if (!value || isLocalImportedImageUrl(value)) return false;
+  try {
+    return isPlaceholderIntegrationHostname(new URL(value).hostname);
+  } catch {
+    return true;
+  }
+}
+
 export function isArbitraryRemoteImageUrl(
   value: string | null | undefined,
   library: readonly Pick<
@@ -74,7 +91,10 @@ export function isArbitraryRemoteImageUrl(
   >[],
 ): boolean {
   if (!value || isLocalImportedImageUrl(value)) return false;
-  return !library.some((photo) => libraryPhotoMatchesUrl(photo, value));
+  if (library.some((photo) => libraryPhotoMatchesUrl(photo, value))) {
+    return false;
+  }
+  return isInventedOwnerImageUrl(value);
 }
 
 export function activeReviewedPhotoUrl(
@@ -113,34 +133,50 @@ export function approvedSelectedPhotos(
   );
 }
 
+function keepImportedImageSlot(submitted: ClientImageSlot): ClientImageSlot {
+  const url = submitted.url;
+  if (!url) return emptySlot;
+  return {
+    url,
+    originalUrl:
+      submitted.originalUrl &&
+      (isLocalImportedImageUrl(submitted.originalUrl) ||
+        !isInventedOwnerImageUrl(submitted.originalUrl))
+        ? submitted.originalUrl
+        : url,
+    provenance: submitted.provenance,
+  };
+}
+
 /**
- * Library selections always win. Caller-authored remote URLs and provenance
- * cannot enter a slot unless they match an approved tenant photo. Local
- * imported paths stay readable so they can be adopted without rewriting.
+ * Library selections win over empty slots and invented owner-typed URLs.
+ * Existing valid imported images stay readable so they can be adopted
+ * without rewriting stored originals.
  */
 export function bindImageSlot(
   submitted: ClientImageSlot,
   library: readonly LibraryPhotoProjection[],
   selected: LibraryPhotoProjection | null = null,
 ): ClientImageSlot {
-  if (selected?.reviewStatus === "APPROVED") {
-    return slotFromLibraryPhoto(selected);
-  }
   const url = submitted.url;
+  if (selected?.reviewStatus === "APPROVED") {
+    if (
+      !url ||
+      isInventedOwnerImageUrl(url) ||
+      libraryPhotoMatchesUrl(selected, url)
+    ) {
+      return slotFromLibraryPhoto(selected);
+    }
+    return keepImportedImageSlot(submitted);
+  }
   if (!url) return emptySlot;
   const adopted = library.find(
     (photo) =>
       photo.reviewStatus === "APPROVED" && libraryPhotoMatchesUrl(photo, url),
   );
   if (adopted) return slotFromLibraryPhoto(adopted);
-  if (isLocalImportedImageUrl(url)) {
-    return {
-      url,
-      originalUrl: isLocalImportedImageUrl(submitted.originalUrl)
-        ? submitted.originalUrl
-        : url,
-      provenance: submitted.provenance,
-    };
+  if (isLocalImportedImageUrl(url) || !isInventedOwnerImageUrl(url)) {
+    return keepImportedImageSlot(submitted);
   }
   return emptySlot;
 }
@@ -266,13 +302,15 @@ export function catalogItemHasUnselectedRemoteImage(input: {
   const url = input.imageUrl;
   if (!url || isLocalImportedImageUrl(url)) return false;
   const selected = input.selected;
-  if (!selected || selected.reviewStatus !== "APPROVED") return true;
-  const slot = slotFromLibraryPhoto(selected);
-  return (
-    input.imageUrl !== slot.url ||
-    (input.originalImageUrl ?? null) !== slot.originalUrl ||
-    (input.imageProvenance ?? null) !== slot.provenance
-  );
+  if (selected?.reviewStatus === "APPROVED") {
+    const slot = slotFromLibraryPhoto(selected);
+    return (
+      input.imageUrl !== slot.url ||
+      (input.originalImageUrl ?? null) !== slot.originalUrl ||
+      (input.imageProvenance ?? null) !== slot.provenance
+    );
+  }
+  return isInventedOwnerImageUrl(url);
 }
 
 export function projectHasUnselectedRemoteImage(input: {

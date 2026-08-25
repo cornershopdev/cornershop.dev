@@ -6,6 +6,7 @@ import {
   catalogItemHasUnselectedRemoteImage,
   gallerySlotsFromLibrary,
   isArbitraryRemoteImageUrl,
+  isInventedOwnerImageUrl,
   projectHasUnselectedRemoteImage,
   slotFromLibraryPhoto,
 } from "@/lib/reviewed-photo-projection";
@@ -31,6 +32,8 @@ const enhancedHero = "https://assets.example/enhanced-hero.webp";
 const productOriginal = "https://assets.example/original-loaf.jpg";
 const projectOriginal = "https://assets.example/original-rewire.jpg";
 const arbitrary = "https://example.com/invented-product.jpg";
+const importedFixture =
+  "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=1800&q=88";
 
 describe("reviewed photo slot mapping", () => {
   it("rejects arbitrary remote URLs that are not in the tenant library", () => {
@@ -44,6 +47,10 @@ describe("reviewed photo slot mapping", () => {
       ]),
     ).toBe(false);
     expect(isArbitraryRemoteImageUrl("/approved/loaf.webp", [])).toBe(false);
+    expect(isArbitraryRemoteImageUrl(importedFixture, [])).toBe(false);
+    expect(isInventedOwnerImageUrl(arbitrary)).toBe(true);
+    expect(isInventedOwnerImageUrl(importedFixture)).toBe(false);
+    expect(isInventedOwnerImageUrl(originalHero)).toBe(false);
   });
 
   it("maps approved originals and derivatives onto hero, catalog, gallery, and project slots", () => {
@@ -173,6 +180,48 @@ describe("reviewed photo slot mapping", () => {
     });
   });
 
+  it("keeps restaurant fixture photography readable without rewriting it onto a selected library photo", () => {
+    expect(
+      bindImageSlot(
+        {
+          url: importedFixture,
+          originalUrl: importedFixture,
+          provenance: "owner",
+        },
+        [],
+      ),
+    ).toEqual({
+      url: importedFixture,
+      originalUrl: importedFixture,
+      provenance: "owner",
+    });
+    expect(
+      bindImageSlot(
+        {
+          url: importedFixture,
+          originalUrl: importedFixture,
+          provenance: "owner",
+        },
+        [
+          photo({
+            originalUrl: originalHero,
+            selectedUsage: "HERO",
+            provenance: "OWNER",
+          }),
+        ],
+        photo({
+          originalUrl: originalHero,
+          selectedUsage: "HERO",
+          provenance: "OWNER",
+        }),
+      ),
+    ).toEqual({
+      url: importedFixture,
+      originalUrl: importedFixture,
+      provenance: "owner",
+    });
+  });
+
   it("does not persist caller-authored provenance for a remote URL outside the library", () => {
     expect(
       bindImageSlot(
@@ -215,6 +264,14 @@ describe("reviewed photo slot mapping", () => {
     expect(
       catalogItemHasUnselectedRemoteImage({
         imageUrl: "/approved/loaf.webp",
+        selected: null,
+      }),
+    ).toBe(false);
+    expect(
+      catalogItemHasUnselectedRemoteImage({
+        imageUrl: importedFixture,
+        originalImageUrl: importedFixture,
+        imageProvenance: "owner",
         selected: null,
       }),
     ).toBe(false);
