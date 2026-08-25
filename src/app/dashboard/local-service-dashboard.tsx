@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ExternalLink,
@@ -18,6 +18,7 @@ import {
   OwnerPaidOperationsSection,
   useOwnerPaidOperations,
 } from "@/components/owner-paid-operations";
+import { PhotoLibraryPanel } from "@/components/photo-library-panel";
 import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -150,6 +151,95 @@ export function LocalServiceDashboard({
   const [integrationIssues, setIntegrationIssues] = useState<
     OwnerIntegrationIssue[]
   >([]);
+
+  const handlePhotoRevision = useCallback((nextRevision: number) => {
+    savedRevisionRef.current = nextRevision;
+    setSavedRevision(nextRevision);
+  }, []);
+  const handlePhotoHeroChange = useCallback(
+    (
+      hero: {
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      } | null,
+    ) => {
+      const next = {
+        ...draftRef.current,
+        heroImageUrl: hero?.url ?? null,
+        heroOriginalImageUrl: hero?.originalUrl ?? null,
+        heroImageProvenance: hero?.provenance ?? null,
+      };
+      draftRef.current = next;
+      setDraftState(next);
+    },
+    [],
+  );
+  const handlePhotoGalleryChange = useCallback(
+    (
+      galleryImages: Array<{
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      }>,
+    ) => {
+      const current = draftRef.current;
+      const next = {
+        ...current,
+        galleryImages,
+        attributes: {
+          ...current.attributes,
+          projects: current.attributes.projects.map((project, index) => {
+            const selected = galleryImages[index];
+            if (!selected) return project;
+            return {
+              ...project,
+              imageUrl: selected.url,
+              originalImageUrl: selected.originalUrl,
+              imageProvenance: selected.provenance,
+            };
+          }),
+        },
+      };
+      draftRef.current = next;
+      setDraftState(next);
+    },
+    [],
+  );
+  const handlePhotoCatalogChange = useCallback(
+    (change: {
+      sectionIndex: number;
+      itemIndex: number;
+      url: string | null;
+      originalUrl: string | null;
+      provenance: "official" | "owner" | "permissioned-ugc" | null;
+    }) => {
+      const current = draftRef.current;
+      const next = {
+        ...current,
+        catalogSections: current.catalogSections.map((section, sectionIndex) =>
+          sectionIndex !== change.sectionIndex
+            ? section
+            : {
+                ...section,
+                items: section.items.map((item, itemIndex) =>
+                  itemIndex !== change.itemIndex
+                    ? item
+                    : {
+                        ...item,
+                        imageUrl: change.url,
+                        originalImageUrl: change.originalUrl,
+                        imageProvenance: change.provenance,
+                      },
+                ),
+              },
+        ),
+      };
+      draftRef.current = next;
+      setDraftState(next);
+    },
+    [],
+  );
 
   function change(mutator: (next: LocalServiceSiteDraft) => void) {
     const next = structuredClone(draftRef.current);
@@ -412,6 +502,17 @@ export function LocalServiceDashboard({
               draftRevision={savedRevision}
               hasUnsavedChanges={dirty}
               onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
+            />
+          </div>
+        ) : null}
+        {isOwnerOperationEnabled(ownerOperations.photoLibrary) ? (
+          <div className="mt-8">
+            <PhotoLibraryPanel
+              siteSlug={draft.slug}
+              onRevision={handlePhotoRevision}
+              onHeroChange={handlePhotoHeroChange}
+              onGalleryChange={handlePhotoGalleryChange}
+              onCatalogChange={handlePhotoCatalogChange}
             />
           </div>
         ) : null}
@@ -919,17 +1020,20 @@ export function LocalServiceDashboard({
                       })
                     }
                   />
-                  <Input
-                    aria-label="Project image URL"
-                    value={project.imageUrl ?? ""}
-                    placeholder="https://…"
-                    onChange={(event) =>
-                      change((next) => {
-                        next.attributes.projects[index].imageUrl =
-                          event.target.value || null;
-                      })
-                    }
-                  />
+                  {project.imageUrl ? (
+                    <p className="text-xs text-muted-foreground">
+                      Project image is selected from the reviewed photo library
+                      {project.imageProvenance
+                        ? ` · ${project.imageProvenance.replaceAll("-", " ")}`
+                        : ""}
+                      .
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Choose an approved gallery photo for this project in the
+                      photo library.
+                    </p>
+                  )}
                   <Button
                     variant="destructive"
                     size="sm"

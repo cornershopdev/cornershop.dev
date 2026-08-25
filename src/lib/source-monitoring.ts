@@ -29,8 +29,10 @@ import {
   monitoringIdempotencyKey,
   nextMonitoringTime,
 } from "@/lib/source-monitoring-plan";
+import { catalogPhotoReplacementPosition } from "@/lib/catalog-photo-reconciliation";
 import {
   DraftRevisionConflictError,
+  rebindSelectedCatalogPhotos,
   type PersistableSiteDraft,
 } from "@/lib/site-persistence";
 import { projectSiteDraft, siteDraftRelations } from "@/lib/sites";
@@ -700,6 +702,37 @@ async function applySuggestionValue(
   const config = resolveVerticalConfig(vertical);
   const { catalogSections: sections, translations } =
     menuSuggestionSchema.parse(value);
+  const catalogPhotoSelections = await transaction.photoAsset.findMany({
+    where: {
+      siteId,
+      selectedUsage: "CATALOG",
+      selectedCatalogItemId: { not: null },
+    },
+    select: {
+      id: true,
+      originalUrl: true,
+      enhancedUrl: true,
+      enhancedReviewStatus: true,
+      activeVariant: true,
+      provenance: true,
+      selectedCatalogItem: {
+        select: {
+          name: true,
+          section: { select: { name: true } },
+        },
+      },
+    },
+  });
+  const catalogPhotoTargets = catalogPhotoSelections.map((selection) => ({
+    selection,
+    position: selection.selectedCatalogItem
+      ? catalogPhotoReplacementPosition({
+          previousSectionName: selection.selectedCatalogItem.section.name,
+          previousItemName: selection.selectedCatalogItem.name,
+          replacementCatalog: sections,
+        })
+      : null,
+  }));
   const updated = await transaction.site.update({
     where: { id: siteId },
     data: {
@@ -735,6 +768,7 @@ async function applySuggestionValue(
       },
     });
   }
+  await rebindSelectedCatalogPhotos(transaction, siteId, catalogPhotoTargets);
   return updated.draftRevision;
 }
 

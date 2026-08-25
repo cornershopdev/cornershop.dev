@@ -129,6 +129,14 @@ describe("dashboard tab and settings surface", () => {
     expect(localServiceDashboard).toContain(
       "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
     );
+    expect(foodRetailDashboard).toContain("<PhotoLibraryPanel");
+    expect(localServiceDashboard).toContain("<PhotoLibraryPanel");
+    expect(foodRetailDashboard).toContain("onCatalogChange={handlePhotoCatalogChange}");
+    expect(localServiceDashboard).toContain(
+      "onCatalogChange={handlePhotoCatalogChange}",
+    );
+    expect(foodRetailDashboard).not.toContain("Approved product image URL");
+    expect(localServiceDashboard).not.toContain("Project image URL");
     expect(sourceMonitoringPanel).toContain(
       "onAcceptedDraft({ revision: acceptedRevision, draft: result.draft })",
     );

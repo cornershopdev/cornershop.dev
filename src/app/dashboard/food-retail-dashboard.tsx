@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -20,6 +20,7 @@ import {
   OwnerPaidOperationsSection,
   useOwnerPaidOperations,
 } from "@/components/owner-paid-operations";
+import { PhotoLibraryPanel } from "@/components/photo-library-panel";
 import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,70 @@ export function FoodRetailDashboard({
   const [integrationIssues, setIntegrationIssues] = useState<
     OwnerIntegrationIssue[]
   >([]);
+
+  const handlePhotoRevision = useCallback((nextRevision: number) => {
+    setRevision(nextRevision);
+  }, []);
+  const handlePhotoHeroChange = useCallback(
+    (
+      hero: {
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      } | null,
+    ) => {
+      setDraft((current) => ({
+        ...current,
+        heroImageUrl: hero?.url ?? null,
+        heroOriginalImageUrl: hero?.originalUrl ?? null,
+        heroImageProvenance: hero?.provenance ?? null,
+      }));
+    },
+    [],
+  );
+  const handlePhotoGalleryChange = useCallback(
+    (
+      galleryImages: Array<{
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      }>,
+    ) => {
+      setDraft((current) => ({ ...current, galleryImages }));
+    },
+    [],
+  );
+  const handlePhotoCatalogChange = useCallback(
+    (change: {
+      sectionIndex: number;
+      itemIndex: number;
+      url: string | null;
+      originalUrl: string | null;
+      provenance: "official" | "owner" | "permissioned-ugc" | null;
+    }) => {
+      setDraft((current) => ({
+        ...current,
+        catalogSections: current.catalogSections.map((section, sectionIndex) =>
+          sectionIndex !== change.sectionIndex
+            ? section
+            : {
+                ...section,
+                items: section.items.map((item, itemIndex) =>
+                  itemIndex !== change.itemIndex
+                    ? item
+                    : {
+                        ...item,
+                        imageUrl: change.url,
+                        originalImageUrl: change.originalUrl,
+                        imageProvenance: change.provenance,
+                      },
+                ),
+              },
+        ),
+      }));
+    },
+    [],
+  );
 
   function updateSection(
     sectionIndex: number,
@@ -514,6 +579,15 @@ export function FoodRetailDashboard({
                 JSON.stringify(draft) !== JSON.stringify(persistedDraft)
               }
               onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
+            />
+          ) : null}
+          {isOwnerOperationEnabled(ownerOperations.photoLibrary) ? (
+            <PhotoLibraryPanel
+              siteSlug={draft.slug}
+              onRevision={handlePhotoRevision}
+              onHeroChange={handlePhotoHeroChange}
+              onGalleryChange={handlePhotoGalleryChange}
+              onCatalogChange={handlePhotoCatalogChange}
             />
           ) : null}
 
@@ -924,39 +998,21 @@ export function FoodRetailDashboard({
                         }
                       />
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
-                      <Input
-                        aria-label={`Product ${itemIndex + 1} image`}
-                        type="url"
-                        placeholder="Approved product image URL"
-                        value={item.imageUrl ?? ""}
-                        onChange={(event) =>
-                          updateItem(sectionIndex, itemIndex, (next) => {
-                            next.imageUrl = event.target.value || null;
-                            if (!next.imageUrl) next.imageProvenance = null;
-                          })
-                        }
-                      />
-                      <select
-                        aria-label={`Product ${itemIndex + 1} image provenance`}
-                        className="h-9 rounded-lg border bg-background px-2 text-sm"
-                        value={item.imageProvenance ?? ""}
-                        onChange={(event) =>
-                          updateItem(sectionIndex, itemIndex, (next) => {
-                            next.imageProvenance = (event.target.value ||
-                              null) as
-                              "official" | "owner" | "permissioned-ugc" | null;
-                          })
-                        }
-                      >
-                        <option value="">Choose image source</option>
-                        <option value="official">Official source</option>
-                        <option value="owner">Owner supplied</option>
-                        <option value="permissioned-ugc">
-                          Permissioned UGC
-                        </option>
-                      </select>
-                    </div>
+                    {item.imageUrl ? (
+                      <p className="text-xs text-muted-foreground">
+                        Product image is selected from the reviewed photo
+                        library
+                        {item.imageProvenance
+                          ? ` · ${item.imageProvenance.replaceAll("-", " ")}`
+                          : ""}
+                        .
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Choose an approved photo for this product in the photo
+                        library.
+                      </p>
+                    )}
                   </div>
                 ))}
                 <Button
