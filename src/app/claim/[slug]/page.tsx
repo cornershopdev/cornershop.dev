@@ -5,11 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { ClaimPanel } from "@/app/claim/[slug]/claim-panel";
 import { Button } from "@/components/ui/button";
+import { claimPageState } from "@/lib/claim-launch-offer";
 import { findSiteView } from "@/lib/sites";
-import {
-  isVerticalClaimEnabled,
-  resolveVerticalConfig,
-} from "@/lib/verticals/registry";
 
 type ClaimPageProps = {
   params: Promise<{ slug: string }>;
@@ -26,11 +23,10 @@ export async function generateMetadata({
   params,
 }: ClaimPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const site = await findSiteView(slug);
-  if (!site || !isVerticalClaimEnabled(site.vertical)) notFound();
-  const brand = resolveVerticalConfig(site.vertical).marketing.brand;
+  const state = claimPageState(await findSiteView(slug));
+  if (state.kind === "not_found") notFound();
   return {
-    title: { absolute: `Claim your ${brand.name} site` },
+    title: { absolute: `Claim your ${state.brand.name} site` },
     robots: { index: false, follow: false },
   };
 }
@@ -41,12 +37,8 @@ export default async function ClaimPage({
 }: ClaimPageProps) {
   const { slug } = await params;
   const query = await searchParams;
-  const site = await findSiteView(slug);
-  if (!site || !isVerticalClaimEnabled(site.vertical)) notFound();
-
-  // The site itself knows which niche produced it, which is a stronger signal
-  // than the Host header: an owner can reach their claim link from anywhere.
-  const brand = resolveVerticalConfig(site.vertical).marketing.brand;
+  const state = claimPageState(await findSiteView(slug));
+  if (state.kind === "not_found") notFound();
 
   return (
     <main className="min-h-screen">
@@ -54,12 +46,13 @@ export default async function ClaimPage({
         <Button render={<Link href="/create" />} variant="ghost" size="icon-sm">
           <ArrowLeft />
         </Button>
-        <Brand {...brand} />
+        <Brand {...state.brand} />
       </header>
       <ClaimPanel
         slug={slug}
-        vertical={site.vertical}
-        fallbackDraft={site.draft}
+        vertical={state.vertical}
+        fallbackDraft={state.draft}
+        offer={state.offer}
         checkoutReturn={
           query.checkout === "processing" && query.session_id && query.claim_id
             ? {

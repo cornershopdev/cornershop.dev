@@ -28,6 +28,7 @@ import { limitClaimCheckout } from "@/lib/rate-limit";
 import { isSameOriginMutation } from "@/lib/request-origin";
 import { getStripe } from "@/lib/stripe";
 import { secureCookieRequired } from "@/lib/first-customer-test-mode";
+import { resolveClaimLaunchOfferForVertical } from "@/lib/claim-launch-offer";
 import { isVerticalClaimEnabled } from "@/lib/verticals/registry";
 
 const requestSchema = z.object({
@@ -83,6 +84,13 @@ export async function POST(request: Request) {
         409,
         "This site already has an owner or is not available to claim.",
         invitation.id,
+      );
+    }
+    const offer = resolveClaimLaunchOfferForVertical(invitation.vertical);
+    if (!offer || offer.planId !== plan) {
+      return Response.json(
+        { error: "Claim checkout is temporarily unavailable." },
+        { status: 503 },
       );
     }
     const stripe = getStripe();

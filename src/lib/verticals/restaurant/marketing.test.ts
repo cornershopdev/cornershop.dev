@@ -69,9 +69,13 @@ describe("Restofront founding offer", () => {
   });
 
   it("checks out the founding plan against the single STRIPE_PRICE_ID", async () => {
-    const [panel, checkoutRoute] = await Promise.all([
+    const [panel, mapping, checkoutRoute] = await Promise.all([
       readFile(
         new URL("../../../app/claim/[slug]/claim-panel.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../claim-launch-offer.ts", import.meta.url),
         "utf8",
       ),
       readFile(
@@ -79,11 +83,14 @@ describe("Restofront founding offer", () => {
         "utf8",
       ),
     ]);
-    expect(panel).toContain('CLAIM_CHECKOUT_PLAN_ID = "founding"');
-    expect(panel).toContain("restaurantMarketing.pricing.plans[0]");
+    expect(mapping).toContain("CLAIM_CHECKOUT_PLAN_ID = FOUNDING_PLAN_ID");
+    expect(mapping).toContain("foundingOfferDisplay");
+    expect(panel).toContain("plan: offer.planId");
+    expect(panel).not.toContain("restaurantMarketing");
     expect(panel).not.toContain("price: 25");
     expect(panel).not.toContain("price: 50");
     expect(panel).not.toContain("$25");
     expect(checkoutRoute).toContain("adaptive_pricing: { enabled: true }");
+    expect(checkoutRoute).toContain("resolveClaimLaunchOfferForVertical");
   });
 });
