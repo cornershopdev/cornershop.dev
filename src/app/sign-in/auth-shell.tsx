@@ -29,7 +29,14 @@ export function AuthShell({
         )}
       >
         <Button
-          render={<Link href={backHref} prefetch={false} />}
+          render={
+            <Link
+              href={backHref}
+              prefetch={false}
+              aria-label={`Back to ${surface.brand.name}`}
+            />
+          }
+          nativeButton={false}
           variant="ghost"
           size="icon-sm"
           className={

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,6 +19,7 @@ import { Brand } from "@/components/brand";
 import { InstantSitePreview } from "@/components/instant-restaurant-preview";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import type { BrandContext } from "@/lib/brand-context";
@@ -47,6 +48,7 @@ type Stage = {
 type VerticalCopy = {
   label: string;
   eyebrow: string;
+  sourceLabel: string;
   placeholder: string;
   opening: string;
   idlePrompt: string;
@@ -63,6 +65,7 @@ const verticalCopy = {
   [Vertical.RESTAURANT]: {
     label: "Restaurant",
     eyebrow: "New restaurant",
+    sourceLabel: "Restaurant website or name",
     placeholder: "restaurant.com or restaurant name",
     opening: "Opening the restaurant",
     idlePrompt:
@@ -85,6 +88,7 @@ const verticalCopy = {
   [Vertical.BEAUTY]: {
     label: "Salon & barber",
     eyebrow: "New salon",
+    sourceLabel: "Salon website or name",
     placeholder: "salon.com or salon name",
     opening: "Opening the salon",
     idlePrompt:
@@ -109,6 +113,7 @@ const verticalCopy = {
   [Vertical.LOCAL_SERVICE]: {
     label: "Local trade",
     eyebrow: "New local trade",
+    sourceLabel: "Trade website or business name",
     placeholder: "trade website or business name",
     opening: "Opening the trade business",
     idlePrompt:
@@ -131,6 +136,7 @@ const verticalCopy = {
   [Vertical.FOOD_RETAIL]: {
     label: "Local food shop",
     eyebrow: "New food shop",
+    sourceLabel: "Shop website or name",
     placeholder: "bakery.com or shop name",
     opening: "Opening the shop",
     idlePrompt:
@@ -445,6 +451,7 @@ export function ImportStudio({
 
           <form
             className="mt-7 space-y-3"
+            aria-busy={loading}
             onSubmit={(event) => {
               event.preventDefault();
               void runImport();
@@ -469,24 +476,30 @@ export function ImportStudio({
                 </Button>
               ))}
             </div>
-            <div className="relative">
-              <Globe2 className="absolute left-3 top-3 size-4 text-muted-foreground" />
-              <Input
+            <Field
+              label={copy.sourceLabel}
+              controlId="import-source"
+            >
+              <ImportSourceControl
                 value={source}
                 onChange={(event) => setSource(event.target.value)}
                 placeholder={copy.placeholder}
-                className="h-10 pl-9"
                 disabled={loading}
+                autoComplete="url"
+                name="source"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "import-source-error" : undefined}
               />
-            </div>
+            </Field>
             <Button
               type="submit"
               className="w-full"
               disabled={!source.trim() || loading}
+              aria-busy={loading}
             >
               {loading ? (
                 <>
-                  <LoaderCircle className="animate-spin" />
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
                   Finishing the details
                 </>
               ) : (
@@ -499,7 +512,12 @@ export function ImportStudio({
           </form>
 
           {loading || site ? (
-            <div className="mt-8">
+            <div
+              className="mt-8"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium">{message}</span>
                 <span className="font-mono text-muted-foreground">
@@ -546,8 +564,15 @@ export function ImportStudio({
 
           {error ? (
             <div className="mt-6 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-              <div className="flex gap-2 text-sm text-destructive">
-                <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              <div
+                id="import-source-error"
+                className="flex gap-2 text-sm text-destructive"
+                role="alert"
+              >
+                <CircleAlert
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
                 <span>{error}</span>
               </div>
               <div className="mt-4 flex gap-2">
@@ -662,5 +687,17 @@ export function ImportStudio({
         </section>
       </div>
     </main>
+  );
+}
+
+function ImportSourceControl(props: ComponentProps<typeof Input>) {
+  return (
+    <div className="relative">
+      <Globe2
+        aria-hidden="true"
+        className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground"
+      />
+      <Input {...props} className="h-10 pl-9" />
+    </div>
   );
 }

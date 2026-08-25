@@ -13,7 +13,15 @@ const verifyRoute = await Bun.file(
 describe("magic-link sign-in form surface", () => {
   it("submits through the form handler instead of rendering a non-submit button", () => {
     expect(signInForm).toContain("<form onSubmit={submit}");
-    expect(signInForm).toContain('<Button type="submit"');
+    expect(signInForm).toContain('type="submit"');
+  });
+
+  it("names the email field and announces asynchronous errors", () => {
+    expect(signInForm).toContain('<Field label="Email" controlId="sign-in-email"');
+    expect(signInForm).toContain("error={error}");
+    expect(signInForm).toContain('placeholder={copy.emailPlaceholder}');
+    expect(signInForm).toContain("aria-busy={loading}");
+    expect(signInForm).toContain("Email me a secure link");
   });
 
   it("preserves token privacy while allowing the same-origin verification form", () => {

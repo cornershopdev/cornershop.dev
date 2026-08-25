@@ -232,7 +232,12 @@ export function ClaimPanel({
             website and domain stay untouched until the final DNS step.
           </p>
           {checkoutReturn ? (
-            <p className="mt-4 rounded-xl border bg-muted/45 px-4 py-3 text-xs leading-5">
+            <p
+              className="mt-4 rounded-xl border bg-muted/45 px-4 py-3 text-xs leading-5"
+              role="status"
+              aria-live="polite"
+              aria-busy={loading && !error}
+            >
               Payment received. Finalizing the owner account from Stripe&apos;s
               signed webhook…
             </p>
@@ -289,7 +294,7 @@ export function ClaimPanel({
           )}
 
           {offer ? (
-            <form onSubmit={submit} className="mt-7">
+            <form onSubmit={submit} className="mt-7" aria-busy={loading}>
               {invitationToken ? (
                 <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                   <p className="text-sm font-medium">Ownership link ready</p>
@@ -327,6 +332,7 @@ export function ClaimPanel({
                 <p
                   className="mt-3 rounded-lg bg-primary/8 px-3 py-2 text-xs text-primary"
                   role="status"
+                  aria-live="polite"
                 >
                   Check that inbox for the 48-hour one-time ownership link.
                 </p>
@@ -345,10 +351,11 @@ export function ClaimPanel({
                 size="lg"
                 className="mt-4 h-12 w-full"
                 disabled={(!invitationToken && !email) || loading}
+                aria-busy={loading}
               >
                 {loading ? (
                   <>
-                    <LoaderCircle className="animate-spin" />
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
                     {invitationToken
                       ? "Opening secure checkout"
                       : "Sending ownership link"}
