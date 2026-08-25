@@ -7,6 +7,7 @@ import {
   gallerySlotsFromLibrary,
   isArbitraryRemoteImageUrl,
   isInventedOwnerImageUrl,
+  isPreservedImportedImageUrl,
   projectHasUnselectedRemoteImage,
   slotFromLibraryPhoto,
 } from "@/lib/reviewed-photo-projection";
@@ -48,9 +49,16 @@ describe("reviewed photo slot mapping", () => {
     ).toBe(false);
     expect(isArbitraryRemoteImageUrl("/approved/loaf.webp", [])).toBe(false);
     expect(isArbitraryRemoteImageUrl(importedFixture, [])).toBe(false);
+    expect(isArbitraryRemoteImageUrl(originalHero, [])).toBe(true);
     expect(isInventedOwnerImageUrl(arbitrary)).toBe(true);
+    expect(isInventedOwnerImageUrl(originalHero)).toBe(true);
     expect(isInventedOwnerImageUrl(importedFixture)).toBe(false);
-    expect(isInventedOwnerImageUrl(originalHero)).toBe(false);
+    expect(isInventedOwnerImageUrl("/themes/restaurant/counter-service.webp")).toBe(
+      false,
+    );
+    expect(isPreservedImportedImageUrl(importedFixture)).toBe(true);
+    expect(isPreservedImportedImageUrl("/approved/loaf.webp")).toBe(true);
+    expect(isPreservedImportedImageUrl(originalHero)).toBe(false);
   });
 
   it("maps approved originals and derivatives onto hero, catalog, gallery, and project slots", () => {
@@ -237,6 +245,20 @@ describe("reviewed photo slot mapping", () => {
       originalUrl: null,
       provenance: null,
     });
+    expect(
+      bindImageSlot(
+        {
+          url: "https://assets.example/food-counter.jpg",
+          originalUrl: "https://assets.example/food-counter.jpg",
+          provenance: "official",
+        },
+        [],
+      ),
+    ).toEqual({
+      url: null,
+      originalUrl: null,
+      provenance: null,
+    });
   });
 
   it("flags unselected remote catalog and project images as unpublished", () => {
@@ -275,6 +297,14 @@ describe("reviewed photo slot mapping", () => {
         selected: null,
       }),
     ).toBe(false);
+    expect(
+      catalogItemHasUnselectedRemoteImage({
+        imageUrl: originalHero,
+        originalImageUrl: originalHero,
+        imageProvenance: "official",
+        selected: null,
+      }),
+    ).toBe(true);
     expect(
       projectHasUnselectedRemoteImage({
         imageUrl: projectOriginal,
