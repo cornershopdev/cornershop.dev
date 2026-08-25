@@ -20,6 +20,7 @@ import {
   resolveLocalServiceTemplateFromAttributes,
   type LocalServiceTemplate,
 } from "@/lib/verticals/local-service/templates";
+import { localServiceOwnerOperations } from "@/lib/owner-operations";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 const tradeLabels: Record<LocalServiceTradeType, string> = {
@@ -158,6 +159,7 @@ export const localServiceConfig = {
   claimMode: "factory",
   publicationEnabled: true,
   publicationMutationEnabled: true,
+  ownerOperations: localServiceOwnerOperations,
   draftGenerationStrategy: "deterministic-only",
   integrationTypes: ["quote", "contact", "booking", "social"],
   attributesSchema: localServiceAttributesSchema,

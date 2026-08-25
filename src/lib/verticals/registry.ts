@@ -3,7 +3,12 @@ import { beautyConfig } from "@/lib/verticals/beauty/config";
 import { foodRetailConfig } from "@/lib/verticals/food-retail/config";
 import { localServiceConfig } from "@/lib/verticals/local-service/config";
 import { restaurantConfig } from "@/lib/verticals/restaurant/config";
-import type { VerticalConfig, VerticalId } from "@/lib/verticals/types";
+import { applyOwnerOperationInvariants } from "@/lib/owner-operations";
+import type {
+  VerticalConfig,
+  VerticalId,
+  VerticalOwnerOperations,
+} from "@/lib/verticals/types";
 
 /**
  * Variance-erased on purpose: `VerticalConfig` is contravariant in TAttributes —
@@ -219,6 +224,23 @@ export function isVerticalPublicationMutationEnabled(id: VerticalId): boolean {
   const config = resolveVerticalConfig(id);
   return (
     config.publicationMutationEnabled && isVerticalOwnerReviewSupported(id)
+  );
+}
+
+/**
+ * Owner-workspace capabilities as declared on the vertical, fail-closed against
+ * claim and publication-mutation gates. Callers must not infer this from which
+ * dashboard component is mounted.
+ */
+export function resolveOwnerOperations(
+  id: VerticalId,
+): VerticalOwnerOperations {
+  return applyOwnerOperationInvariants(
+    resolveVerticalConfig(id).ownerOperations,
+    {
+      claimEnabled: isVerticalClaimEnabled(id),
+      publicationMutationEnabled: isVerticalPublicationMutationEnabled(id),
+    },
   );
 }
 

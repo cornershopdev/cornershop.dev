@@ -302,11 +302,9 @@ describe("owner integration schema and editor wiring", () => {
 
 describe("owner dashboard workspace switching", () => {
   it("loads the food-retail workspace count onto the shared account-actions contract", () => {
-    expect(dashboardPage).toContain(
-      "listAccountWorkspaces(access.session.userId)",
-    );
+    expect(dashboardPage).toContain("loadOwnerPaidWorkspace(access)");
     expect(dashboardPage).toMatch(
-      /FOOD_RETAIL[\s\S]*canSwitchWorkspace=\{workspaces\.length > 1\}/,
+      /FOOD_RETAIL[\s\S]*canSwitchWorkspace=\{paid\.canSwitchWorkspace\}/,
     );
     expect(foodRetailDashboardSource).toContain(
       "<AccountActions canSwitch={canSwitchWorkspace} />",

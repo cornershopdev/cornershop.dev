@@ -14,6 +14,12 @@ import {
 } from "lucide-react";
 import { AccountActions } from "@/components/account-actions";
 import { Brand } from "@/components/brand";
+import {
+  OwnerBillingBanner,
+  OwnerBillingButton,
+  OwnerPaidOperationsSection,
+  useOwnerPaidOperations,
+} from "@/components/owner-paid-operations";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +29,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Vertical } from "@/generated/prisma/enums";
+import type { BillingAccess } from "@/lib/billing-access";
 import type { BrandIdentity } from "@/lib/brand";
+import {
+  foodRetailOwnerOperations,
+  isOwnerOperationEnabled,
+  ownerOperationUnavailableMessage,
+  type ClientPublicationHistoryItem,
+} from "@/lib/owner-operations";
+import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import {
   canEnableOwnerIntegration,
   createOwnerIntegration,
@@ -61,6 +75,9 @@ export function FoodRetailDashboard({
   canSwitchWorkspace,
   initiallyPublished,
   platformUrl,
+  ownerOperations = foodRetailOwnerOperations,
+  billingAccess = null,
+  publicationHistory = [],
 }: {
   email: string;
   brand: BrandIdentity;
@@ -69,6 +86,9 @@ export function FoodRetailDashboard({
   canSwitchWorkspace: boolean;
   initiallyPublished: boolean;
   platformUrl: string;
+  ownerOperations?: VerticalOwnerOperations;
+  billingAccess?: BillingAccess | null;
+  publicationHistory?: ClientPublicationHistoryItem[];
 }) {
   const [draft, setDraftState] = useState(initialDraft);
   const draftRef = useRef(initialDraft);
@@ -84,10 +104,18 @@ export function FoodRetailDashboard({
   const [revision, setRevision] = useState(initialRevision);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const [published, setPublished] = useState(initiallyPublished);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const paidOps = useOwnerPaidOperations({
+    siteSlug: initialDraft.slug,
+    platformUrl,
+    brandName: brand.name,
+    capabilities: ownerOperations,
+    billingAccess,
+    initialPublicationHistory: publicationHistory,
+  });
+  const publishedVersion = paidOps.publishedVersion;
+  const published = initiallyPublished || paidOps.isPublished;
   const [integrationIssues, setIntegrationIssues] = useState<
     OwnerIntegrationIssue[]
   >([]);
@@ -299,6 +327,17 @@ export function FoodRetailDashboard({
   }
 
   async function publishDraft() {
+    if (!isOwnerOperationEnabled(ownerOperations.publicationMutation)) {
+      setError(
+        ownerOperationUnavailableMessage(
+          "publicationMutation",
+          ownerOperations.publicationMutation === "enabled"
+            ? "gated"
+            : ownerOperations.publicationMutation,
+        ),
+      );
+      return;
+    }
     if (hasUnreviewedFoodRetailTranslations(draftRef.current)) {
       setError("Review every draft or stale translation before publishing.");
       return;
@@ -328,13 +367,23 @@ export function FoodRetailDashboard({
       });
       const result = (await response.json()) as {
         error?: string;
-        published?: { version: number };
+        published?: {
+          id: string;
+          version: number;
+          publishedAt: string;
+          theme: { id: string; version: string };
+        };
       };
       if (!response.ok || !result.published) {
         throw new Error(result.error ?? "Publish failed");
       }
-      setPublished(true);
-      setPublishedVersion(result.published.version);
+      paidOps.recordPublished({
+        id: result.published.id,
+        version: result.published.version,
+        publishedAt: result.published.publishedAt,
+        changeSummary,
+        theme: result.published.theme,
+      });
       setNotice(`Published version ${result.published.version}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Publish failed");
@@ -352,10 +401,20 @@ export function FoodRetailDashboard({
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {email}
             </span>
+            <OwnerBillingButton
+              billingAccess={paidOps.billingAccess}
+              portalLoading={paidOps.portalLoading}
+              onOpenPortal={() => void paidOps.openBillingPortal()}
+            />
             <AccountActions canSwitch={canSwitchWorkspace} />
           </div>
         </div>
       </header>
+      <OwnerBillingBanner
+        billingAccess={paidOps.billingAccess}
+        portalLoading={paidOps.portalLoading}
+        onOpenPortal={() => void paidOps.openBillingPortal()}
+      />
 
       <main className="mx-auto grid max-w-[1500px] gap-6 px-5 py-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,1.1fr)]">
         <div className="space-y-5">
@@ -377,7 +436,9 @@ export function FoodRetailDashboard({
                 <Button
                   render={
                     <Link
-                      href={published ? platformUrl : `/preview/${draft.slug}`}
+                      href={
+                        published ? paidOps.liveUrl : `/preview/${draft.slug}`
+                      }
                       target="_blank"
                     />
                   }
@@ -414,13 +475,15 @@ export function FoodRetailDashboard({
                   {notice}
                 </p>
               ) : null}
-              {error ? (
+              {error || paidOps.operationError ? (
                 <p role="alert" className="text-sm text-destructive">
-                  {error}
+                  {error ?? paidOps.operationError}
                 </p>
               ) : null}
             </CardContent>
           </Card>
+
+          <OwnerPaidOperationsSection paid={paidOps} />
 
           <Card>
             <CardHeader>

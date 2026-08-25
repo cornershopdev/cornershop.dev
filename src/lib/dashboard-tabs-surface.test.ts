@@ -76,6 +76,9 @@ describe("dashboard tab and settings surface", () => {
   });
 
   it("publishes reviewed food-retail and local-service drafts through the guarded route", () => {
+    expect(dashboardPage).toContain("loadOwnerPaidWorkspace(access)");
+    expect(foodRetailDashboard).toContain("OwnerPaidOperationsSection");
+    expect(localServiceDashboard).toContain("OwnerPaidOperationsSection");
     expect(foodRetailDashboard).toContain("publishDraft");
     expect(foodRetailDashboard).toContain("/publish");
     expect(foodRetailDashboard).toContain(
