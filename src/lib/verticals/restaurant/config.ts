@@ -25,6 +25,7 @@ import {
   resolveRestaurantTemplateFromAttributes,
   type RestaurantTemplate,
 } from "@/lib/verticals/restaurant/templates";
+import { restaurantOwnerOperations } from "@/lib/owner-operations";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const restaurantDictionaryExtensions = {
@@ -114,6 +115,7 @@ export const restaurantConfig = {
   claimMode: "niche",
   publicationEnabled: true,
   publicationMutationEnabled: true,
+  ownerOperations: restaurantOwnerOperations,
   integrationTypes: ["booking", "ordering", "delivery", "social"],
   attributesSchema: restaurantAttributesSchema,
   attributeDefaults: {

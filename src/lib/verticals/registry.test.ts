@@ -20,6 +20,7 @@ import {
   listMarketingVerticals,
   listPublicVerticals,
   listVerticalIds,
+  resolveOwnerOperations,
   resolveVerticalByHostname,
   resolveVerticalBySlug,
   resolveVerticalConfig,
@@ -389,6 +390,10 @@ describe("niche routing", () => {
       }
       if (!isVerticalOwnerReviewSupported(id)) {
         expect(isVerticalPublicationMutationEnabled(id)).toBe(false);
+      }
+      if (resolveOwnerOperations(id).publicationMutation === "enabled") {
+        expect(isVerticalPublicationMutationEnabled(id)).toBe(true);
+        expect(isVerticalOwnerReviewSupported(id)).toBe(true);
       }
     }
   });

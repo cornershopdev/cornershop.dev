@@ -66,16 +66,25 @@ describe("dashboard tab and settings surface", () => {
       "initialDraftRevision={ownerDraft?.revision ?? 0}",
     );
     expect(dashboardPage).toContain("initialRevision={loaded.revision}");
-    expect(dashboard).toContain("useState(initialDraftRevision)");
-    expect(dashboard).toContain("expectedRevision: savedRevision");
+    expect(dashboard).toContain(
+      "useOwnerDraftDirtyState(initialDraft, initialDraftRevision)",
+    );
+    expect(dashboard).toContain(
+      "expectedRevision: submitted.expectedRevision",
+    );
     expect(restaurantSaveRoute).toContain("saveAuthorizedSiteDraft");
     expect(ownerSiteSave).toContain('code: "EXPECTED_REVISION_REQUIRED"');
     expect(dashboard).toContain("expectedRevision: revisionToPublish");
-    expect(foodRetailDashboard).toContain("expectedRevision: revision");
+    expect(foodRetailDashboard).toContain(
+      "expectedRevision: submitted.expectedRevision",
+    );
     expect(restaurantPublishRoute).toContain('code: "DRAFT_REVISION_CONFLICT"');
   });
 
   it("publishes reviewed food-retail and local-service drafts through the guarded route", () => {
+    expect(dashboardPage).toContain("loadOwnerPaidWorkspace(access)");
+    expect(foodRetailDashboard).toContain("OwnerPaidOperationsSection");
+    expect(localServiceDashboard).toContain("OwnerPaidOperationsSection");
     expect(foodRetailDashboard).toContain("publishDraft");
     expect(foodRetailDashboard).toContain("/publish");
     expect(foodRetailDashboard).toContain(
@@ -106,7 +115,7 @@ describe("dashboard tab and settings surface", () => {
     expect(dashboard).toContain(
       "body: JSON.stringify({ expectedRevision: requestedRevision })",
     );
-    expect(dashboard).toContain("setSavedRevision(result.revision)");
+    expect(dashboard).toContain("adoptServerDraft({");
     expect(translationRegenerationRoute).toContain(
       "expectedRevision: requestBody.data.expectedRevision",
     );
@@ -120,6 +129,20 @@ describe("dashboard tab and settings surface", () => {
     expect(dashboard).toContain(
       "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
     );
+    expect(foodRetailDashboard).toContain(
+      "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
+    );
+    expect(localServiceDashboard).toContain(
+      "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
+    );
+    expect(foodRetailDashboard).toContain("<PhotoLibraryPanel");
+    expect(localServiceDashboard).toContain("<PhotoLibraryPanel");
+    expect(foodRetailDashboard).toContain("onCatalogChange={handlePhotoCatalogChange}");
+    expect(localServiceDashboard).toContain(
+      "onCatalogChange={handlePhotoCatalogChange}",
+    );
+    expect(foodRetailDashboard).not.toContain("Approved product image URL");
+    expect(localServiceDashboard).not.toContain("Project image URL");
     expect(sourceMonitoringPanel).toContain(
       "onAcceptedDraft({ revision: acceptedRevision, draft: result.draft })",
     );

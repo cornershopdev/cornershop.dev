@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { catalogPhotoReplacementPosition } from "@/lib/catalog-photo-reconciliation";
 import { Vertical } from "@/generated/prisma/enums";
 import { getDb } from "@/lib/db";
+import { bindOwnerDraftImagesToLibrary } from "@/lib/reviewed-photo-projection";
 import { evidenceDigest, integrationUrlDigest } from "@/lib/evidence-digests";
 import { LEGACY_THEME_VERSION, slugify } from "@/lib/site-draft";
 import { restaurantSiteTheme } from "@/lib/site-themes/restaurant/configuration";
@@ -695,15 +696,8 @@ export async function updateSiteDraft(
           ) {
             throw new DraftRevisionConflictError(current.draftRevision);
           }
-          // Catalog rows are replaced on a full owner save. Preserve a managed
-          // photo only when section + item names identify one unique replacement;
-          // position alone can silently move a real product photo to another item.
-          const catalogPhotoSelections = await tx.photoAsset.findMany({
-            where: {
-              siteId: current.id,
-              selectedUsage: "CATALOG",
-              selectedCatalogItemId: { not: null },
-            },
+          const libraryPhotos = await tx.photoAsset.findMany({
+            where: { siteId: current.id },
             select: {
               id: true,
               originalUrl: true,
@@ -711,6 +705,9 @@ export async function updateSiteDraft(
               enhancedReviewStatus: true,
               activeVariant: true,
               provenance: true,
+              reviewStatus: true,
+              selectedUsage: true,
+              selectedCatalogItemId: true,
               selectedCatalogItem: {
                 select: {
                   name: true,
@@ -719,86 +716,40 @@ export async function updateSiteDraft(
               },
             },
           });
-          const catalogPhotoTargets = catalogPhotoSelections.map((selection) => ({
-            selection,
-            position: selection.selectedCatalogItem
-              ? catalogPhotoReplacementPosition({
-                  previousSectionName: selection.selectedCatalogItem.section.name,
-                  previousItemName: selection.selectedCatalogItem.name,
-                  replacementCatalog: parsed.catalogSections,
-                })
-              : null,
-          }));
+          const bound = bindOwnerDraftImagesToLibrary(parsed, libraryPhotos);
+          // Catalog rows are replaced on a full owner save. Preserve a managed
+          // photo only when section + item names identify one unique replacement;
+          // position alone can silently move a real product photo to another item.
+          const catalogPhotoTargets = libraryPhotos.flatMap((selection) =>
+            selection.selectedUsage === "CATALOG" &&
+            selection.selectedCatalogItem
+              ? [
+                  {
+                    selection,
+                    position: catalogPhotoReplacementPosition({
+                      previousSectionName:
+                        selection.selectedCatalogItem.section.name,
+                      previousItemName: selection.selectedCatalogItem.name,
+                      replacementCatalog: bound.catalogSections,
+                    }),
+                  },
+                ]
+              : [],
+          );
           const updated = await tx.site.update({
             where: { id: current.id },
             data: {
-              ...siteDraftScalarData(parsed, vertical),
-              ...siteRelationReplaceData(parsed, vertical),
+              ...siteDraftScalarData(bound, vertical),
+              ...siteRelationReplaceData(bound, vertical),
               draftRevision: { increment: 1 },
             },
             select: { id: true, draftRevision: true },
           });
-          if (catalogPhotoSelections.length > 0) {
-            const replacementItems = await tx.catalogItem.findMany({
-              where: { section: { siteId: current.id } },
-              select: {
-                id: true,
-                position: true,
-                section: { select: { position: true } },
-              },
-            });
-            for (const { selection, position } of catalogPhotoTargets) {
-              const replacement = position
-                ? replacementItems.find(
-                    (item) =>
-                      item.position === position.itemIndex &&
-                      item.section.position === position.sectionIndex,
-                  )
-                : null;
-              const managedUrls = [selection.originalUrl, selection.enhancedUrl]
-                .filter((url): url is string => Boolean(url));
-              await tx.catalogItem.updateMany({
-                where: {
-                  section: { siteId: current.id },
-                  ...(replacement ? { id: { not: replacement.id } } : {}),
-                  OR: [
-                    { imageUrl: { in: managedUrls } },
-                    { originalImageUrl: { in: managedUrls } },
-                  ],
-                },
-                data: {
-                  imageUrl: null,
-                  originalImageUrl: null,
-                  imageProvenance: null,
-                },
-              });
-              if (replacement) {
-                const imageUrl =
-                  selection.activeVariant === "ENHANCED" &&
-                  selection.enhancedReviewStatus === "APPROVED" &&
-                  selection.enhancedUrl
-                    ? selection.enhancedUrl
-                    : selection.originalUrl;
-                await tx.catalogItem.update({
-                  where: { id: replacement.id },
-                  data: {
-                    imageUrl,
-                    originalImageUrl: selection.originalUrl,
-                    imageProvenance: selection.provenance,
-                  },
-                });
-              }
-              await tx.photoAsset.update({
-                where: { id: selection.id },
-                data: replacement
-                  ? {
-                      selectedCatalogItemId: replacement.id,
-                      selectedUsage: "CATALOG",
-                    }
-                  : { selectedCatalogItemId: null, selectedUsage: null },
-              });
-            }
-          }
+          await rebindSelectedCatalogPhotos(
+            tx,
+            current.id,
+            catalogPhotoTargets,
+          );
           if (options.actor) {
             await tx.auditEvent.create({
               data: {
@@ -840,6 +791,86 @@ function requireImportDatabase() {
     throw new ImportDatabaseUnavailableError();
   }
   return getDb();
+}
+
+type CatalogPhotoSelectionRow = {
+  id: string;
+  originalUrl: string;
+  enhancedUrl: string | null;
+  enhancedReviewStatus: "PENDING" | "APPROVED" | "REJECTED" | null;
+  activeVariant: "ORIGINAL" | "ENHANCED";
+  provenance: "OFFICIAL" | "OWNER" | "PERMISSIONED_UGC";
+};
+
+export async function rebindSelectedCatalogPhotos(
+  tx: Prisma.TransactionClient,
+  siteId: string,
+  catalogPhotoTargets: Array<{
+    selection: CatalogPhotoSelectionRow;
+    position: { sectionIndex: number; itemIndex: number } | null;
+  }>,
+): Promise<void> {
+  if (catalogPhotoTargets.length === 0) return;
+  const replacementItems = await tx.catalogItem.findMany({
+    where: { section: { siteId } },
+    select: {
+      id: true,
+      position: true,
+      section: { select: { position: true } },
+    },
+  });
+  for (const { selection, position } of catalogPhotoTargets) {
+    const replacement = position
+      ? replacementItems.find(
+          (item) =>
+            item.position === position.itemIndex &&
+            item.section.position === position.sectionIndex,
+        )
+      : null;
+    const managedUrls = [selection.originalUrl, selection.enhancedUrl].filter(
+      (url): url is string => Boolean(url),
+    );
+    await tx.catalogItem.updateMany({
+      where: {
+        section: { siteId },
+        ...(replacement ? { id: { not: replacement.id } } : {}),
+        OR: [
+          { imageUrl: { in: managedUrls } },
+          { originalImageUrl: { in: managedUrls } },
+        ],
+      },
+      data: {
+        imageUrl: null,
+        originalImageUrl: null,
+        imageProvenance: null,
+      },
+    });
+    if (replacement) {
+      const imageUrl =
+        selection.activeVariant === "ENHANCED" &&
+        selection.enhancedReviewStatus === "APPROVED" &&
+        selection.enhancedUrl
+          ? selection.enhancedUrl
+          : selection.originalUrl;
+      await tx.catalogItem.update({
+        where: { id: replacement.id },
+        data: {
+          imageUrl,
+          originalImageUrl: selection.originalUrl,
+          imageProvenance: selection.provenance,
+        },
+      });
+    }
+    await tx.photoAsset.update({
+      where: { id: selection.id },
+      data: replacement
+        ? {
+            selectedCatalogItemId: replacement.id,
+            selectedUsage: "CATALOG",
+          }
+        : { selectedCatalogItemId: null, selectedUsage: null },
+    });
+  }
 }
 
 function siteRelationReplaceData(
@@ -966,8 +997,8 @@ function toDatabaseIntegrationType(
 
 function toDatabaseImageProvenance(
   value: PersistableSiteDraft["heroImageProvenance"],
-): "OFFICIAL" | "OWNER" | "PERMISSIONED_UGC" | undefined {
-  if (!value) return undefined;
+): "OFFICIAL" | "OWNER" | "PERMISSIONED_UGC" | null {
+  if (!value) return null;
   if (value === "permissioned-ugc") return "PERMISSIONED_UGC";
   return value.toUpperCase() as "OFFICIAL" | "OWNER";
 }

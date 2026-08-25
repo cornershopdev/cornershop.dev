@@ -5,6 +5,7 @@ import {
   baseSiteTranslationSchema,
   catalogItemSchema,
   catalogSectionSchema,
+  imageProvenanceSchema,
   integrationSchema,
   siteImageUrlSchema,
   translatedCatalogItemSchema,
@@ -40,18 +41,31 @@ export const localServiceTrustSignalSchema = z.object({
   detail: z.string().trim().max(140).default(""),
 });
 
-export const localServiceProjectSchema = z.object({
-  title: z.string().trim().min(1).max(100),
-  description: z.string().trim().max(320).default(""),
-  imageUrl: siteImageUrlSchema
-    .refine(
-      (value) => value.startsWith("/") || new URL(value).protocol === "https:",
-      "Project images must use HTTPS or a local asset path",
-    )
-    .nullable()
-    .default(null),
-  location: z.string().trim().max(100).default(""),
-});
+export const localServiceProjectSchema = z
+  .object({
+    title: z.string().trim().min(1).max(100),
+    description: z.string().trim().max(320).default(""),
+    imageUrl: siteImageUrlSchema
+      .refine(
+        (value) =>
+          value.startsWith("/") || new URL(value).protocol === "https:",
+        "Project images must use HTTPS or a local asset path",
+      )
+      .nullable()
+      .default(null),
+    originalImageUrl: siteImageUrlSchema.nullable().optional(),
+    imageProvenance: imageProvenanceSchema.nullable().optional(),
+    location: z.string().trim().max(100).default(""),
+  })
+  .superRefine((project, context) => {
+    if (project.imageUrl && !project.imageProvenance) {
+      context.addIssue({
+        code: "custom",
+        path: ["imageProvenance"],
+        message: "A project image requires recorded provenance",
+      });
+    }
+  });
 
 export const localServiceAttributesSchema = z.object({
   tradeType: localServiceTradeTypeSchema.default("general-trades"),

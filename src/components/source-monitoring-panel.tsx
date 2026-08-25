@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring";
+import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring-diff";
 
 export function SourceMonitoringPanel({
   siteSlug,
@@ -297,10 +297,10 @@ function formatDateTime(value: string | null) {
 function fieldLabel(value: string) {
   return (
     {
-      MENU: "Menu changes",
+      MENU: "Catalog changes",
       CONTACT: "Contact details",
       HOURS: "Business hours",
-      LINKS: "Booking and ordering links",
+      LINKS: "External links",
     }[value] ?? value
   );
 }
