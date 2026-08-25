@@ -6,8 +6,9 @@ import type { BrandIdentity } from "@/lib/brand";
 import type { Vertical } from "@/generated/prisma/enums";
 
 /**
- * Restaurant owns the full editor today. Other verticals can import and claim,
- * but must not fall through to the restaurant sample draft under the real slug.
+ * Restaurant owns the full editor today. Verticals without a dedicated
+ * owner-review dashboard can still import a private preview, but must not
+ * fall through to the restaurant sample draft under the real slug.
  */
 export function UnsupportedVerticalDashboard({
   email,
@@ -44,12 +45,12 @@ export function UnsupportedVerticalDashboard({
               <span className="font-medium text-foreground">
                 {vertical.toLowerCase()}
               </span>{" "}
-              site. Import, claim, and hosting already work; the dashboard editor
-              still ships restaurant-first so we do not risk rewriting your
-              content as a restaurant sample.
+              site. This is a private, non-chargeable preview. The dashboard
+              editor still ships restaurant-first so we do not risk rewriting
+              your content as a restaurant sample.
             </p>
             <p>
-              Open the private preview to review the generated site, or switch
+              Open the private preview to inspect the generated site, or switch
               workspace if you manage a restaurant as well.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">

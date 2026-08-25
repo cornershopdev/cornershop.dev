@@ -28,6 +28,9 @@ const sitePublication = await Bun.file(
   new URL("./site-publication.ts", import.meta.url),
 ).text();
 const sites = await Bun.file(new URL("./sites.ts", import.meta.url)).text();
+const publicationCapability = await Bun.file(
+  new URL("./site-publication-capability.ts", import.meta.url),
+).text();
 const translationRegenerationRoute = await Bun.file(
   new URL(
     "../app/api/sites/[slug]/translations/[locale]/regenerate/route.ts",
@@ -90,6 +93,13 @@ describe("dashboard tab and settings surface", () => {
       ),
     ).toHaveLength(2);
     expect(sites).toContain("!isVerticalPublicationEnabled(version.vertical)");
+    expect(sites).not.toContain("isVerticalPublicationMutationEnabled");
+    expect(publicationCapability).toContain(
+      "isVerticalPublicationMutationEnabled",
+    );
+    expect(publicationCapability).not.toContain(
+      "isVerticalPublicationEnabled(vertical)",
+    );
   });
 
   it("carries the universal draft revision through auxiliary owner mutations", () => {

@@ -236,7 +236,11 @@ export type VerticalMarketing = {
     copy: string;
     assurances: { icon: MarketingIconName; copy: string }[];
   };
-  pricing: {
+  /**
+   * Public founding offer. Omitted while claiming is disabled so a
+   * preview-only vertical cannot advertise a plan it cannot sell.
+   */
+  pricing?: {
     eyebrow: string;
     headline: string;
     copy: string;
@@ -267,11 +271,17 @@ export type VerticalConfig<
    */
   claimMode: "disabled" | "factory" | "niche";
   /**
-   * Whether owner-reviewed drafts may create or roll back public snapshots.
-   * This is explicit and server-enforced: a registered vertical can support
-   * private imports and previews without accidentally inheriting publication.
+   * Whether an already-published snapshot may be rendered on the public
+   * storefront. Independent of whether owners may create or roll back
+   * snapshots: flipping this off would hide existing live sites.
    */
   publicationEnabled: boolean;
+  /**
+   * Whether owners may create or roll back public snapshots. Requires a
+   * supported owner-review workflow; a vertical that only imports and
+   * previews must leave this off.
+   */
+  publicationMutationEnabled: boolean;
   /**
    * Model assistance is the compatibility default. Evidence-sensitive verticals
    * can opt into deterministic reconstruction and skip text generation entirely.

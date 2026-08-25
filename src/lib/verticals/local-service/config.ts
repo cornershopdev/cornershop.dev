@@ -157,6 +157,7 @@ export const localServiceConfig = {
   marketing: localServiceMarketing,
   claimMode: "factory",
   publicationEnabled: true,
+  publicationMutationEnabled: true,
   draftGenerationStrategy: "deterministic-only",
   integrationTypes: ["quote", "contact", "booking", "social"],
   attributesSchema: localServiceAttributesSchema,

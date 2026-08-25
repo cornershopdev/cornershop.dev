@@ -191,12 +191,35 @@ export function isVerticalClaimEnabled(id: VerticalId): boolean {
 }
 
 /**
- * Publication is a separate capability from rendering, importing and claim.
- * Keeping it explicit prevents a private vertical from inheriting the shared
- * snapshot and rollback engine merely because its schema is registered.
+ * Dedicated owner-review dashboards currently exist for restaurant,
+ * food-retail and local-service. Beauty still uses UnsupportedVerticalDashboard.
+ */
+export function isVerticalOwnerReviewSupported(id: VerticalId): boolean {
+  return (
+    id === Vertical.RESTAURANT ||
+    id === Vertical.FOOD_RETAIL ||
+    id === Vertical.LOCAL_SERVICE
+  );
+}
+
+/**
+ * Whether an already-published snapshot may be rendered. Independent of
+ * whether owners may create or roll back snapshots.
  */
 export function isVerticalPublicationEnabled(id: VerticalId): boolean {
   return resolveVerticalConfig(id).publicationEnabled;
+}
+
+/**
+ * Owner publish/rollback. Fail closed unless the vertical both opts in and
+ * ships a supported owner-review workflow — otherwise a preview-only
+ * vertical could inherit mutation from a leftover config flag.
+ */
+export function isVerticalPublicationMutationEnabled(id: VerticalId): boolean {
+  const config = resolveVerticalConfig(id);
+  return (
+    config.publicationMutationEnabled && isVerticalOwnerReviewSupported(id)
+  );
 }
 
 /** Every vertical intentionally exposed by the shared public niche route. */
