@@ -20,6 +20,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  canEnableOwnerIntegration,
+  ownerIntegrationFieldPath,
+  ownerIntegrationIssueMessage,
+} from "@/lib/owner-integration";
 import type { RestaurantDraft } from "@/lib/restaurant";
 import {
   integrationPlacement,
@@ -223,6 +228,7 @@ export function RestaurantIntegrationEditor({
                   <Switch
                     aria-label={`Show ${integration.label} publicly`}
                     checked={integration.enabled}
+                    disabled={!canEnableOwnerIntegration(integration.url)}
                     onCheckedChange={(enabled) =>
                       onMutation({
                         type: "update",
@@ -273,7 +279,13 @@ export function RestaurantIntegrationEditor({
                       </Field>
                     </div>
                     <div className="mt-4 grid gap-4 md:grid-cols-[1fr_180px]">
-                      <Field label="HTTPS destination">
+                      <Field
+                        label="HTTPS destination"
+                        error={ownerIntegrationIssueMessage(
+                          validationIssues,
+                          ownerIntegrationFieldPath(integrationIndex, "url"),
+                        )}
+                      >
                         <Input
                           id={`integration-url-${integrationIndex}`}
                           type="url"

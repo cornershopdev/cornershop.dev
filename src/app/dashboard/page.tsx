@@ -49,8 +49,9 @@ export default async function DashboardPage({
   if (session && (!access || !access.ok)) redirect("/sign-in");
 
   if (access?.ok && access.site.vertical === Vertical.FOOD_RETAIL) {
-    const [loaded, publicationHistory] = await Promise.all([
+    const [loaded, workspaces, publicationHistory] = await Promise.all([
       findSiteDraft(access.site.slug),
+      listAccountWorkspaces(access.session.userId),
       getSitePublicationHistory(access.site.id),
     ]);
     if (!loaded || loaded.vertical !== Vertical.FOOD_RETAIL)
@@ -62,6 +63,7 @@ export default async function DashboardPage({
           brand={await resolveRequestBrand()}
           initialDraft={loaded.draft as FoodRetailSiteDraft}
           initialRevision={loaded.revision}
+          canSwitchWorkspace={workspaces.length > 1}
           initiallyPublished={publicationHistory.some((item) => item.current)}
           platformUrl={publicSiteOrigin({
             slug: access.site.slug,

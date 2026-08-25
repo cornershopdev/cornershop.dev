@@ -15,7 +15,7 @@ describe("food retail JSON-LD", () => {
       openingHours: ["Monday–Friday 07:00–16:00", "Saturday 08:00–14:00"],
       potentialAction: {
         "@type": "OrderAction",
-        target: "https://example.com/maison-levain/order",
+        target: "https://maison-levain.example/order",
       },
     });
     expect(jsonLd).not.toHaveProperty("acceptsReservations");

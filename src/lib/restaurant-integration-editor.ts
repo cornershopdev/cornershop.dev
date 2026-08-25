@@ -1,4 +1,11 @@
 import {
+  canEnableOwnerIntegration,
+  createOwnerIntegration,
+  mergeOwnerDraftIssues,
+  validateOwnerIntegrations,
+  zodIssuesToOwnerIssues,
+} from "@/lib/owner-integration";
+import {
   markRestaurantTranslationsStale,
   type MenuValidationIssue,
 } from "@/lib/restaurant-menu-editor";
@@ -38,17 +45,12 @@ export function applyRestaurantIntegrationMutation(
 
   switch (mutation.type) {
     case "add": {
-      const label = defaultIntegrationLabel(mutation.integrationType);
-      draft.integrations.push({
+      const integration = createOwnerIntegration({
         type: mutation.integrationType,
-        label,
-        provider: null,
-        url: "",
-        enabled: true,
-        venueId: null,
       });
+      draft.integrations.push(integration);
       for (const translation of draft.translations) {
-        translation.integrationLabels.push(label);
+        translation.integrationLabels.push(integration.label);
       }
       translationTextChanged = true;
       break;
@@ -61,6 +63,9 @@ export function applyRestaurantIntegrationMutation(
       const previousUrl = integration.url;
       const previousProvider = integration.provider;
       Object.assign(integration, mutation.changes);
+      if (!canEnableOwnerIntegration(integration.url)) {
+        integration.enabled = false;
+      }
       if (
         mutation.changes.url !== undefined ||
         mutation.changes.type !== undefined
@@ -116,19 +121,17 @@ export function applyRestaurantIntegrationMutation(
 export function validateRestaurantIntegrations(
   draft: RestaurantDraft,
 ): MenuValidationIssue[] {
+  const ownerIssues = validateOwnerIntegrations(draft.integrations);
   const parsed = restaurantDraftSchema.safeParse(draft);
-  if (parsed.success) return [];
-  return parsed.error.issues
-    .filter(
-      (issue) =>
-        issue.path[0] === "integrations" ||
-        (issue.path[0] === "translations" &&
-          issue.path.includes("integrationLabels")),
-    )
-    .map((issue) => ({
-      path: issue.path.join("."),
-      message: issue.message,
-    }));
+  const schemaIssues = parsed.success
+    ? []
+    : zodIssuesToOwnerIssues(parsed.error.issues).filter(
+        (issue) =>
+          issue.path === "integrations" ||
+          issue.path.startsWith("integrations.") ||
+          issue.path.includes("integrationLabels"),
+      );
+  return mergeOwnerDraftIssues(ownerIssues, schemaIssues);
 }
 
 export function integrationPlacement(
@@ -158,21 +161,6 @@ export function integrationPlacement(
         label: "Supporting link; exact position follows the selected theme",
         regions: ["footer"],
       };
-  }
-}
-
-function defaultIntegrationLabel(
-  type: RestaurantIntegration["type"],
-): string {
-  switch (type) {
-    case "booking":
-      return "Book a table";
-    case "ordering":
-      return "Order online";
-    case "delivery":
-      return "Get delivery";
-    case "social":
-      return "Follow us";
   }
 }
 

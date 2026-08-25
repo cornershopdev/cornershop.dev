@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  isPlaceholderIntegrationHostname,
+  OWNER_INTEGRATION_PLACEHOLDER_MESSAGE,
+} from "@/lib/owner-integration";
 
 /**
  * The draft primitives that belong to the engine rather than to any one vertical.
@@ -146,6 +150,23 @@ export const safeExternalHttpsUrlSchema = z.url().superRefine((value, context) =
   }
 });
 
+const integrationUrlSchema = safeExternalHttpsUrlSchema.superRefine(
+  (value, context) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return;
+    }
+    if (isPlaceholderIntegrationHostname(url.hostname)) {
+      context.addIssue({
+        code: "custom",
+        message: OWNER_INTEGRATION_PLACEHOLDER_MESSAGE,
+      });
+    }
+  },
+);
+
 export const integrationSchema = z.object({
   type: z.enum([
     "booking",
@@ -157,7 +178,7 @@ export const integrationSchema = z.object({
   ]),
   label: z.string().trim().min(1).max(60),
   provider: z.string().trim().min(1).max(60).nullable().default(null),
-  url: safeExternalHttpsUrlSchema,
+  url: integrationUrlSchema,
   enabled: z.boolean().default(true),
   /**
    * The owner's id inside the provider, used to build an embedded booking
