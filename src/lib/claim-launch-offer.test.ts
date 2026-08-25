@@ -172,25 +172,36 @@ describe("claim page route state", () => {
   });
 });
 
+function requirePricing(
+  marketing: VerticalMarketing,
+): NonNullable<VerticalMarketing["pricing"]> {
+  if (!marketing.pricing) {
+    throw new Error("fixture marketing must declare a founding offer");
+  }
+  return marketing.pricing;
+}
+
 function wrongPriceMarketing(
   base: VerticalMarketing = foodRetailMarketing,
 ): VerticalMarketing {
-  const [plan] = base.pricing.plans;
+  const pricing = requirePricing(base);
+  const [plan] = pricing.plans;
   return {
     ...base,
     pricing: {
-      ...base.pricing,
+      ...pricing,
       plans: [{ ...plan, price: "$25" }],
     },
   };
 }
 
 function unnamedPlanMarketing(): VerticalMarketing {
-  const [plan] = localServiceMarketing.pricing.plans;
+  const pricing = requirePricing(localServiceMarketing);
+  const [plan] = pricing.plans;
   return {
     ...localServiceMarketing,
     pricing: {
-      ...localServiceMarketing.pricing,
+      ...pricing,
       plans: [{ ...plan, name: "Starter" }],
     },
   };

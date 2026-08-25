@@ -86,10 +86,11 @@ export function resolveClaimLaunchOffer(
   marketing: VerticalMarketing,
 ): ClaimLaunchOffer | null {
   const display = foundingOfferDisplay();
+  const pricing = marketing.pricing;
   const emailPlaceholder = marketing.signIn.emailPlaceholder.trim();
-  if (!display || emailPlaceholder.length === 0) return null;
+  if (!display || !pricing || emailPlaceholder.length === 0) return null;
 
-  const matches = marketing.pricing.plans.filter((plan) =>
+  const matches = pricing.plans.filter((plan) =>
     isValidFoundingPlan(plan, display),
   );
   const plan = matches.length === 1 ? matches[0] : undefined;
