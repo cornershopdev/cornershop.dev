@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAnalyticsVisitId } from "@/lib/analytics-browser";
 
 export type BookingRequestFormCopy = {
@@ -27,8 +27,10 @@ type BookingRequestFormProps = {
 const fieldClassName =
   "w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm outline-none placeholder:opacity-50 focus:border-current/45";
 
+const fieldWrapClassName = "flex flex-col gap-1.5";
+
 const labelClassName =
-  "flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] opacity-70";
+  "text-xs font-semibold uppercase tracking-[0.1em] opacity-70";
 
 /**
  * The fallback booking surface: a site with no provider to embed still has to be
@@ -48,10 +50,18 @@ export function BookingRequestForm({
 }: BookingRequestFormProps) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+  const sending = status === "sending";
+  const errorId = "booking-request-error";
+
+  useEffect(() => {
+    if (status !== "sent") return;
+    successRef.current?.focus();
+  }, [status]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (embedded || status === "sending") return;
+    if (embedded || sending) return;
 
     const form = new FormData(event.currentTarget);
     const read = (key: string) => {
@@ -99,81 +109,123 @@ export function BookingRequestForm({
 
   if (status === "sent") {
     return (
-      <p className="rounded-2xl border border-current/15 px-5 py-6 text-sm opacity-80">
+      <p
+        ref={successRef}
+        tabIndex={-1}
+        role="status"
+        aria-live="polite"
+        className="rounded-2xl border border-current/15 px-5 py-6 text-sm opacity-80"
+      >
         {copy.success}
       </p>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4"
+      aria-busy={sending}
+    >
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className={labelClassName}>
-          {copy.name}
+        <div className={fieldWrapClassName}>
+          <label htmlFor="booking-request-name" className={labelClassName}>
+            {copy.name}
+          </label>
           <input
+            id="booking-request-name"
             name="name"
             required
             maxLength={120}
             autoComplete="name"
             className={fieldClassName}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
           />
-        </label>
-        <label className={labelClassName}>
-          {copy.email}
+        </div>
+        <div className={fieldWrapClassName}>
+          <label htmlFor="booking-request-email" className={labelClassName}>
+            {copy.email}
+          </label>
           <input
+            id="booking-request-email"
             name="email"
             type="email"
             maxLength={180}
             autoComplete="email"
             className={fieldClassName}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
           />
-        </label>
-        <label className={labelClassName}>
-          {copy.phone}
+        </div>
+        <div className={fieldWrapClassName}>
+          <label htmlFor="booking-request-phone" className={labelClassName}>
+            {copy.phone}
+          </label>
           <input
+            id="booking-request-phone"
             name="phone"
             type="tel"
             maxLength={40}
             autoComplete="tel"
             className={fieldClassName}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
           />
-        </label>
-        <label className={labelClassName}>
-          {copy.when}
+        </div>
+        <div className={fieldWrapClassName}>
+          <label htmlFor="booking-request-when" className={labelClassName}>
+            {copy.when}
+          </label>
           <input
+            id="booking-request-when"
             name="requestedAt"
             type="datetime-local"
             className={fieldClassName}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
           />
-        </label>
-        <label className={labelClassName}>
-          {copy.partySize}
+        </div>
+        <div className={fieldWrapClassName}>
+          <label htmlFor="booking-request-party-size" className={labelClassName}>
+            {copy.partySize}
+          </label>
           <input
+            id="booking-request-party-size"
             name="partySize"
             type="number"
             min={1}
             max={200}
             className={fieldClassName}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
           />
-        </label>
+        </div>
       </div>
-      <label className={labelClassName}>
-        <span>
+      <div className={fieldWrapClassName}>
+        <label htmlFor="booking-request-notes" className={labelClassName}>
           {copy.notes}{" "}
           <span className="font-normal normal-case tracking-normal opacity-60">
             ({copy.optional})
           </span>
-        </span>
+        </label>
         <textarea
+          id="booking-request-notes"
           name="notes"
           rows={3}
           maxLength={1000}
           className={fieldClassName}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
         />
-      </label>
+      </div>
 
       {error ? (
-        <p role="alert" className="text-sm font-medium opacity-90">
+        <p
+          id={errorId}
+          role="alert"
+          className="text-sm font-medium opacity-90"
+        >
           {error}
         </p>
       ) : null}
@@ -181,11 +233,12 @@ export function BookingRequestForm({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={embedded || status === "sending"}
+          disabled={embedded || sending}
+          aria-busy={sending}
           className="inline-flex min-h-11 items-center justify-center rounded-full px-6 text-sm font-semibold text-white disabled:opacity-60"
           style={{ background: "var(--site-accent)" }}
         >
-          {status === "sending" ? copy.sending : copy.submit}
+          {sending ? copy.sending : copy.submit}
         </button>
         {embedded ? (
           <span className="text-xs opacity-60">{copy.previewNotice}</span>

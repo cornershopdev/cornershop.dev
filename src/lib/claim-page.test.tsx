@@ -9,7 +9,15 @@ import { sampleFoodRetailDraft } from "@/lib/verticals/food-retail/fixtures";
 import { sampleLocalServiceSiteDraft } from "@/lib/verticals/local-service/fixtures";
 import type { VerticalId } from "@/lib/verticals/types";
 
+const claimPageSource = await Bun.file(
+  new URL("../app/claim/[slug]/page.tsx", import.meta.url),
+).text();
+
 describe("claim page route surface", () => {
+  it("names the icon-only back control", () => {
+    expect(claimPageSource).toContain('aria-label="Back to create"');
+  });
+
   it("renders restaurant brand and founding identity", () => {
     const { brand, html } = renderClaimRoute(
       Vertical.RESTAURANT,

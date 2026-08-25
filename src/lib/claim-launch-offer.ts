@@ -69,7 +69,12 @@ export type ClaimPageState =
     };
 
 export function foundingOfferDisplay(
-  price: typeof FOUNDING_PRICE = FOUNDING_PRICE,
+  price: {
+    currency: string;
+    unitAmount: number;
+    interval: string;
+    intervalCount: number;
+  } = FOUNDING_PRICE,
 ): FoundingOfferDisplay | null {
   if (price.currency !== "usd") return null;
   if (price.intervalCount !== 1) return null;
@@ -78,7 +83,7 @@ export function foundingOfferDisplay(
   return {
     price: `$${majorUnits}`,
     cadence: `/${price.interval}`,
-    currency: price.currency,
+    currency: "usd",
   };
 }
 
