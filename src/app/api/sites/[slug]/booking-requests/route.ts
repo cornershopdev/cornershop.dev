@@ -6,25 +6,37 @@ import {
   resolveAnalyticsSiteForHeaders,
 } from "@/lib/analytics";
 import {
+  admitLiveBookingRequest,
+  BOOKING_REQUEST_ADMISSION_REJECTED_MESSAGE,
+  BOOKING_REQUEST_ADMISSION_REJECTED_STATUS,
+} from "@/lib/booking-request-admission";
+import {
   bookingRequestInputSchema,
   createBookingRequest,
   notifyOwnerOfBookingRequest,
 } from "@/lib/booking-requests";
 import { getDb } from "@/lib/db";
 import { limitBookingRequest } from "@/lib/rate-limit";
+import { liveSiteVersionId } from "@/lib/site-surface";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
+function rejectedAdmissionResponse() {
+  return NextResponse.json(
+    { error: BOOKING_REQUEST_ADMISSION_REJECTED_MESSAGE },
+    { status: BOOKING_REQUEST_ADMISSION_REJECTED_STATUS },
+  );
+}
+
 /**
  * The one unauthenticated write a generated site exposes to its visitors.
  *
- * Metered before anything else runs, validated against a closed schema, and
- * answered with either the visitor's own validation problem or a fixed generic
- * message — the same redaction posture as the import route, for the same reason:
- * this is a public endpoint and internal failure text is not the caller's
- * business.
+ * Metered before anything else runs. Persist and notify only after a
+ * proxy-attested live slug/version matches the route, the current published
+ * snapshot, and the live-host resolver. Every admission failure uses one
+ * visitor-safe body so the caller cannot probe whether a slug exists.
  */
 export async function POST(request: Request, { params }: RouteContext) {
   const { slug } = await params;
@@ -52,6 +64,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     const parsed = bookingRequestInputSchema.parse(await request.json());
     const { analyticsVisitId, ...input } = parsed;
 
+    if (!liveSiteVersionId(request.headers, slug)) {
+      return rejectedAdmissionResponse();
+    }
+
     if (!process.env.DATABASE_URL) {
       return NextResponse.json(
         { error: "Booking requests are temporarily unavailable" },
@@ -59,49 +75,43 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const site = await getDb().site.findUnique({
-      where: { slug },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        organizationId: true,
-        // Decides which niche the owner's notification is sent as.
-        vertical: true,
-      },
+    const site = await admitLiveBookingRequest({
+      slug,
+      headers: request.headers,
+      lookupSite: (liveSlug) =>
+        getDb().site.findUnique({
+          where: { slug: liveSlug },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            organizationId: true,
+            vertical: true,
+            status: true,
+            publishedSiteVersionId: true,
+            publishedSiteVersion: {
+              select: { id: true, siteId: true, publishedAt: true },
+            },
+          },
+        }),
+      resolveLiveHost: resolveAnalyticsSiteForHeaders,
     });
-    if (!site) {
-      return NextResponse.json({ error: "Site not found" }, { status: 404 });
-    }
-
-    let liveAnalyticsSiteId: string | null = null;
-    try {
-      const analyticsSite = await resolveAnalyticsSiteForHeaders(
-        request.headers,
-      );
-      if (analyticsSite?.id === site.id) liveAnalyticsSiteId = site.id;
-    } catch (error) {
-      console.error("[booking-request] analytics host check failed", {
-        slug,
-        error: error instanceof Error ? error.message : "unknown",
-      });
-    }
+    if (!site) return rejectedAdmissionResponse();
 
     const created = await createBookingRequest(
       site,
       input,
-      liveAnalyticsSiteId ? LIVE_BOOKING_REQUEST_SOURCE : "site-form",
+      LIVE_BOOKING_REQUEST_SOURCE,
     );
-    if (liveAnalyticsSiteId && analyticsVisitId) {
+    if (analyticsVisitId) {
       after(async () => {
         try {
           await recordLeadCreatedEvent({
-            siteId: liveAnalyticsSiteId,
+            siteId: site.id,
             visitId: analyticsVisitId,
           });
         } catch (error) {
           console.error("[booking-request] lead analytics dropped", {
-            slug,
             bookingRequestId: created.id,
             error: error instanceof Error ? error.message : "unknown",
           });
@@ -123,7 +133,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     console.error("[booking-request] failed", {
-      slug,
       error: error instanceof Error ? error.message : "unknown",
     });
     return NextResponse.json(
