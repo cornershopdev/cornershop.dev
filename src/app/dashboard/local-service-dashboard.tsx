@@ -18,8 +18,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { BrandIdentity } from "@/lib/brand";
+import {
+  canEnableOwnerIntegration,
+  createOwnerIntegration,
+  formatOwnerDraftIssues,
+  mergeOwnerDraftIssues,
+  ownerIntegrationFieldPath,
+  ownerIntegrationIssueMessage,
+  type OwnerIntegrationIssue,
+  validateOwnerIntegrations,
+  withOwnerIntegrationEnabled,
+  withOwnerIntegrationUrl,
+  zodIssuesToOwnerIssues,
+} from "@/lib/owner-integration";
 import {
   localServiceSiteDraftSchema,
   type LocalServiceAttributes,
@@ -98,6 +112,9 @@ export function LocalServiceDashboard({
   const savedRevisionRef = useRef(initialRevision);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [integrationIssues, setIntegrationIssues] = useState<
+    OwnerIntegrationIssue[]
+  >([]);
 
   function change(mutator: (next: LocalServiceSiteDraft) => void) {
     const next = structuredClone(draftRef.current);
@@ -108,23 +125,28 @@ export function LocalServiceDashboard({
     setDirty(true);
     setNotice(null);
     setError(null);
+    setIntegrationIssues([]);
   }
 
   async function save(): Promise<number | null> {
     const submittedDraft = draftRef.current;
     const submittedMutationVersion = mutationVersionRef.current;
+    const ownerIssues = validateOwnerIntegrations(submittedDraft.integrations);
     const parsed = localServiceSiteDraftSchema.safeParse(submittedDraft);
-    if (!parsed.success) {
-      setError(
-        parsed.error.issues
-          .slice(0, 5)
-          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-          .join(" · "),
+    if (ownerIssues.length > 0 || !parsed.success) {
+      const issues = mergeOwnerDraftIssues(
+        ownerIssues,
+        parsed.success ? [] : zodIssuesToOwnerIssues(parsed.error.issues),
       );
+      setIntegrationIssues(
+        issues.filter((issue) => issue.path.startsWith("integrations.")),
+      );
+      setError(formatOwnerDraftIssues(issues) || "Check the draft fields");
       return null;
     }
     setSaving(true);
     setError(null);
+    setIntegrationIssues([]);
     try {
       const response = await fetch(`/api/sites/${submittedDraft.slug}`, {
         method: "PUT",
@@ -835,16 +857,10 @@ export function LocalServiceDashboard({
           actionLabel="Add link"
           onAdd={() =>
             change((next) => {
-              next.integrations.push({
-                type: "quote",
-                label: "Request a quote",
-                provider: null,
-                url: "https://example.com",
-                enabled: true,
-                venueId: null,
-              });
+              const integration = createOwnerIntegration({ type: "quote" });
+              next.integrations.push(integration);
               next.translations.forEach((translation) => {
-                translation.integrationLabels.push("Request a quote");
+                translation.integrationLabels.push(integration.label);
               });
             })
           }
@@ -879,30 +895,48 @@ export function LocalServiceDashboard({
                       }
                     />
                   </Field>
-                  <Field label="HTTPS destination" className="md:col-span-2">
+                  <Field
+                    label="HTTPS destination"
+                    className="md:col-span-2"
+                    error={ownerIntegrationIssueMessage(
+                      integrationIssues,
+                      ownerIntegrationFieldPath(index, "url"),
+                    )}
+                  >
                     <Input
                       type="url"
                       value={integration.url}
                       onChange={(event) =>
                         change((next) => {
-                          next.integrations[index].url = event.target.value;
+                          const current = next.integrations[index];
+                          if (!current) return;
+                          next.integrations[index] = withOwnerIntegrationUrl(
+                            current,
+                            event.target.value,
+                          );
                         })
                       }
                     />
                   </Field>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor={`integration-enabled-${index}`}>
+                      Visible in preview
+                    </Label>
+                    <Switch
+                      id={`integration-enabled-${index}`}
+                      aria-label="Visible in preview"
                       checked={integration.enabled}
-                      onChange={(event) =>
+                      disabled={!canEnableOwnerIntegration(integration.url)}
+                      onCheckedChange={(enabled) =>
                         change((next) => {
-                          next.integrations[index].enabled =
-                            event.target.checked;
+                          const current = next.integrations[index];
+                          if (!current) return;
+                          next.integrations[index] =
+                            withOwnerIntegrationEnabled(current, enabled);
                         })
                       }
-                    />{" "}
-                    Visible in preview
-                  </label>
+                    />
+                  </div>
                   <Button
                     variant="destructive"
                     size="sm"

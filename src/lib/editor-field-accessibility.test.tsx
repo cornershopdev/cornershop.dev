@@ -103,6 +103,7 @@ describe("owner editor field accessibility", () => {
         initialDraft={sampleFoodRetailDraft}
         initialRevision={7}
         initiallyPublished={false}
+        canSwitchWorkspace={false}
         platformUrl="https://bakery.cornershop.dev"
       />,
     );

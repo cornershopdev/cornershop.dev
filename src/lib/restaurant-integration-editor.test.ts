@@ -98,6 +98,8 @@ describe("restaurant integration editor", () => {
       "https://localhost/restaurant",
       "https://127.0.0.1/restaurant",
       "https://instagram.com:8443/osteria",
+      "https://example.com",
+      "https://www.example.org/order",
     ];
     for (const url of unsafeUrls) {
       const draft = {

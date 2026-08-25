@@ -60,6 +60,6 @@ export const sampleLocalServiceSiteDraft = localServiceSiteDraftSchema.parse({
   ],
   integrations: [
     { type: "contact", label: "Message on WhatsApp", provider: "WhatsApp", url: "https://wa.me/35679991122", enabled: true, venueId: null },
-    { type: "quote", label: "Request a written quote", provider: "Existing quote form", url: "https://example.com/harbour-electrical/quote", enabled: true, venueId: null },
+    { type: "quote", label: "Request a written quote", provider: "Existing quote form", url: "https://harbour-electrical.example/quote", enabled: true, venueId: null },
   ],
 });

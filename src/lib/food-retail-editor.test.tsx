@@ -66,7 +66,7 @@ function draftWithUiAdditions() {
     type: "ordering",
     label: FOOD_RETAIL_NEW_LINK_LABEL,
     provider: null,
-    url: "https://example.com/maison-levain/order",
+    url: "https://maison-levain.example/order",
     enabled: true,
     venueId: null,
   });
@@ -101,6 +101,7 @@ describe("food-retail bilingual dashboard editing", () => {
         initialDraft={draftWithUiAdditions()}
         initialRevision={7}
         initiallyPublished={false}
+        canSwitchWorkspace={false}
         platformUrl="https://bakery.cornershop.dev"
       />,
     );
