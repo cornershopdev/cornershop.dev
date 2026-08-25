@@ -107,6 +107,7 @@ describe("dependency audit workflow", () => {
       "package.json",
       "bun.lock",
       "bunfig.toml",
+      ".npmrc",
       "Dockerfile",
       ".github/dependabot.yml",
       ".github/workflows/**",

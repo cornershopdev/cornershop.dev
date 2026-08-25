@@ -82,7 +82,8 @@ supports version updates for the text `bun.lock` format from Bun 1.1.39 onward,
 but does not support Bun security-update pull requests. The root entry therefore
 uses `package-ecosystem: bun`, while `.github/workflows/dependency-audit.yml`
 provides the missing lockfile-native vulnerability detection. It runs for
-relevant dependency and workflow changes on pull requests and `main` pushes,
+relevant dependency and workflow changes — including `.npmrc`, which can
+reroute registry advisory lookups — on pull requests and `main` pushes,
 daily at 04:17 UTC, and on manual dispatch. The job installs Bun 1.3.14, validates
 that `package.json` and `bun.lock` agree with a frozen install while lifecycle
 scripts are disabled, then runs the exact unfiltered audit with Bash pipefail.
