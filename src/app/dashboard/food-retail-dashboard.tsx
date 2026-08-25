@@ -25,6 +25,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Vertical } from "@/generated/prisma/enums";
 import type { BrandIdentity } from "@/lib/brand";
 import {
+  canEnableOwnerIntegration,
+  createOwnerIntegration,
+  formatOwnerDraftIssues,
+  mergeOwnerDraftIssues,
+  ownerIntegrationFieldPath,
+  ownerIntegrationIssueMessage,
+  type OwnerIntegrationIssue,
+  validateOwnerIntegrations,
+  withOwnerIntegrationEnabled,
+  withOwnerIntegrationUrl,
+  zodIssuesToOwnerIssues,
+} from "@/lib/owner-integration";
+import {
   appendFoodRetailCategoryTranslations,
   appendFoodRetailIntegrationTranslations,
   appendFoodRetailItemTranslations,
@@ -45,6 +58,7 @@ export function FoodRetailDashboard({
   brand,
   initialDraft,
   initialRevision,
+  canSwitchWorkspace,
   initiallyPublished,
   platformUrl,
 }: {
@@ -52,6 +66,7 @@ export function FoodRetailDashboard({
   brand: BrandIdentity;
   initialDraft: FoodRetailSiteDraft;
   initialRevision: number;
+  canSwitchWorkspace: boolean;
   initiallyPublished: boolean;
   platformUrl: string;
 }) {
@@ -73,6 +88,9 @@ export function FoodRetailDashboard({
   const [published, setPublished] = useState(initiallyPublished);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [integrationIssues, setIntegrationIssues] = useState<
+    OwnerIntegrationIssue[]
+  >([]);
 
   function updateSection(
     sectionIndex: number,
@@ -170,17 +188,14 @@ export function FoodRetailDashboard({
         ...current,
         integrations: [
           ...current.integrations,
-          {
+          createOwnerIntegration({
             type: "ordering",
             label: FOOD_RETAIL_NEW_LINK_LABEL,
-            provider: null,
-            url: "",
-            enabled: true,
-            venueId: null,
-          },
+          }),
         ],
       }),
     );
+    setIntegrationIssues([]);
   }
 
   function removeIntegration(integrationIndex: number) {
@@ -225,13 +240,22 @@ export function FoodRetailDashboard({
 
   async function saveDraft(): Promise<number | null> {
     const submittedDraft = draft;
+    const ownerIssues = validateOwnerIntegrations(submittedDraft.integrations);
     const parsed = foodRetailSiteDraftSchema.safeParse(submittedDraft);
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Check the draft fields");
+    if (ownerIssues.length > 0 || !parsed.success) {
+      const issues = mergeOwnerDraftIssues(
+        ownerIssues,
+        parsed.success ? [] : zodIssuesToOwnerIssues(parsed.error.issues),
+      );
+      setIntegrationIssues(
+        issues.filter((issue) => issue.path.startsWith("integrations.")),
+      );
+      setError(formatOwnerDraftIssues(issues) || "Check the draft fields");
       return null;
     }
     setSaving(true);
     setError(null);
+    setIntegrationIssues([]);
     setNotice(null);
     try {
       const response = await fetch(`/api/sites/${draft.slug}`, {
@@ -328,7 +352,7 @@ export function FoodRetailDashboard({
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {email}
             </span>
-            <AccountActions canSwitch />
+            <AccountActions canSwitch={canSwitchWorkspace} />
           </div>
         </div>
       </header>
@@ -871,7 +895,7 @@ export function FoodRetailDashboard({
                   return (
                     <div
                       key={integrationIndex}
-                      className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[130px_1fr_1.4fr_auto]"
+                      className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[130px_1fr_minmax(0,1.4fr)_auto_auto]"
                     >
                       <select
                         aria-label={`Link ${integrationIndex + 1} type`}
@@ -917,18 +941,51 @@ export function FoodRetailDashboard({
                           )
                         }
                       />
-                      <Input
-                        aria-label={`Link ${integrationIndex + 1} URL`}
-                        type="url"
-                        placeholder="https://…"
-                        value={integration.url}
-                        onChange={(event) =>
+                      <Field
+                        label={`Link ${integrationIndex + 1} URL`}
+                        error={ownerIntegrationIssueMessage(
+                          integrationIssues,
+                          ownerIntegrationFieldPath(integrationIndex, "url"),
+                        )}
+                      >
+                        <Input
+                          aria-label={`Link ${integrationIndex + 1} URL`}
+                          type="url"
+                          placeholder="https://…"
+                          value={integration.url}
+                          onChange={(event) => {
+                            setIntegrationIssues([]);
+                            setDraft({
+                              ...draft,
+                              integrations: draft.integrations.map(
+                                (candidate, index) =>
+                                  index === integrationIndex
+                                    ? withOwnerIntegrationUrl(
+                                        candidate,
+                                        event.target.value,
+                                      )
+                                    : candidate,
+                              ),
+                            });
+                          }}
+                        />
+                      </Field>
+                      <Switch
+                        aria-label={`Show link ${integrationIndex + 1} publicly`}
+                        checked={integration.enabled}
+                        disabled={
+                          !canEnableOwnerIntegration(integration.url)
+                        }
+                        onCheckedChange={(enabled) =>
                           setDraft({
                             ...draft,
                             integrations: draft.integrations.map(
                               (candidate, index) =>
                                 index === integrationIndex
-                                  ? { ...candidate, url: event.target.value }
+                                  ? withOwnerIntegrationEnabled(
+                                      candidate,
+                                      enabled,
+                                    )
                                   : candidate,
                             ),
                           })

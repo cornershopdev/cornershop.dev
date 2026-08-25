@@ -29,7 +29,7 @@ describe("local-service JSON-LD", () => {
     ]);
     expect(jsonLd.potentialAction?.map(({ target }) => target)).toEqual([
       "https://wa.me/35679991122",
-      "https://example.com/harbour-electrical/quote",
+      "https://harbour-electrical.example/quote",
     ]);
   });
 

@@ -313,7 +313,7 @@ const sampleRestaurantFixture = restaurantDraftSchema.parse({
       type: "ordering",
       label: "Order collection",
       provider: "Existing ordering",
-      url: "https://example.com/order",
+      url: "https://osteria-luna.example/order",
     },
   ],
 });

@@ -135,7 +135,7 @@ export const sampleFoodRetailDraft = foodRetailSiteDraftSchema.parse({
       type: "ordering",
       label: "Preorder for pickup",
       provider: "Existing ordering",
-      url: "https://example.com/maison-levain/order",
+      url: "https://maison-levain.example/order",
       enabled: true,
       venueId: null,
     },
