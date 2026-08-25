@@ -66,7 +66,7 @@ import {
 } from "@/lib/owner-operations";
 import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import { listRestaurantThemeManifests } from "@/lib/site-themes/restaurant/registry";
-import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring";
+import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring-diff";
 import {
   parseRestaurantThemeSelection,
   restoreAutomaticRestaurantTheme,

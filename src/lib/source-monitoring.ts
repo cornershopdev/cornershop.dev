@@ -14,8 +14,15 @@ import { emailReplyTo, emailSender } from "@/lib/email-identity";
 import { getResend } from "@/lib/resend";
 import {
   buildSourceMonitoringDiff,
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  linksSuggestionSchema,
+  menuSuggestionSchema,
+  monitoringFieldValue,
+  parseSourceMonitoringSuggestionValue,
+  SourceMonitoringUnsupportedSuggestionError,
   type MonitoringSuggestionInput,
   type SourceEvidence,
+  type SourceMonitoringDashboardDto,
 } from "@/lib/source-monitoring-diff";
 import {
   monitoringEntitlement,
@@ -28,29 +35,21 @@ import {
 } from "@/lib/site-persistence";
 import { projectSiteDraft, siteDraftRelations } from "@/lib/sites";
 import { crawlSiteSource, generateDraftForVertical } from "@/lib/site-pipeline";
-import {
-  businessHoursSchema,
-  catalogSectionSchema,
-  integrationSchema,
-} from "@/lib/verticals/schema";
+import { businessHoursSchema } from "@/lib/verticals/schema";
 import { resolveVerticalConfig } from "@/lib/verticals/registry";
 import type { VerticalId } from "@/lib/verticals/types";
+
+export {
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  SourceMonitoringUnsupportedSuggestionError,
+  type SourceMonitoringDashboardDto,
+};
 
 const DAY_MS = 24 * 60 * 60_000;
 const MAX_DISPATCH = 200;
 const contactSchema = z.object({
   address: z.string().max(220),
   phone: z.string().max(40),
-});
-const menuSchema = z.array(catalogSectionSchema).min(1).max(12);
-const linksSchema = z.array(integrationSchema).max(12);
-const menuSuggestionSchema = z.object({
-  catalogSections: menuSchema,
-  translations: z.array(z.unknown()).max(8),
-});
-const linksSuggestionSchema = z.object({
-  integrations: linksSchema,
-  translations: z.array(z.unknown()).max(8),
 });
 
 export class SourceMonitoringConflictError extends Error {
@@ -59,36 +58,6 @@ export class SourceMonitoringConflictError extends Error {
     this.name = "SourceMonitoringConflictError";
   }
 }
-
-export type SourceMonitoringDashboardDto = {
-  cadenceDays: number | null;
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-  lastSuccessAt: string | null;
-  lastFailureAt: string | null;
-  lastFailureCode: string | null;
-  latestRun: {
-    id: string;
-    status: string;
-    scheduledFor: string;
-    completedAt: string | null;
-    suggestionCount: number;
-    checkedSourceCount: number;
-    failedSourceCount: number;
-    notificationFailureCode: string | null;
-  } | null;
-  suggestions: Array<{
-    id: string;
-    field: SourceMonitorSuggestionField;
-    path: string;
-    currentValue: unknown;
-    suggestedValue: unknown;
-    editedValue: unknown;
-    evidence: SourceEvidence[];
-    status: string;
-    createdAt: string;
-  }>;
-};
 
 export async function dispatchDueSourceMonitoring(
   now = new Date(),
@@ -567,7 +536,7 @@ export async function reviewSourceMonitoringSuggestion(input: {
       if (!sameJsonValue(currentValue, suggestion.currentValue)) {
         throw new SourceMonitoringConflictError();
       }
-      const proposedValue = parseSuggestionValue(
+      const proposedValue = parseSourceMonitoringSuggestionValue(
         suggestion.field,
         input.editedValue ?? suggestion.suggestedValue,
         currentDraft,
@@ -672,51 +641,6 @@ async function persistSuccessfulRun(
   );
 }
 
-function monitoringFieldValue(
-  draft: PersistableSiteDraft,
-  field: SourceMonitorSuggestionField,
-) {
-  if (field === "CONTACT") {
-    return { address: draft.address, phone: draft.phone };
-  }
-  if (field === "HOURS") return draft.businessHours;
-  if (field === "MENU") {
-    return {
-      catalogSections: draft.catalogSections,
-      translations: draft.translations,
-    };
-  }
-  return {
-    integrations: draft.integrations,
-    translations: draft.translations,
-  };
-}
-
-function parseSuggestionValue(
-  field: SourceMonitorSuggestionField,
-  value: unknown,
-  current: PersistableSiteDraft,
-  vertical: Vertical,
-) {
-  const parsed =
-    field === "CONTACT"
-      ? contactSchema.parse(value)
-      : field === "HOURS"
-        ? businessHoursSchema.parse(value)
-        : field === "MENU"
-          ? menuSuggestionSchema.parse(value)
-          : linksSuggestionSchema.parse(value);
-  const config = resolveVerticalConfig(vertical);
-  config.draftSchema.parse({
-    ...current,
-    ...(field === "CONTACT" ? parsed : {}),
-    ...(field === "HOURS" ? { businessHours: parsed } : {}),
-    ...(field === "MENU" ? parsed : {}),
-    ...(field === "LINKS" ? parsed : {}),
-  });
-  return parsed;
-}
-
 async function applySuggestionValue(
   transaction: Prisma.TransactionClient,
   siteId: string,
@@ -765,6 +689,7 @@ async function applySuggestionValue(
         label: link.label,
         provider: link.provider,
         url: link.url,
+        enabled: link.enabled,
         venueId: link.venueId,
         position,
       })),
@@ -797,6 +722,7 @@ async function applySuggestionValue(
             description: item.description,
             price: item.price,
             currency: item.currency,
+            available: item.available,
             attributes: config.itemAttributesSchema.parse(
               item.attributes,
             ) as Prisma.InputJsonValue,

@@ -12,7 +12,10 @@ import { isOwnerOperationEnabled } from "@/lib/owner-operations";
 import { loadOwnerPaidWorkspace } from "@/lib/owner-workspace";
 import { getRestaurantOwnerDraft } from "@/lib/restaurants";
 import { sampleRestaurant } from "@/lib/restaurant";
-import { getSourceMonitoringDashboard } from "@/lib/source-monitoring";
+import {
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  getSourceMonitoringDashboard,
+} from "@/lib/source-monitoring";
 import { resolveRequestBrand } from "@/lib/verticals/request-site";
 import { resolveOwnerOperations } from "@/lib/verticals/registry";
 import { UnsupportedVerticalDashboard } from "@/app/dashboard/unsupported-vertical-dashboard";
@@ -49,9 +52,13 @@ export default async function DashboardPage({
   if (session && (!access || !access.ok)) redirect("/sign-in");
 
   if (access?.ok && access.site.vertical === Vertical.FOOD_RETAIL) {
-    const [loaded, paid] = await Promise.all([
+    const capabilities = resolveOwnerOperations(access.site.vertical);
+    const [loaded, paid, sourceMonitoring] = await Promise.all([
       findSiteDraft(access.site.slug),
       loadOwnerPaidWorkspace(access),
+      isOwnerOperationEnabled(capabilities.sourceMonitoring)
+        ? getSourceMonitoringDashboard(access.site.id)
+        : EMPTY_SOURCE_MONITORING_DASHBOARD,
     ]);
     if (!loaded || loaded.vertical !== Vertical.FOOD_RETAIL)
       redirect("/sign-in");
@@ -71,15 +78,20 @@ export default async function DashboardPage({
           ownerOperations={paid.capabilities}
           billingAccess={paid.billingAccess}
           publicationHistory={paid.publicationHistory}
+          sourceMonitoring={sourceMonitoring}
         />
       </EditorialFontScope>
     );
   }
 
   if (access?.ok && access.site.vertical === Vertical.LOCAL_SERVICE) {
-    const [loaded, paid] = await Promise.all([
+    const capabilities = resolveOwnerOperations(access.site.vertical);
+    const [loaded, paid, sourceMonitoring] = await Promise.all([
       findSiteDraft(access.site.slug),
       loadOwnerPaidWorkspace(access),
+      isOwnerOperationEnabled(capabilities.sourceMonitoring)
+        ? getSourceMonitoringDashboard(access.site.id)
+        : EMPTY_SOURCE_MONITORING_DASHBOARD,
     ]);
     if (!loaded || loaded.vertical !== Vertical.LOCAL_SERVICE) {
       redirect("/sign-in");
@@ -100,6 +112,7 @@ export default async function DashboardPage({
           ownerOperations={paid.capabilities}
           billingAccess={paid.billingAccess}
           publicationHistory={paid.publicationHistory}
+          sourceMonitoring={sourceMonitoring}
         />
       </EditorialFontScope>
     );
@@ -124,16 +137,6 @@ export default async function DashboardPage({
     awaitingContact: 0,
     truncated: false,
   };
-  const emptySourceMonitoring = {
-    cadenceDays: null,
-    nextRunAt: null,
-    lastRunAt: null,
-    lastSuccessAt: null,
-    lastFailureAt: null,
-    lastFailureCode: null,
-    latestRun: null,
-    suggestions: [],
-  };
   const restaurantCapabilities = access?.ok
     ? resolveOwnerOperations(access.site.vertical)
     : resolveOwnerOperations(Vertical.RESTAURANT);
@@ -155,7 +158,7 @@ export default async function DashboardPage({
         loadOwnerPaidWorkspace(access),
         isOwnerOperationEnabled(restaurantCapabilities.sourceMonitoring)
           ? getSourceMonitoringDashboard(access.site.id)
-          : emptySourceMonitoring,
+          : EMPTY_SOURCE_MONITORING_DASHBOARD,
       ])
     : [
         { draft: sampleRestaurant, revision: 0 },
@@ -168,7 +171,7 @@ export default async function DashboardPage({
           workspaces: [],
           canSwitchWorkspace: false,
         },
-        emptySourceMonitoring,
+        EMPTY_SOURCE_MONITORING_DASHBOARD,
       ];
 
   // A claimed restaurant without a loadable draft is a data integrity problem,

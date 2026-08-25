@@ -123,6 +123,12 @@ describe("dashboard tab and settings surface", () => {
     expect(dashboard).toContain(
       "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
     );
+    expect(foodRetailDashboard).toContain(
+      "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
+    );
+    expect(localServiceDashboard).toContain(
+      "onAcceptedDraft={applyAcceptedSourceMonitoringDraft}",
+    );
     expect(sourceMonitoringPanel).toContain(
       "onAcceptedDraft({ revision: acceptedRevision, draft: result.draft })",
     );

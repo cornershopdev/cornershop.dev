@@ -18,6 +18,7 @@ import {
   OwnerPaidOperationsSection,
   useOwnerPaidOperations,
 } from "@/components/owner-paid-operations";
+import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,10 @@ import {
   ownerOperationUnavailableMessage,
   type ClientPublicationHistoryItem,
 } from "@/lib/owner-operations";
+import {
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  type SourceMonitoringDashboardDto,
+} from "@/lib/source-monitoring-diff";
 import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import {
   canEnableOwnerIntegration,
@@ -108,6 +113,7 @@ export function LocalServiceDashboard({
   ownerOperations = localServiceOwnerOperations,
   billingAccess = null,
   publicationHistory = [],
+  sourceMonitoring = EMPTY_SOURCE_MONITORING_DASHBOARD,
 }: {
   initialDraft: LocalServiceSiteDraft;
   initialRevision: number;
@@ -119,6 +125,7 @@ export function LocalServiceDashboard({
   ownerOperations?: VerticalOwnerOperations;
   billingAccess?: BillingAccess | null;
   publicationHistory?: ClientPublicationHistoryItem[];
+  sourceMonitoring?: SourceMonitoringDashboardDto;
 }) {
   const [draft, setDraftState] = useState(initialDraft);
   const draftRef = useRef(initialDraft);
@@ -284,6 +291,20 @@ export function LocalServiceDashboard({
     }
   }
 
+  function applyAcceptedSourceMonitoringDraft(input: {
+    revision: number;
+    draft: unknown;
+  }) {
+    const accepted = localServiceSiteDraftSchema.parse(input.draft);
+    draftRef.current = accepted;
+    savedRevisionRef.current = input.revision;
+    setDraftState(accepted);
+    setSavedRevision(input.revision);
+    setDirty(false);
+    setNotice("Source suggestion saved to the private draft.");
+    setError(null);
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border/70">
@@ -383,6 +404,17 @@ export function LocalServiceDashboard({
         <div className="mt-8">
           <OwnerPaidOperationsSection paid={paidOps} />
         </div>
+        {isOwnerOperationEnabled(ownerOperations.sourceMonitoring) ? (
+          <div className="mt-8">
+            <SourceMonitoringPanel
+              siteSlug={draft.slug}
+              initial={sourceMonitoring}
+              draftRevision={savedRevision}
+              hasUnsavedChanges={dirty}
+              onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Card>

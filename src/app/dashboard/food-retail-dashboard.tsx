@@ -20,6 +20,7 @@ import {
   OwnerPaidOperationsSection,
   useOwnerPaidOperations,
 } from "@/components/owner-paid-operations";
+import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +38,10 @@ import {
   ownerOperationUnavailableMessage,
   type ClientPublicationHistoryItem,
 } from "@/lib/owner-operations";
+import {
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  type SourceMonitoringDashboardDto,
+} from "@/lib/source-monitoring-diff";
 import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import {
   canEnableOwnerIntegration,
@@ -78,6 +83,7 @@ export function FoodRetailDashboard({
   ownerOperations = foodRetailOwnerOperations,
   billingAccess = null,
   publicationHistory = [],
+  sourceMonitoring = EMPTY_SOURCE_MONITORING_DASHBOARD,
 }: {
   email: string;
   brand: BrandIdentity;
@@ -89,9 +95,11 @@ export function FoodRetailDashboard({
   ownerOperations?: VerticalOwnerOperations;
   billingAccess?: BillingAccess | null;
   publicationHistory?: ClientPublicationHistoryItem[];
+  sourceMonitoring?: SourceMonitoringDashboardDto;
 }) {
   const [draft, setDraftState] = useState(initialDraft);
   const draftRef = useRef(initialDraft);
+  const [persistedDraft, setPersistedDraft] = useState(initialDraft);
   function setDraft(
     next:
       | FoodRetailSiteDraft
@@ -309,6 +317,7 @@ export function FoodRetailDashboard({
       setDraft((current) =>
         reconcileFoodRetailDraftAfterSave(submittedDraft, parsed.data, current),
       );
+      if (!hadNewerEdits) setPersistedDraft(parsed.data);
       setRevision(result.revision);
       if (hadNewerEdits) {
         setError(
@@ -390,6 +399,18 @@ export function FoodRetailDashboard({
     } finally {
       setPublishing(false);
     }
+  }
+
+  function applyAcceptedSourceMonitoringDraft(input: {
+    revision: number;
+    draft: unknown;
+  }) {
+    const accepted = foodRetailSiteDraftSchema.parse(input.draft);
+    setDraft(accepted);
+    setPersistedDraft(accepted);
+    setRevision(input.revision);
+    setNotice("Source suggestion saved to the private draft.");
+    setError(null);
   }
 
   return (
@@ -484,6 +505,17 @@ export function FoodRetailDashboard({
           </Card>
 
           <OwnerPaidOperationsSection paid={paidOps} />
+          {isOwnerOperationEnabled(ownerOperations.sourceMonitoring) ? (
+            <SourceMonitoringPanel
+              siteSlug={draft.slug}
+              initial={sourceMonitoring}
+              draftRevision={revision}
+              hasUnsavedChanges={
+                JSON.stringify(draft) !== JSON.stringify(persistedDraft)
+              }
+              onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

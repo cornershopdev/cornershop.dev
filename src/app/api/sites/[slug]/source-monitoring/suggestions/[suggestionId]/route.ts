@@ -8,10 +8,12 @@ import {
 import {
   reviewSourceMonitoringSuggestion,
   SourceMonitoringConflictError,
+  SourceMonitoringUnsupportedSuggestionError,
 } from "@/lib/source-monitoring";
 import { getSourceMonitoringAccess } from "@/lib/source-monitoring-access";
 import { isSameOriginMutation } from "@/lib/request-origin";
 import { DraftRevisionConflictError } from "@/lib/site-persistence";
+import { resolveVerticalConfig } from "@/lib/verticals/registry";
 
 const reviewSchema = z.discriminatedUnion("action", [
   z.object({
@@ -53,9 +55,8 @@ export async function PATCH(
       ...parsed.data,
     });
     const ownerDraft =
-      result.status === "ACCEPTED" &&
-      result.vertical === Vertical.RESTAURANT
-        ? toRestaurantDraft(restaurantSiteDraftSchema.parse(result.draft))
+      result.status === "ACCEPTED" && result.vertical && result.draft !== undefined
+        ? toOwnerReviewDraft(result.vertical, result.draft)
         : undefined;
     return Response.json({
       status: result.status,
@@ -76,9 +77,18 @@ export async function PATCH(
     if (error instanceof SourceMonitoringConflictError) {
       return Response.json({ error: error.message }, { status: 409 });
     }
+    if (error instanceof SourceMonitoringUnsupportedSuggestionError) {
+      return Response.json(
+        { error: error.message, code: "UNSUPPORTED_SUGGESTION" },
+        { status: 422 },
+      );
+    }
     if (error instanceof z.ZodError) {
       return Response.json(
-        { error: "The edited suggestion is not valid for this site" },
+        {
+          error:
+            "This suggestion is not valid for this workspace. Nothing was saved to the private draft.",
+        },
         { status: 422 },
       );
     }
@@ -92,4 +102,11 @@ export async function PATCH(
       { status: 500 },
     );
   }
+}
+
+function toOwnerReviewDraft(vertical: Vertical, draft: unknown) {
+  if (vertical === Vertical.RESTAURANT) {
+    return toRestaurantDraft(restaurantSiteDraftSchema.parse(draft));
+  }
+  return resolveVerticalConfig(vertical).draftSchema.parse(draft);
 }

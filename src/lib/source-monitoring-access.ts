@@ -5,6 +5,9 @@ import {
   type AccessFailure,
 } from "@/lib/authorization";
 import { getDb } from "@/lib/db";
+import { ownerOperationUnavailableMessage } from "@/lib/owner-operations";
+import { resolveOwnerOperations } from "@/lib/verticals/registry";
+import type { VerticalId } from "@/lib/verticals/types";
 
 export type SourceMonitoringAccess =
   | {
@@ -23,6 +26,8 @@ export async function getSourceMonitoringAccess(
 ): Promise<SourceMonitoringAccess> {
   const owner = await getSiteAccess(siteSlug);
   if (owner.ok) {
+    const denied = sourceMonitoringUnavailable(owner.site.vertical);
+    if (denied) return denied;
     return {
       ok: true,
       site: { id: owner.site.id, slug: owner.site.slug },
@@ -38,7 +43,7 @@ export async function getSourceMonitoringAccess(
   if (!operator) return owner;
   const site = await getDb().site.findUnique({
     where: { slug: siteSlug },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, vertical: true },
   });
   if (!site) {
     return {
@@ -47,13 +52,27 @@ export async function getSourceMonitoringAccess(
       message: "Site access is required",
     };
   }
+  const denied = sourceMonitoringUnavailable(site.vertical);
+  if (denied) return denied;
   return {
     ok: true,
-    site,
+    site: { id: site.id, slug: site.slug },
     actor: {
       id: operator.id,
       email: operator.email,
       role: "operator",
     },
+  };
+}
+
+function sourceMonitoringUnavailable(
+  vertical: VerticalId,
+): AccessFailure | null {
+  const state = resolveOwnerOperations(vertical).sourceMonitoring;
+  if (state === "enabled") return null;
+  return {
+    ok: false,
+    status: 403,
+    message: ownerOperationUnavailableMessage("sourceMonitoring", state),
   };
 }

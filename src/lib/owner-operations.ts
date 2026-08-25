@@ -132,15 +132,16 @@ export const restaurantOwnerOperations = {
 } as const satisfies VerticalOwnerOperations;
 
 /**
- * Food-retail and local-service share billing, publication, domain, and
- * workspace switching. Monitoring, articles, and the photo library stay
- * explicit not-yet states until those issues ship.
+ * Food-retail and local-service share billing, publication, domain,
+ * workspace switching, and source-monitoring review. Articles, analytics,
+ * leads, and the photo library stay explicit not-yet states until those
+ * issues ship.
  */
 export const foodRetailOwnerOperations = {
   ...paidOwnerReviewOperations,
   analytics: "not-yet",
   bookingInbox: "not-yet",
-  sourceMonitoring: "not-yet",
+  sourceMonitoring: "enabled",
   articles: "not-yet",
   photoLibrary: "not-yet",
 } as const satisfies VerticalOwnerOperations;

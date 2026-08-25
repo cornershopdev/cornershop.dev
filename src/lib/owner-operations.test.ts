@@ -61,6 +61,9 @@ describe("owner operations capability model", () => {
     expect(localServiceDashboard).toContain("useOwnerPaidOperations");
     expect(foodRetailDashboard).toContain("OwnerPaidOperationsSection");
     expect(localServiceDashboard).toContain("OwnerPaidOperationsSection");
+    expect(dashboardPage).toContain("getSourceMonitoringDashboard(access.site.id)");
+    expect(foodRetailDashboard).toContain("SourceMonitoringPanel");
+    expect(localServiceDashboard).toContain("SourceMonitoringPanel");
   });
 
   it("enables billing, publication, domain, and workspace switching for owner-review verticals", () => {
@@ -78,20 +81,23 @@ describe("owner operations capability model", () => {
     }
   });
 
-  it("keeps food-retail and local-service monitoring, articles, and photos explicit not-yet states", () => {
+  it("enables source monitoring for owner-review verticals and keeps later surfaces explicit not-yet", () => {
+    for (const id of [
+      Vertical.RESTAURANT,
+      Vertical.FOOD_RETAIL,
+      Vertical.LOCAL_SERVICE,
+    ] as const) {
+      expect(resolveOwnerOperations(id).sourceMonitoring).toBe("enabled");
+    }
     for (const ops of [
       resolveOwnerOperations(Vertical.FOOD_RETAIL),
       resolveOwnerOperations(Vertical.LOCAL_SERVICE),
     ]) {
-      expect(ops.sourceMonitoring).toBe("not-yet");
       expect(ops.articles).toBe("not-yet");
       expect(ops.photoLibrary).toBe("not-yet");
       expect(ops.analytics).toBe("not-yet");
       expect(ops.bookingInbox).toBe("not-yet");
     }
-    expect(resolveOwnerOperations(Vertical.RESTAURANT).sourceMonitoring).toBe(
-      "enabled",
-    );
   });
 
   it("fails closed for beauty paid operations even if a leftover enabled flag is present", () => {
