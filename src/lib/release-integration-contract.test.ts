@@ -58,6 +58,14 @@ describe("release integration contract", () => {
     expect(deployScript).not.toMatch(/if \(\s*\n/);
   });
 
+  it("ships the article rollout operator used by production deploys", async () => {
+    const dockerfile = await readRepoFile("Dockerfile");
+    expect(dockerfile).toContain("bun build scripts/article-rollout.ts");
+    expect(dockerfile).toContain(
+      "--outfile=.operator-scripts/article-rollout.ts",
+    );
+  });
+
   it("keeps the browser journey as a production deploy dependency", async () => {
     const ci = await readRepoFile(".github/workflows/ci.yml");
     expect(ci).toMatch(
