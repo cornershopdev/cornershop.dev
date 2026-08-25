@@ -235,11 +235,14 @@ export function interceptOwnerNavigationClick(
   if (!anchor || anchor.download) return;
   if (anchor.target === "_blank" || anchor.target === "_new") return;
   const href = anchor.href;
-  if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+  if (!href || href.startsWith("#")) return;
   let destination: URL;
   try {
     destination = new URL(href, window.location.href);
   } catch {
+    return;
+  }
+  if (destination.protocol !== "http:" && destination.protocol !== "https:") {
     return;
   }
   if (destination.origin !== window.location.origin) return;

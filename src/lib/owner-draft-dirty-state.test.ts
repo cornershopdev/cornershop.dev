@@ -320,6 +320,36 @@ describe("owner draft navigation and unload guards", () => {
     expect(api.confirm).not.toHaveBeenCalled();
     api.restore();
   });
+
+  it("does not intercept javascript, data, or vbscript hrefs", () => {
+    const api = installWindow(() => false);
+    for (const href of [
+      "javascript:void(0)",
+      "data:text/html,hi",
+      "vbscript:msgbox(1)",
+    ]) {
+      api.confirm.mockClear();
+      let prevented = false;
+      interceptOwnerNavigationClick(
+        {
+          target: fakeAnchor(href),
+          preventDefault() {
+            prevented = true;
+          },
+          defaultPrevented: false,
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          button: 0,
+        },
+        true,
+      );
+      expect(prevented).toBe(false);
+      expect(api.confirm).not.toHaveBeenCalled();
+    }
+    api.restore();
+  });
 });
 
 function fakeAnchor(href: string, target = "") {
