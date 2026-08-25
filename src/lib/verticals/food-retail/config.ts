@@ -20,6 +20,7 @@ import {
   resolveFoodRetailTemplateFromAttributes,
   type FoodRetailTemplate,
 } from "@/lib/verticals/food-retail/templates";
+import { foodRetailOwnerOperations } from "@/lib/owner-operations";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const foodRetailDictionaryExtensions = {
@@ -137,6 +138,7 @@ export const foodRetailConfig = {
   claimMode: "factory",
   publicationEnabled: true,
   publicationMutationEnabled: true,
+  ownerOperations: foodRetailOwnerOperations,
   integrationTypes: ["ordering", "delivery", "social"],
   attributesSchema: foodRetailAttributesSchema,
   attributeDefaults: {

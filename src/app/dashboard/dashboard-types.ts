@@ -1,3 +1,5 @@
+export type { ClientPublicationHistoryItem } from "@/lib/owner-operations";
+
 export type DomainSetup = {
   hostname: string;
   hostnames: string[];

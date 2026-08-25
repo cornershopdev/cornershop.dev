@@ -1,14 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
   BookOpenText,
   Check,
   CircleCheck,
-  Copy,
-  CreditCard,
   ExternalLink,
   Eye,
   Globe2,
@@ -24,9 +22,7 @@ import {
   Rocket,
   Save,
   Settings,
-  Trash2,
   TrendingUp,
-  TriangleAlert,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { AccountActions } from "@/components/account-actions";
@@ -38,6 +34,13 @@ import {
 import { RestaurantIntegrationEditor } from "@/components/restaurant-integration-editor";
 import { RestaurantMenuEditor } from "@/components/restaurant-menu-editor";
 import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
+import {
+  OwnerBillingBanner,
+  OwnerBillingButton,
+  OwnerDomainPanel,
+  OwnerPublicationHistoryCard,
+  useOwnerPaidOperations,
+} from "@/components/owner-paid-operations";
 import { PhotoLibraryPanel } from "@/components/photo-library-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,9 +59,14 @@ import {
   ownerPreviewHref,
   proAppPath,
 } from "@/lib/cornershop-pro";
-import type { SitePublicationHistoryItem } from "@/lib/site-publication";
+import {
+  isOwnerOperationEnabled,
+  restaurantOwnerOperations,
+  type ClientPublicationHistoryItem,
+} from "@/lib/owner-operations";
+import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import { listRestaurantThemeManifests } from "@/lib/site-themes/restaurant/registry";
-import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring";
+import type { SourceMonitoringDashboardDto } from "@/lib/source-monitoring-diff";
 import {
   parseRestaurantThemeSelection,
   restoreAutomaticRestaurantTheme,
@@ -84,14 +92,12 @@ import {
   validateRestaurantMenuDraft,
   type RestaurantMenuMutation,
 } from "@/lib/restaurant-menu-editor";
-import type { DomainSetup } from "@/app/dashboard/dashboard-types";
+import {
+  OwnerDraftDirtyGuard,
+  ownerDraftNavigationProps,
+  useOwnerDraftDirtyState,
+} from "@/lib/owner-draft-dirty-state";
 
-type ClientPublicationHistoryItem = Omit<
-  SitePublicationHistoryItem,
-  "publishedAt"
-> & {
-  publishedAt: string;
-};
 
 /**
  * `brand` is resolved on the server from the host the owner signed in through,
@@ -112,6 +118,7 @@ export function Dashboard({
   canSwitchWorkspace,
   sourceMonitoring,
   platformUrl,
+  ownerOperations = restaurantOwnerOperations,
 }: {
   initialDraft: RestaurantDraft;
   initialDraftRevision: number;
@@ -126,25 +133,28 @@ export function Dashboard({
   canSwitchWorkspace: boolean;
   sourceMonitoring: SourceMonitoringDashboardDto;
   platformUrl: string;
+  ownerOperations?: VerticalOwnerOperations;
 }) {
-  const [draft, setDraftState] = useState(initialDraft);
-  const draftRef = useRef(initialDraft);
-  const [persistedDraft, setPersistedDraft] = useState(initialDraft);
-  function setDraft(
-    next:
-      | RestaurantDraft
-      | ((current: RestaurantDraft) => RestaurantDraft),
-  ) {
-    const resolved = typeof next === "function" ? next(draftRef.current) : next;
-    draftRef.current = resolved;
-    setDraftState(resolved);
-  }
+  const {
+    draft,
+    baseline,
+    revision: savedRevision,
+    dirty,
+    draftRef,
+    setDraft,
+    applyAuxiliary,
+    setRevision,
+    beginSave,
+    acknowledgeSave,
+    adoptServerDraft,
+  } = useOwnerDraftDirtyState(initialDraft, initialDraftRevision);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [savedRevision, setSavedRevision] = useState(initialDraftRevision);
-  const handlePhotoRevision = useCallback((revision: number) => {
-    setSavedRevision(revision);
-  }, []);
+  const handlePhotoRevision = useCallback(
+    (revision: number) => {
+      setRevision(revision);
+    },
+    [setRevision],
+  );
   const handlePhotoHeroChange = useCallback(
     (
       hero: {
@@ -153,14 +163,14 @@ export function Dashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       } | null,
     ) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         heroImageUrl: hero?.url ?? null,
         heroOriginalImageUrl: hero?.originalUrl ?? null,
         heroImageProvenance: hero?.provenance ?? null,
       }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoGalleryChange = useCallback(
     (
@@ -170,9 +180,9 @@ export function Dashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       }>,
     ) => {
-      setDraft((current) => ({ ...current, galleryImages }));
+      applyAuxiliary((current) => ({ ...current, galleryImages }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoCatalogChange = useCallback(
     (change: {
@@ -182,7 +192,7 @@ export function Dashboard({
       originalUrl: string | null;
       provenance: "official" | "owner" | "permissioned-ugc" | null;
     }) => {
-      setDraft((current) => ({
+      applyAuxiliary((current) => ({
         ...current,
         menuSections: current.menuSections.map((section, sectionIndex) =>
           sectionIndex !== change.sectionIndex
@@ -203,29 +213,28 @@ export function Dashboard({
         ),
       }));
     },
-    [],
+    [applyAuxiliary],
   );
   const [publishing, setPublishing] = useState(false);
-  const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [domain, setDomain] = useState("");
-  const [domainSetup, setDomainSetup] = useState<DomainSetup | null>(null);
-  const [domainError, setDomainError] = useState<string | null>(null);
-  const [domainNotice, setDomainNotice] = useState<string | null>(null);
-  const [domainLoading, setDomainLoading] = useState(false);
-  const [portalLoading, setPortalLoading] = useState(false);
   const [themeDirty, setThemeDirty] = useState(false);
-  const [rollbackLoading, setRollbackLoading] = useState<string | null>(null);
-  const [publicationHistory, setPublicationHistory] = useState(
+  const paidOps = useOwnerPaidOperations({
+    siteSlug: initialDraft.slug,
+    platformUrl,
+    brandName: brand.name,
+    capabilities: ownerOperations,
+    billingAccess,
     initialPublicationHistory,
-  );
-  const isPublished =
-    publishedVersion !== null ||
-    publicationHistory.some((item) => item.current);
-  const liveUrl =
-    domainSetup?.verified && domainSetup.hostname
-      ? `https://${domainSetup.hostname}`
-      : platformUrl;
+    isDemo: demo,
+  });
+  const {
+    publishedVersion,
+    isPublished,
+    liveUrl,
+    publicationHistory,
+    recordPublished,
+    markDraftUnpublished,
+  } = paidOps;
   const siteHref = isPublished ? liveUrl : ownerPreviewHref(draft.slug);
   const overview = buildRestaurantDashboardOverview(draft);
   const launchChecklist = [
@@ -235,7 +244,7 @@ export function Dashboard({
     { label: "Site published", complete: isPublished },
     {
       label: "Custom domain connected",
-      complete: Boolean(domainSetup?.verified),
+      complete: Boolean(paidOps.domainSetup?.verified),
     },
   ];
   const connectedApps = draft.integrations.filter(
@@ -271,36 +280,9 @@ export function Dashboard({
     null,
   );
 
-  useEffect(() => {
-    if (demo) return;
-    let active = true;
-    void fetch(`/api/domains?siteSlug=${encodeURIComponent(draft.slug)}`, {
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        const result = (await response.json()) as {
-          domains?: DomainSetup[];
-          error?: string;
-        };
-        if (!response.ok) throw new Error(result.error ?? "Could not load domain");
-        if (!active || !result.domains?.[0]) return;
-        setDomainSetup(result.domains[0]);
-        setDomain(result.domains[0].hostname);
-      })
-      .catch((caught) => {
-        if (active) {
-          setDomainError(
-            caught instanceof Error ? caught.message : "Could not load domain",
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [demo, draft.slug]);
-
   async function save(): Promise<number | null> {
-    const requestedDraft = structuredClone(draftRef.current);
+    const submitted = beginSave();
+    const requestedDraft = structuredClone(submitted.submittedDraft);
     const validationIssues = validateRestaurantMenuDraft(requestedDraft);
     const integrationIssues = validateRestaurantIntegrations(requestedDraft);
     setMenuValidationIssues(validationIssues);
@@ -319,19 +301,18 @@ export function Dashboard({
       return null;
     }
     setSaving(true);
-    setSaved(false);
     setPublishError(null);
     setMenuSaveError(null);
     setIntegrationSaveError(null);
     try {
-      let persistedRevision = savedRevision;
+      let persistedRevision = submitted.expectedRevision;
       if (!demo) {
-        const response = await fetch(`/api/sites/${draft.slug}`, {
+        const response = await fetch(`/api/sites/${requestedDraft.slug}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...requestedDraft,
-            expectedRevision: savedRevision,
+            expectedRevision: submitted.expectedRevision,
           }),
         });
         const result = (await response.json()) as {
@@ -345,28 +326,28 @@ export function Dashboard({
         if (!Number.isInteger(result.revision) || result.revision === undefined) {
           throw new Error("Save response did not include a draft revision");
         }
-        setSavedRevision(result.revision);
         persistedRevision = result.revision;
       }
-      setPersistedDraft(requestedDraft);
-      if (
-        JSON.stringify(draftRef.current) !== JSON.stringify(requestedDraft)
-      ) {
+      const acknowledged = acknowledgeSave({
+        submittedDraft: requestedDraft,
+        persistedDraft: requestedDraft,
+        submittedMutationVersion: submitted.submittedMutationVersion,
+        savedRevision: persistedRevision,
+      });
+      if (acknowledged.hadNewerEdits) {
         const message =
           "New edits were made while saving. Save them before publishing.";
-        setSaved(false);
         setPublishError(message);
         setMenuSaveError(message);
         setIntegrationSaveError(message);
         return null;
       }
-      setSaved(true);
       setThemeDirty(false);
       setMenuDirty(false);
       setIntegrationDirty(false);
       setMenuValidationIssues([]);
       setIntegrationValidationIssues([]);
-      setPublishedVersion(null);
+      markDraftUnpublished();
       return persistedRevision;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Save failed";
@@ -411,7 +392,13 @@ export function Dashboard({
       const revisionToPublish = await save();
       if (revisionToPublish === null) return;
       if (demo) {
-        setPublishedVersion(1);
+        recordPublished({
+          id: "demo-publish",
+          version: 1,
+          publishedAt: new Date().toISOString(),
+          changeSummary,
+          theme: { id: "demo", version: "1" },
+        });
         setMenuUndoStack([]);
         setIntegrationUndoStack([]);
         return;
@@ -437,18 +424,13 @@ export function Dashboard({
       if (!response.ok || !result.published) {
         throw new Error(result.error ?? "Publish failed");
       }
-      setPublishedVersion(result.published.version);
-      setPublicationHistory((current) => [
-        {
-          id: result.published!.id,
-          version: result.published!.version,
-          publishedAt: result.published!.publishedAt,
-          changeSummary,
-          current: true,
-          theme: result.published!.theme,
-        },
-        ...current.map((item) => ({ ...item, current: false })),
-      ]);
+      recordPublished({
+        id: result.published.id,
+        version: result.published.version,
+        publishedAt: result.published.publishedAt,
+        changeSummary,
+        theme: result.published.theme,
+      });
       setMenuUndoStack([]);
       setIntegrationUndoStack([]);
     } catch (caught) {
@@ -466,9 +448,8 @@ export function Dashboard({
       themeId,
     );
     setDraft((current) => ({ ...current, themeSelection: selection }));
-    setSaved(false);
     setThemeDirty(true);
-    setPublishedVersion(null);
+    markDraftUnpublished();
     setPublishError(null);
   }
 
@@ -479,64 +460,9 @@ export function Dashboard({
         current.designProfile,
       ),
     }));
-    setSaved(false);
     setThemeDirty(true);
-    setPublishedVersion(null);
+    markDraftUnpublished();
     setPublishError(null);
-  }
-
-  async function rollback(siteVersionId: string) {
-    const target = publicationHistory.find(
-      (item) => item.id === siteVersionId,
-    );
-    if (!target || target.current) return;
-    if (
-      !window.confirm(
-        `Restore the public site to version ${target.version}? Your private draft will not change.`,
-      )
-    ) {
-      return;
-    }
-
-    setRollbackLoading(siteVersionId);
-    setPublishError(null);
-    try {
-      const response = await fetch(`/api/sites/${draft.slug}/rollback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteVersionId }),
-      });
-      const result = (await response.json()) as {
-        error?: string;
-        published?: {
-          id: string;
-          version: number;
-          publishedAt: string;
-          theme: { id: string; version: string };
-        };
-      };
-      if (!response.ok || !result.published) {
-        throw new Error(result.error ?? "Rollback failed");
-      }
-      setPublishedVersion(result.published.version);
-      setPublicationHistory((current) => [
-        {
-          id: result.published!.id,
-          version: result.published!.version,
-          publishedAt: result.published!.publishedAt,
-          changeSummary: `Rollback to v${target.version}: ${target.changeSummary}`,
-          current: true,
-          theme: result.published!.theme,
-        },
-        ...current.map((item) => ({ ...item, current: false })),
-      ]);
-    } catch (caught) {
-      setPublishError(
-        caught instanceof Error ? caught.message : "Rollback failed",
-      );
-    } finally {
-      setRollbackLoading(null);
-    }
   }
 
   function mutateMenu(
@@ -553,7 +479,6 @@ export function Dashboard({
       const next = applyRestaurantMenuMutation(draft, mutation);
       setDraft(next);
       setMenuDirty(true);
-      setSaved(false);
       setMenuSaveError(null);
       setMenuValidationIssues(validateRestaurantMenuDraft(next));
     } catch (error) {
@@ -570,7 +495,6 @@ export function Dashboard({
     const next = updateRestaurantTranslation(draft, locale, updater);
     setDraft(next);
     setMenuDirty(true);
-    setSaved(false);
     setMenuSaveError(null);
     setMenuValidationIssues(validateRestaurantMenuDraft(next));
   }
@@ -580,7 +504,6 @@ export function Dashboard({
       const next = markRestaurantTranslationReviewed(draft, locale);
       setDraft(next);
       setMenuDirty(true);
-      setSaved(false);
       setMenuSaveError(null);
       setMenuValidationIssues([]);
     } catch {
@@ -629,17 +552,17 @@ export function Dashboard({
         draftRef.current,
         regenerated,
       );
-      setPersistedDraft(structuredClone(regenerated));
-      setDraft(reconciled.draft);
-      setSavedRevision(result.revision);
+      adoptServerDraft({
+        draft: reconciled.draft,
+        baseline: regenerated,
+        revision: result.revision,
+      });
       if (reconciled.preservedClientEdits) {
-        setSaved(false);
         setMenuValidationIssues(validateRestaurantMenuDraft(reconciled.draft));
         setIntegrationValidationIssues(
           validateRestaurantIntegrations(reconciled.draft),
         );
       } else {
-        setSaved(true);
         setMenuDirty(false);
         setIntegrationDirty(false);
         setMenuValidationIssues([]);
@@ -662,7 +585,6 @@ export function Dashboard({
     setDraft(previous);
     setMenuUndoStack((current) => current.slice(0, -1));
     setMenuDirty(true);
-    setSaved(false);
     setMenuSaveError(null);
     setMenuValidationIssues([]);
   }
@@ -673,18 +595,23 @@ export function Dashboard({
   }) {
     const acceptedServerDraft = restaurantDraftSchema.parse(input.draft);
     const reconciled = reconcileAcceptedSourceMonitoringDraft(
-      persistedDraft,
+      baseline,
       draftRef.current,
       acceptedServerDraft,
     );
-    setPersistedDraft(acceptedServerDraft);
-    setDraft(reconciled.draft);
-    setSavedRevision(input.revision);
-    setSaved(!reconciled.preservedClientEdits);
+    adoptServerDraft({
+      draft: reconciled.draft,
+      baseline: acceptedServerDraft,
+      revision: input.revision,
+    });
     setMenuValidationIssues(validateRestaurantMenuDraft(reconciled.draft));
     setIntegrationValidationIssues(
       validateRestaurantIntegrations(reconciled.draft),
     );
+    if (!reconciled.preservedClientEdits) {
+      setMenuDirty(false);
+      setIntegrationDirty(false);
+    }
   }
 
   function mutateIntegration(
@@ -701,7 +628,6 @@ export function Dashboard({
       const next = applyRestaurantIntegrationMutation(draft, mutation);
       setDraft(next);
       setIntegrationDirty(true);
-      setSaved(false);
       setIntegrationSaveError(null);
       setIntegrationValidationIssues(
         validateRestaurantIntegrations(next),
@@ -729,7 +655,6 @@ export function Dashboard({
     );
     setDraft(next);
     setIntegrationDirty(true);
-    setSaved(false);
     setIntegrationSaveError(null);
     setIntegrationValidationIssues(
       validateRestaurantIntegrations(next),
@@ -741,7 +666,6 @@ export function Dashboard({
       const next = markRestaurantTranslationReviewed(draft, locale);
       setDraft(next);
       setIntegrationDirty(true);
-      setSaved(false);
       setIntegrationSaveError(null);
       setIntegrationValidationIssues([]);
     } catch {
@@ -757,143 +681,13 @@ export function Dashboard({
     setDraft(previous);
     setIntegrationUndoStack((current) => current.slice(0, -1));
     setIntegrationDirty(true);
-    setSaved(false);
     setIntegrationSaveError(null);
     setIntegrationValidationIssues([]);
   }
 
-  async function connectDomain() {
-    setDomainLoading(true);
-    setDomainError(null);
-    setDomainNotice(null);
-    try {
-      const response = await fetch("/api/domains", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostname: domain,
-          siteSlug: draft.slug,
-        }),
-      });
-      const result = (await response.json()) as DomainSetup & {
-        error?: string;
-      };
-      if (!response.ok) throw new Error(result.error ?? "Could not add domain");
-      setDomainSetup(result);
-      setDomain(result.hostname);
-    } catch (caught) {
-      setDomainError(
-        caught instanceof Error ? caught.message : "Could not add domain",
-      );
-    } finally {
-      setDomainLoading(false);
-    }
-  }
-
-  async function checkDomain() {
-    if (!domainSetup) return;
-    setDomainLoading(true);
-    setDomainError(null);
-    setDomainNotice(null);
-    try {
-      const response = await fetch("/api/domains", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostname: domainSetup.hostname,
-          siteSlug: draft.slug,
-        }),
-      });
-      const result = (await response.json()) as DomainSetup & {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(result.error ?? "Could not check the domain");
-      }
-      setDomainSetup(result);
-    } catch (caught) {
-      setDomainError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not check the domain",
-      );
-    } finally {
-      setDomainLoading(false);
-    }
-  }
-
-  async function removeDomain() {
-    if (
-      !domainSetup ||
-      !window.confirm(
-        `Remove ${domainSetup.hostname}? Guests will use ${platformUrl.replace(/^https:\/\//, "")} instead.`,
-      )
-    ) {
-      return;
-    }
-    setDomainLoading(true);
-    setDomainError(null);
-    setDomainNotice(null);
-    try {
-      const response = await fetch("/api/domains", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostname: domainSetup.hostname,
-          siteSlug: draft.slug,
-        }),
-      });
-      const result = (await response.json()) as {
-        removed?: boolean;
-        error?: string;
-      };
-      if (!response.ok || !result.removed) {
-        throw new Error(result.error ?? "Could not remove the domain");
-      }
-      setDomainSetup(null);
-      setDomain("");
-      setDomainNotice(
-        `Domain removed. Guests now use ${platformUrl.replace(/^https:\/\//, "")}.`,
-      );
-    } catch (caught) {
-      setDomainError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not remove the domain",
-      );
-    } finally {
-      setDomainLoading(false);
-    }
-  }
-
-  async function openBillingPortal() {
-    setPortalLoading(true);
-    try {
-      const response = await fetch("/api/billing/portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteSlug: draft.slug }),
-      });
-      const result = (await response.json()) as {
-        url?: string;
-        error?: string;
-      };
-      if (!response.ok || !result.url) {
-        throw new Error(result.error ?? "Billing portal could not open");
-      }
-      window.location.assign(result.url);
-    } catch (caught) {
-      alert(
-        caught instanceof Error
-          ? caught.message
-          : "Billing portal could not open",
-      );
-      setPortalLoading(false);
-    }
-  }
-
   return (
-    <main className="min-h-screen bg-[#f3f1eb]">
+    <OwnerDraftDirtyGuard dirty={dirty}>
+    <main className="min-h-screen bg-[#f3f1eb]" {...ownerDraftNavigationProps(dirty)}>
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
         <div className="flex items-center gap-5">
           <Brand {...brand} />
@@ -920,20 +714,12 @@ export function Dashboard({
             {isPublished ? "View live site" : "View preview"}{" "}
             <ExternalLink />
           </Button>
-          {!demo && billingAccess?.ok ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void openBillingPortal()}
-              disabled={portalLoading}
-            >
-              {portalLoading ? (
-                <LoaderCircle className="animate-spin" />
-              ) : (
-                <CreditCard />
-              )}
-              Billing
-            </Button>
+          {!demo ? (
+            <OwnerBillingButton
+              billingAccess={paidOps.billingAccess}
+              portalLoading={paidOps.portalLoading}
+              onOpenPortal={() => void paidOps.openBillingPortal()}
+            />
           ) : null}
           <Button
             size="sm"
@@ -941,7 +727,7 @@ export function Dashboard({
             disabled={saving || publishing}
           >
             {saving ? <LoaderCircle className="animate-spin" /> : <Save />}
-            {saved ? "Saved" : "Save"}
+            {dirty ? "Save" : "Saved"}
           </Button>
           <Button
             size="sm"
@@ -964,9 +750,9 @@ export function Dashboard({
         </div>
       </header>
 
-      {publishError ? (
+      {publishError || paidOps.operationError ? (
         <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-800">
-          {publishError}
+          {publishError ?? paidOps.operationError}
         </div>
       ) : null}
       {checkoutComplete ? (
@@ -983,20 +769,12 @@ export function Dashboard({
           live. A custom domain is optional.
         </div>
       ) : null}
-      {!demo && billingAccess && !billingAccess.ok ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm text-amber-900">
-          {billingAccess.message}. Publishing and monitoring are paused.
-          {billingAccess.customerPortalAvailable ? (
-            <Button
-              variant="link"
-              className="ml-1 h-auto p-0 text-amber-950 underline"
-              onClick={() => void openBillingPortal()}
-              disabled={portalLoading}
-            >
-              Manage billing
-            </Button>
-          ) : null}
-        </div>
+      {!demo ? (
+        <OwnerBillingBanner
+          billingAccess={paidOps.billingAccess}
+          portalLoading={paidOps.portalLoading}
+          onOpenPortal={() => void paidOps.openBillingPortal()}
+        />
       ) : null}
       {demo ? (
         <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-center text-xs text-amber-900">
@@ -1201,10 +979,7 @@ export function Dashboard({
                 initial={sourceMonitoring}
                 demo={demo}
                 draftRevision={savedRevision}
-                hasUnsavedChanges={
-                  JSON.stringify(draft) !==
-                  JSON.stringify(persistedDraft)
-                }
+                hasUnsavedChanges={dirty}
                 onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
               />
             </TabsContent>
@@ -1350,73 +1125,20 @@ export function Dashboard({
                 })}
               </div>
 
-              <Card className="mt-8">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Published history
-                  </CardTitle>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Rollback creates a new immutable version from a previous
-                    snapshot. Your private draft remains untouched.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {publicationHistory.length > 0 ? (
-                    <div className="divide-y">
-                      {publicationHistory.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold">
-                                Version {item.version}
-                              </p>
-                              {item.current ? (
-                                <Badge className="bg-emerald-600 text-white">
-                                  Live
-                                </Badge>
-                              ) : null}
-                              <Badge variant="outline">
-                                {item.theme.id} · {item.theme.version}
-                              </Badge>
-                            </div>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {item.changeSummary} ·{" "}
-                              {new Intl.DateTimeFormat(undefined, {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                              }).format(new Date(item.publishedAt))}
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                              item.current ||
-                              rollbackLoading !== null ||
-                              demo
-                            }
-                            onClick={() => void rollback(item.id)}
-                          >
-                            {rollbackLoading === item.id ? (
-                              <LoaderCircle className="animate-spin" />
-                            ) : (
-                              <RotateCcw />
-                            )}
-                            {item.current ? "Currently live" : "Rollback"}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Publish the site once to start immutable version history.
-                    </p>
+              <div className="mt-8">
+                <OwnerPublicationHistoryCard
+                  history={publicationHistory}
+                  rollbackLoading={paidOps.rollbackLoading}
+                  mutationEnabled={isOwnerOperationEnabled(
+                    ownerOperations.publicationMutation,
                   )}
-                </CardContent>
-              </Card>
+                  mutationState={ownerOperations.publicationMutation}
+                  isDemo={demo}
+                  onRollback={(siteVersionId) =>
+                    void paidOps.rollback(siteVersionId)
+                  }
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="menu" className="mt-0">
@@ -1530,197 +1252,27 @@ export function Dashboard({
                 title="Use your own domain (optional)."
                 copy="Connect a custom domain when you want guests to use your own address."
               />
-              <Card className="mt-8">
-                <CardHeader>
-                  <CardTitle className="text-base">Your site is live</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Guests can open this address as soon as you publish. A custom
-                    domain below is optional.
-                  </p>
-                  <p className="mt-3 font-mono text-sm">
-                    <Link href={liveUrl} target="_blank" className="underline">
-                      {liveUrl.replace(/^https:\/\//, "")}
-                    </Link>
-                  </p>
-                </CardContent>
-              </Card>
-              <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Use your own domain (optional)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Label htmlFor="domain">Domain name</Label>
-                    <Input
-                      id="domain"
-                      value={domain}
-                      onChange={(event) => setDomain(event.target.value)}
-                      placeholder="restaurant.com"
-                      className="mt-2 h-11"
-                    />
-                    {domainError ? (
-                      <p
-                        className="mt-3 text-xs text-destructive"
-                        role="alert"
-                      >
-                        {domainError}
-                      </p>
-                    ) : null}
-                    {domainNotice ? (
-                      <p
-                        className="mt-3 text-xs text-muted-foreground"
-                        role="status"
-                      >
-                        {domainNotice}
-                      </p>
-                    ) : null}
-                    <Button
-                      className="mt-4 w-full"
-                      onClick={() => void connectDomain()}
-                      disabled={!domain || domainLoading}
-                    >
-                      {domainLoading ? (
-                        <LoaderCircle className="animate-spin" />
-                      ) : (
-                        <Globe2 />
-                      )}
-                      Add domain
-                    </Button>
-                    <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                      Optional. {brand.name} authorizes the domain for automatic
-                      SSL before asking for DNS changes.
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      {domainSetup
-                        ? "DNS records to copy"
-                        : "What happens next"}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {domainSetup ? (
-                      <div className="space-y-3">
-                        {domainSetup.records.map((record) => (
-                          <div
-                            key={`${record.type}-${record.name}`}
-                            className="grid grid-cols-[70px_1fr_auto] items-center gap-3 rounded-xl border bg-muted/35 p-3"
-                          >
-                            <Badge variant="outline">{record.type}</Badge>
-                            <div className="min-w-0">
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                {record.name}
-                              </p>
-                              <p className="truncate font-mono text-xs">
-                                {record.value}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() =>
-                                navigator.clipboard.writeText(record.value)
-                              }
-                            >
-                              <Copy />
-                            </Button>
-                          </div>
-                        ))}
-                        <div className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              DNS
-                            </p>
-                            <p className="mt-1 flex items-center gap-2 text-xs font-medium">
-                              {domainSetup.verified ? (
-                                <CircleCheck className="size-4 text-emerald-500" />
-                              ) : (
-                                <RefreshCcw className="size-4 text-muted-foreground" />
-                              )}
-                              {domainSetup.verified
-                                ? "Verified"
-                                : "Waiting for records"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              HTTPS
-                            </p>
-                            <p className="mt-1 flex items-center gap-2 text-xs font-medium">
-                              {domainSetup.tls.status === "READY" ? (
-                                <CircleCheck className="size-4 text-emerald-500" />
-                              ) : domainSetup.tls.status === "ERROR" ? (
-                                <TriangleAlert className="size-4 text-amber-500" />
-                              ) : (
-                                <RefreshCcw className="size-4 text-muted-foreground" />
-                              )}
-                              {domainSetup.tls.status === "READY"
-                                ? "Secure connection ready"
-                                : domainSetup.tls.status === "ERROR"
-                                  ? "Needs attention"
-                                  : "Certificate pending"}
-                            </p>
-                          </div>
-                          <p className="text-xs leading-5 text-muted-foreground sm:col-span-2">
-                            {domainSetup.tls.message}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => void checkDomain()}
-                          disabled={domainLoading}
-                        >
-                          <RefreshCcw
-                            className={domainLoading ? "animate-spin" : ""}
-                          />
-                          {domainSetup.verified
-                            ? "Check HTTPS again"
-                            : "Check DNS again"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="w-full text-destructive hover:text-destructive"
-                          onClick={() => void removeDomain()}
-                          disabled={domainLoading}
-                        >
-                          <Trash2 />
-                          Remove domain
-                        </Button>
-                        <p className="text-xs leading-5 text-muted-foreground">
-                          Removing the domain sends guests back to your Restofront
-                          address. Your private preview and published version are
-                          kept.
-                        </p>
-                      </div>
-                    ) : (
-                      <ol className="space-y-5 text-sm">
-                        {[
-                          `${brand.name} authorizes the domain on the production host.`,
-                          "The exact DNS record appears here for copying into your DNS provider.",
-                          "Once DNS resolves, SSL is issued and that custom domain becomes the public address.",
-                        ].map((step, index) => (
-                          <li key={step} className="flex gap-3">
-                            <span className="grid size-6 shrink-0 place-items-center rounded-full border font-mono text-[10px]">
-                              {index + 1}
-                            </span>
-                            <span className="leading-6 text-muted-foreground">
-                              {step}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>            </TabsContent>
+              <div className="mt-8">
+                <OwnerDomainPanel
+                  brandName={brand.name}
+                  platformUrl={platformUrl}
+                  liveUrl={liveUrl}
+                  domain={paidOps.domain}
+                  domainSetup={paidOps.domainSetup}
+                  domainError={paidOps.domainError}
+                  domainNotice={paidOps.domainNotice}
+                  domainLoading={paidOps.domainLoading}
+                  enabled={isOwnerOperationEnabled(
+                    ownerOperations.customDomain,
+                  )}
+                  state={ownerOperations.customDomain}
+                  onDomainChange={paidOps.setDomain}
+                  onConnect={() => void paidOps.connectDomain()}
+                  onCheck={() => void paidOps.checkDomain()}
+                  onRemove={() => void paidOps.removeDomain()}
+                />
+              </div>
+            </TabsContent>
 
             <TabsContent value="settings" className="mt-0">
               <PageHeading
@@ -1788,6 +1340,7 @@ export function Dashboard({
         </div>
       </Tabs>
     </main>
+    </OwnerDraftDirtyGuard>
   );
 }
 

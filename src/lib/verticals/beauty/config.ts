@@ -20,6 +20,7 @@ import {
   resolveBeautyTemplateFromAttributes,
   type BeautyTemplate,
 } from "@/lib/verticals/beauty/templates";
+import { beautyOwnerOperations } from "@/lib/owner-operations";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const beautyDictionaryExtensions = {
@@ -80,6 +81,7 @@ export const beautyConfig = {
   claimMode: "disabled",
   publicationEnabled: true,
   publicationMutationEnabled: false,
+  ownerOperations: beautyOwnerOperations,
   integrationTypes: ["booking", "social"],
   attributesSchema: beautyAttributesSchema,
   attributeDefaults: {

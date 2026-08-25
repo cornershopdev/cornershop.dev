@@ -87,6 +87,10 @@ RUN bun build scripts/preflight-first-customer-migration.ts \
   --target=bun \
   --packages=external \
   --outfile=.operator-scripts/preflight-first-customer-migration.ts
+RUN bun build scripts/article-rollout.ts \
+  --target=bun \
+  --packages=external \
+  --outfile=.operator-scripts/article-rollout.ts
 RUN bun build scripts/verify-first-customer-production.ts \
   --target=bun \
   --packages=external \
