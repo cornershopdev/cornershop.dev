@@ -55,10 +55,7 @@ set_article_edge_gate() {
     /^# END CORNERSHOPDEV$/ { managed = 0 }
     {
       print
-      if (
-        state == "closed" && managed &&
-        ($0 == "api.cornershop.dev {" || $0 == "https:// {")
-      ) {
+      if (state == "closed" && managed && ($0 == "api.cornershop.dev {" || $0 == "https:// {")) {
         print "\t# BEGIN ARTICLE MUTATION GATE"
         print "\t@articleMutations {"
         print "\t\tmethod POST"
