@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -20,6 +20,8 @@ import {
   OwnerPaidOperationsSection,
   useOwnerPaidOperations,
 } from "@/components/owner-paid-operations";
+import { PhotoLibraryPanel } from "@/components/photo-library-panel";
+import { SourceMonitoringPanel } from "@/components/source-monitoring-panel";
 import { SiteRenderer } from "@/components/site-renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,10 @@ import {
   ownerOperationUnavailableMessage,
   type ClientPublicationHistoryItem,
 } from "@/lib/owner-operations";
+import {
+  EMPTY_SOURCE_MONITORING_DASHBOARD,
+  type SourceMonitoringDashboardDto,
+} from "@/lib/source-monitoring-diff";
 import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import {
   canEnableOwnerIntegration,
@@ -59,9 +65,13 @@ import {
   hasUnreviewedFoodRetailTranslations,
   markFoodRetailTranslationReviewed,
   markFoodRetailTranslationsStale,
-  reconcileFoodRetailDraftAfterSave,
   updateFoodRetailTranslation,
 } from "@/lib/verticals/food-retail/editor";
+import {
+  OwnerDraftDirtyGuard,
+  ownerDraftNavigationProps,
+  useOwnerDraftDirtyState,
+} from "@/lib/owner-draft-dirty-state";
 import {
   foodRetailSiteDraftSchema,
   type FoodRetailSiteDraft,
@@ -78,6 +88,7 @@ export function FoodRetailDashboard({
   ownerOperations = foodRetailOwnerOperations,
   billingAccess = null,
   publicationHistory = [],
+  sourceMonitoring = EMPTY_SOURCE_MONITORING_DASHBOARD,
 }: {
   email: string;
   brand: BrandIdentity;
@@ -89,19 +100,20 @@ export function FoodRetailDashboard({
   ownerOperations?: VerticalOwnerOperations;
   billingAccess?: BillingAccess | null;
   publicationHistory?: ClientPublicationHistoryItem[];
+  sourceMonitoring?: SourceMonitoringDashboardDto;
 }) {
-  const [draft, setDraftState] = useState(initialDraft);
-  const draftRef = useRef(initialDraft);
-  function setDraft(
-    next:
-      | FoodRetailSiteDraft
-      | ((current: FoodRetailSiteDraft) => FoodRetailSiteDraft),
-  ) {
-    const resolved = typeof next === "function" ? next(draftRef.current) : next;
-    draftRef.current = resolved;
-    setDraftState(resolved);
-  }
-  const [revision, setRevision] = useState(initialRevision);
+  const {
+    draft,
+    revision,
+    dirty,
+    draftRef,
+    setDraft,
+    applyAuxiliary,
+    setRevision,
+    beginSave,
+    acknowledgeSave,
+    acknowledgeSnapshot,
+  } = useOwnerDraftDirtyState(initialDraft, initialRevision);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -119,6 +131,73 @@ export function FoodRetailDashboard({
   const [integrationIssues, setIntegrationIssues] = useState<
     OwnerIntegrationIssue[]
   >([]);
+
+  const handlePhotoRevision = useCallback(
+    (nextRevision: number) => {
+      setRevision(nextRevision);
+    },
+    [setRevision],
+  );
+  const handlePhotoHeroChange = useCallback(
+    (
+      hero: {
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      } | null,
+    ) => {
+      applyAuxiliary((current) => ({
+        ...current,
+        heroImageUrl: hero?.url ?? null,
+        heroOriginalImageUrl: hero?.originalUrl ?? null,
+        heroImageProvenance: hero?.provenance ?? null,
+      }));
+    },
+    [applyAuxiliary],
+  );
+  const handlePhotoGalleryChange = useCallback(
+    (
+      galleryImages: Array<{
+        url: string;
+        originalUrl: string;
+        provenance: "official" | "owner" | "permissioned-ugc";
+      }>,
+    ) => {
+      applyAuxiliary((current) => ({ ...current, galleryImages }));
+    },
+    [applyAuxiliary],
+  );
+  const handlePhotoCatalogChange = useCallback(
+    (change: {
+      sectionIndex: number;
+      itemIndex: number;
+      url: string | null;
+      originalUrl: string | null;
+      provenance: "official" | "owner" | "permissioned-ugc" | null;
+    }) => {
+      applyAuxiliary((current) => ({
+        ...current,
+        catalogSections: current.catalogSections.map((section, sectionIndex) =>
+          sectionIndex !== change.sectionIndex
+            ? section
+            : {
+                ...section,
+                items: section.items.map((item, itemIndex) =>
+                  itemIndex !== change.itemIndex
+                    ? item
+                    : {
+                        ...item,
+                        imageUrl: change.url,
+                        originalImageUrl: change.originalUrl,
+                        imageProvenance: change.provenance,
+                      },
+                ),
+              },
+        ),
+      }));
+    },
+    [applyAuxiliary],
+  );
 
   function updateSection(
     sectionIndex: number,
@@ -267,7 +346,8 @@ export function FoodRetailDashboard({
   }
 
   async function saveDraft(): Promise<number | null> {
-    const submittedDraft = draft;
+    const submitted = beginSave();
+    const submittedDraft = submitted.submittedDraft;
     const ownerIssues = validateOwnerIntegrations(submittedDraft.integrations);
     const parsed = foodRetailSiteDraftSchema.safeParse(submittedDraft);
     if (ownerIssues.length > 0 || !parsed.success) {
@@ -286,12 +366,12 @@ export function FoodRetailDashboard({
     setIntegrationIssues([]);
     setNotice(null);
     try {
-      const response = await fetch(`/api/sites/${draft.slug}`, {
+      const response = await fetch(`/api/sites/${submittedDraft.slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...parsed.data,
-          expectedRevision: revision,
+          expectedRevision: submitted.expectedRevision,
         }),
       });
       const result = (await response.json()) as {
@@ -305,12 +385,13 @@ export function FoodRetailDashboard({
       ) {
         throw new Error("Save response did not include a draft revision");
       }
-      const hadNewerEdits = draftRef.current !== submittedDraft;
-      setDraft((current) =>
-        reconcileFoodRetailDraftAfterSave(submittedDraft, parsed.data, current),
-      );
-      setRevision(result.revision);
-      if (hadNewerEdits) {
+      const acknowledged = acknowledgeSave({
+        submittedDraft,
+        persistedDraft: parsed.data,
+        submittedMutationVersion: submitted.submittedMutationVersion,
+        savedRevision: result.revision,
+      });
+      if (acknowledged.hadNewerEdits) {
         setError(
           "New edits were made while saving. Save them before leaving this private preview.",
         );
@@ -392,8 +473,22 @@ export function FoodRetailDashboard({
     }
   }
 
+  function applyAcceptedSourceMonitoringDraft(input: {
+    revision: number;
+    draft: unknown;
+  }) {
+    const accepted = foodRetailSiteDraftSchema.parse(input.draft);
+    acknowledgeSnapshot(accepted, input.revision);
+    setNotice("Source suggestion saved to the private draft.");
+    setError(null);
+  }
+
   return (
-    <div className="min-h-screen bg-muted/35 text-foreground">
+    <OwnerDraftDirtyGuard dirty={dirty}>
+    <div
+      className="min-h-screen bg-muted/35 text-foreground"
+      {...ownerDraftNavigationProps(dirty)}
+    >
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-5 py-4">
           <Brand {...brand} />
@@ -449,10 +544,10 @@ export function FoodRetailDashboard({
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={saving || publishing}
+                  disabled={saving || publishing || !dirty}
                   onClick={() => void saveDraft()}
                 >
-                  <Save /> {saving ? "Saving…" : "Save"}
+                  <Save /> {saving ? "Saving…" : dirty ? "Save" : "Saved"}
                 </Button>
                 <Button
                   disabled={saving || publishing}
@@ -484,6 +579,24 @@ export function FoodRetailDashboard({
           </Card>
 
           <OwnerPaidOperationsSection paid={paidOps} />
+          {isOwnerOperationEnabled(ownerOperations.sourceMonitoring) ? (
+            <SourceMonitoringPanel
+              siteSlug={draft.slug}
+              initial={sourceMonitoring}
+              draftRevision={revision}
+              hasUnsavedChanges={dirty}
+              onAcceptedDraft={applyAcceptedSourceMonitoringDraft}
+            />
+          ) : null}
+          {isOwnerOperationEnabled(ownerOperations.photoLibrary) ? (
+            <PhotoLibraryPanel
+              siteSlug={draft.slug}
+              onRevision={handlePhotoRevision}
+              onHeroChange={handlePhotoHeroChange}
+              onGalleryChange={handlePhotoGalleryChange}
+              onCatalogChange={handlePhotoCatalogChange}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>
@@ -892,39 +1005,21 @@ export function FoodRetailDashboard({
                         }
                       />
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
-                      <Input
-                        aria-label={`Product ${itemIndex + 1} image`}
-                        type="url"
-                        placeholder="Approved product image URL"
-                        value={item.imageUrl ?? ""}
-                        onChange={(event) =>
-                          updateItem(sectionIndex, itemIndex, (next) => {
-                            next.imageUrl = event.target.value || null;
-                            if (!next.imageUrl) next.imageProvenance = null;
-                          })
-                        }
-                      />
-                      <select
-                        aria-label={`Product ${itemIndex + 1} image provenance`}
-                        className="h-9 rounded-lg border bg-background px-2 text-sm"
-                        value={item.imageProvenance ?? ""}
-                        onChange={(event) =>
-                          updateItem(sectionIndex, itemIndex, (next) => {
-                            next.imageProvenance = (event.target.value ||
-                              null) as
-                              "official" | "owner" | "permissioned-ugc" | null;
-                          })
-                        }
-                      >
-                        <option value="">Choose image source</option>
-                        <option value="official">Official source</option>
-                        <option value="owner">Owner supplied</option>
-                        <option value="permissioned-ugc">
-                          Permissioned UGC
-                        </option>
-                      </select>
-                    </div>
+                    {item.imageUrl ? (
+                      <p className="text-xs text-muted-foreground">
+                        Product image is selected from the reviewed photo
+                        library
+                        {item.imageProvenance
+                          ? ` · ${item.imageProvenance.replaceAll("-", " ")}`
+                          : ""}
+                        .
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Choose an approved photo for this product in the photo
+                        library.
+                      </p>
+                    )}
                   </div>
                 ))}
                 <Button
@@ -1285,5 +1380,6 @@ export function FoodRetailDashboard({
         </div>
       </main>
     </div>
+    </OwnerDraftDirtyGuard>
   );
 }

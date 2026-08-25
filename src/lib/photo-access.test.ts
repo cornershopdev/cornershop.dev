@@ -32,11 +32,9 @@ mock.module("@/lib/db", () => ({
   }),
 }));
 
-const { getSourceMonitoringAccess } = await import(
-  "@/lib/source-monitoring-access"
-);
+const { getPhotoLibraryAccess } = await import("@/lib/photo-access");
 
-describe("source monitoring review authorization", () => {
+describe("photo library authorization", () => {
   beforeEach(() => {
     mode = "denied";
     vertical = Vertical.RESTAURANT;
@@ -44,7 +42,7 @@ describe("source monitoring review authorization", () => {
 
   it("allows the owning site member", async () => {
     mode = "owner";
-    expect(await getSourceMonitoringAccess("example")).toMatchObject({
+    expect(await getPhotoLibraryAccess("example")).toMatchObject({
       ok: true,
       actor: { id: "user_1", role: "owner" },
       site: { id: "site_1" },
@@ -53,7 +51,7 @@ describe("source monitoring review authorization", () => {
 
   it("allows a dual-gated platform operator", async () => {
     mode = "operator";
-    expect(await getSourceMonitoringAccess("example")).toMatchObject({
+    expect(await getPhotoLibraryAccess("example")).toMatchObject({
       ok: true,
       actor: { id: "operator_1", role: "operator" },
       site: { id: "site_1" },
@@ -61,40 +59,40 @@ describe("source monitoring review authorization", () => {
   });
 
   it("rejects everyone else", async () => {
-    expect(await getSourceMonitoringAccess("example")).toEqual({
+    expect(await getPhotoLibraryAccess("example")).toEqual({
       ok: false,
       status: 403,
       message: "Forbidden",
     });
   });
 
-  it("allows food-retail and local-service owners when monitoring is enabled", async () => {
+  it("allows food-retail and local-service owners when the photo library is enabled", async () => {
     mode = "owner";
     vertical = Vertical.FOOD_RETAIL;
-    expect(await getSourceMonitoringAccess("bakery")).toMatchObject({
+    expect(await getPhotoLibraryAccess("bakery")).toMatchObject({
       ok: true,
       actor: { role: "owner" },
     });
     vertical = Vertical.LOCAL_SERVICE;
-    expect(await getSourceMonitoringAccess("trades")).toMatchObject({
+    expect(await getPhotoLibraryAccess("trades")).toMatchObject({
       ok: true,
       actor: { role: "owner" },
     });
   });
 
-  it("fails closed when the vertical registry disables monitoring", async () => {
+  it("fails closed when the vertical registry disables the photo library", async () => {
     mode = "owner";
     vertical = Vertical.BEAUTY;
-    expect(await getSourceMonitoringAccess("salon")).toEqual({
+    expect(await getPhotoLibraryAccess("salon")).toEqual({
       ok: false,
       status: 403,
-      message: "Source monitoring is not available for this vertical.",
+      message: "The photo library is not available for this vertical.",
     });
     mode = "operator";
-    expect(await getSourceMonitoringAccess("salon")).toEqual({
+    expect(await getPhotoLibraryAccess("salon")).toEqual({
       ok: false,
       status: 403,
-      message: "Source monitoring is not available for this vertical.",
+      message: "The photo library is not available for this vertical.",
     });
   });
 });
