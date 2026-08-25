@@ -32,9 +32,10 @@ describe("food retail factory claim gate", () => {
     expect(importStudio).toContain(
       "{isVerticalClaimEnabled(site.vertical) ? (",
     );
-    expect(claimPage).toContain("isVerticalClaimEnabled(site.vertical)");
+    expect(claimPage).toContain("claimPageState");
     expect(checkoutRoute).toContain(
       "isVerticalClaimEnabled(invitation.vertical)",
     );
+    expect(checkoutRoute).toContain("resolveClaimLaunchOfferForVertical");
   });
 });

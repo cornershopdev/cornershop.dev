@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,31 +12,17 @@ import {
 import { SiteRenderer } from "@/components/site-renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { SiteDraftView } from "@/lib/site-draft";
-import { restaurantMarketing } from "@/lib/verticals/restaurant/marketing";
-import type { VerticalId } from "@/lib/verticals/types";
-
-/**
- * Launch sells one founding plan through the single configured STRIPE_PRICE_ID.
- */
-const CLAIM_CHECKOUT_PLAN_ID = "founding" as const;
-const foundingPlan = restaurantMarketing.pricing.plans[0];
+import type { ClaimPanelProps } from "@/lib/claim-launch-offer";
 
 export function ClaimPanel({
   slug,
   vertical,
   fallbackDraft,
   checkoutReturn,
-}: {
-  slug: string;
-  vertical: VerticalId;
-  fallbackDraft: SiteDraftView;
-  checkoutReturn: {
-    sessionId: string;
-    claimInvitationId: string;
-  } | null;
-}) {
+  offer,
+}: ClaimPanelProps) {
   const draft = fallbackDraft;
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(Boolean(checkoutReturn));
@@ -160,7 +146,7 @@ export function ClaimPanel({
   }
 
   async function checkout() {
-    if (!invitationToken) return;
+    if (!invitationToken || !offer) return;
     setLoading(true);
     setError(null);
     try {
@@ -168,7 +154,7 @@ export function ClaimPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          plan: CLAIM_CHECKOUT_PLAN_ID,
+          plan: offer.planId,
           siteSlug: slug,
           invitationToken,
         }),
@@ -188,6 +174,14 @@ export function ClaimPanel({
       setLoading(false);
     }
   }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!offer || loading || (!invitationToken && !email)) return;
+    void (invitationToken ? checkout() : requestInvitation());
+  }
+
+  const errorSummaryId = "claim-error-summary";
 
   return (
     <div className="grid lg:grid-cols-[1fr_0.9fr]">
@@ -244,111 +238,146 @@ export function ClaimPanel({
             </p>
           ) : null}
 
-          <div className="mt-8">
-            <div className="rounded-2xl border border-primary bg-primary/5 p-5 ring-2 ring-primary/12">
-              <div className="flex items-start justify-between gap-5">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{foundingPlan.name}</span>
-                    {foundingPlan.badge ? (
-                      <Badge className="text-[10px]">{foundingPlan.badge}</Badge>
-                    ) : null}
+          {offer ? (
+            <div className="mt-8">
+              <div className="rounded-2xl border border-primary bg-primary/5 p-5 ring-2 ring-primary/12">
+                <div className="flex items-start justify-between gap-5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{offer.name}</span>
+                      {offer.badge ? (
+                        <Badge className="text-[10px]">{offer.badge}</Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {offer.copy}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {foundingPlan.copy}
+                  <span className="font-display text-4xl">
+                    {offer.price}
+                    <small className="font-sans text-xs text-muted-foreground">
+                      {offer.cadence}
+                    </small>
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {offer.features.map((feature) => (
+                    <span
+                      key={feature}
+                      className="flex items-center gap-1.5 text-xs"
+                    >
+                      <Check className="size-3 text-primary" /> {feature}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : checkoutReturn ? null : (
+            <div
+              className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5"
+              role="status"
+            >
+              <p className="text-sm font-medium">
+                Claiming is unavailable for {draft.name}.
+              </p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                The launch offer for this site is not configured, so checkout
+                cannot start. Ask the operator who sent this preview to try
+                again once the offer is available.
+              </p>
+            </div>
+          )}
+
+          {offer ? (
+            <form onSubmit={submit} className="mt-7">
+              {invitationToken ? (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                  <p className="text-sm font-medium">Ownership link ready</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Checkout will verify that this one-time link belongs to this
+                    site and the email approved for it.
                   </p>
                 </div>
-                <span className="font-display text-4xl">
-                  {foundingPlan.price}
-                  <small className="font-sans text-xs text-muted-foreground">
-                    {foundingPlan.cadence}
-                  </small>
-                </span>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {foundingPlan.features.map((feature) => (
-                  <span
-                    key={feature}
-                    className="flex items-center gap-1.5 text-xs"
-                  >
-                    <Check className="size-3 text-primary" /> {feature}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {invitationToken ? (
-            <div className="mt-7 rounded-xl border border-primary/30 bg-primary/5 p-4">
-              <p className="text-sm font-medium">Ownership link ready</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Checkout will verify that this one-time link belongs to this
-                site and the email approved for it.
+              ) : (
+                <Field
+                  label="Business owner email"
+                  controlId="claim-email"
+                  description="Use the email shown on the source website or an address on that exact domain. Concierge-approved owners can use the address the operator approved."
+                >
+                  <Input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setInvitationSent(false);
+                    }}
+                    placeholder={offer.emailPlaceholder}
+                    className="h-11"
+                    aria-invalid={error && !invitationToken ? true : undefined}
+                    aria-describedby={
+                      error ? errorSummaryId : undefined
+                    }
+                  />
+                </Field>
+              )}
+              {invitationSent ? (
+                <p
+                  className="mt-3 rounded-lg bg-primary/8 px-3 py-2 text-xs text-primary"
+                  role="status"
+                >
+                  Check that inbox for the 48-hour one-time ownership link.
+                </p>
+              ) : null}
+              {error ? (
+                <p
+                  id={errorSummaryId}
+                  className="mt-3 rounded-lg bg-destructive/8 px-3 py-2 text-xs text-destructive"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
+              <Button
+                type="submit"
+                size="lg"
+                className="mt-4 h-12 w-full"
+                disabled={(!invitationToken && !email) || loading}
+              >
+                {loading ? (
+                  <>
+                    <LoaderCircle className="animate-spin" />
+                    {invitationToken
+                      ? "Opening secure checkout"
+                      : "Sending ownership link"}
+                  </>
+                ) : invitationToken ? (
+                  <>
+                    Claim and continue <ArrowRight />
+                  </>
+                ) : (
+                  <>
+                    Verify ownership by email <ArrowRight />
+                  </>
+                )}
+              </Button>
+              <p className="mt-3 text-center text-[11px] leading-5 text-muted-foreground">
+                {invitationToken
+                  ? "Secure subscription checkout by Stripe. The invitation is accepted only after checkout completes."
+                  : "No checkout or owner account can start until the approved email opens its one-time link."}
               </p>
-            </div>
-          ) : (
-            <>
-              <label className="mt-7 block text-xs font-medium" htmlFor="email">
-                Business owner email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setInvitationSent(false);
-                }}
-                placeholder="owner@restaurant.com"
-                className="mt-2 h-11"
-              />
-              <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-                Use the email shown on the source website or an address on that
-                exact domain. Concierge-approved owners can use the address the
-                operator approved.
-              </p>
-            </>
-          )}
-          {invitationSent ? (
-            <p className="mt-3 rounded-lg bg-primary/8 px-3 py-2 text-xs text-primary">
-              Check that inbox for the 48-hour one-time ownership link.
-            </p>
-          ) : null}
-          {error ? (
-            <p className="mt-3 rounded-lg bg-destructive/8 px-3 py-2 text-xs text-destructive">
+            </form>
+          ) : error ? (
+            <p
+              id={errorSummaryId}
+              className="mt-3 rounded-lg bg-destructive/8 px-3 py-2 text-xs text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
-          <Button
-            size="lg"
-            className="mt-4 h-12 w-full"
-            disabled={(!invitationToken && !email) || loading}
-            onClick={() =>
-              void (invitationToken ? checkout() : requestInvitation())
-            }
-          >
-            {loading ? (
-              <>
-                <LoaderCircle className="animate-spin" />
-                {invitationToken
-                  ? "Opening secure checkout"
-                  : "Sending ownership link"}
-              </>
-            ) : invitationToken ? (
-              <>
-                Claim and continue <ArrowRight />
-              </>
-            ) : (
-              <>
-                Verify ownership by email <ArrowRight />
-              </>
-            )}
-          </Button>
-          <p className="mt-3 text-center text-[11px] leading-5 text-muted-foreground">
-            {invitationToken
-              ? "Secure subscription checkout by Stripe. The invitation is accepted only after checkout completes."
-              : "No checkout or owner account can start until the approved email opens its one-time link."}
-          </p>
         </div>
       </aside>
     </div>
