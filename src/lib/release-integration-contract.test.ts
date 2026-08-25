@@ -53,6 +53,11 @@ describe("release integration contract", () => {
     expect(deployScript).not.toContain("redis:7.4-alpine");
   });
 
+  it("keeps the host article-gate awk condition portable", async () => {
+    const deployScript = await readRepoFile("deploy/aws/deploy.sh");
+    expect(deployScript).not.toMatch(/if \(\s*\n/);
+  });
+
   it("keeps the browser journey as a production deploy dependency", async () => {
     const ci = await readRepoFile(".github/workflows/ci.yml");
     expect(ci).toMatch(
