@@ -4,6 +4,33 @@ import type { BrandIdentity } from "@/lib/brand";
 
 export type VerticalId = Vertical;
 
+export const OWNER_OPERATION_IDS = [
+  "billing",
+  "publicationHistory",
+  "publicationMutation",
+  "customDomain",
+  "workspaceSwitching",
+  "analytics",
+  "bookingInbox",
+  "sourceMonitoring",
+  "articles",
+  "photoLibrary",
+] as const;
+
+export type OwnerOperationId = (typeof OWNER_OPERATION_IDS)[number];
+
+/** Truthful readiness for a paid owner-workspace operation. */
+export type OwnerOperationState =
+  | "enabled"
+  | "gated"
+  | "not-yet"
+  | "unsupported";
+
+export type VerticalOwnerOperations = Record<
+  OwnerOperationId,
+  OwnerOperationState
+>;
+
 export type CatalogVocabulary = {
   catalog: string;
   section: string;
@@ -282,6 +309,13 @@ export type VerticalConfig<
    * previews must leave this off.
    */
   publicationMutationEnabled: boolean;
+  /**
+   * Paid owner-workspace operations this vertical actually supports.
+   * Dashboards must render this map — never infer capabilities from which
+   * dashboard component is mounted. `enabled` is still fail-closed by
+   * claim / publication-mutation helpers at resolve time.
+   */
+  ownerOperations: VerticalOwnerOperations;
   /**
    * Model assistance is the compatibility default. Evidence-sensitive verticals
    * can opt into deterministic reconstruction and skip text generation entirely.

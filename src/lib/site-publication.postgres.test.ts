@@ -34,6 +34,8 @@ let sampleFoodRetailDraft: typeof import("@/lib/verticals/food-retail/fixtures")
 let sampleLocalServiceDraft: typeof import("@/lib/verticals/local-service/fixtures").sampleLocalServiceSiteDraft;
 let publishSiteDraft: typeof import("@/lib/site-publication").publishSiteDraft;
 let rollbackPublishedSiteVersion: typeof import("@/lib/site-publication").rollbackPublishedSiteVersion;
+let getSitePublicationHistory: typeof import("@/lib/site-publication").getSitePublicationHistory;
+let DraftRevisionConflictError: typeof import("@/lib/site-persistence").DraftRevisionConflictError;
 let updateSiteDraft: typeof import("@/lib/site-persistence").updateSiteDraft;
 let findOwnerSiteDraft: typeof import("@/lib/sites").findOwnerSiteDraft;
 let findPublishedSiteView: typeof import("@/lib/sites").findPublishedSiteView;
@@ -77,7 +79,9 @@ describe.skipIf(!enabled)(
       sampleLocalServiceDraft = localService.sampleLocalServiceSiteDraft;
       publishSiteDraft = publication.publishSiteDraft;
       rollbackPublishedSiteVersion = publication.rollbackPublishedSiteVersion;
+      getSitePublicationHistory = publication.getSitePublicationHistory;
       updateSiteDraft = persistence.updateSiteDraft;
+      DraftRevisionConflictError = persistence.DraftRevisionConflictError;
       findOwnerSiteDraft = sites.findOwnerSiteDraft;
       findPublishedSiteView = sites.findPublishedSiteView;
       findSiteView = sites.findSiteView;
@@ -1106,6 +1110,139 @@ describe.skipIf(!enabled)(
           },
         }),
       ).toBe(2);
+    });
+
+    test("keeps publication history and rollback site-membership scoped across verticals", async () => {
+      const restaurantHistory = await getSitePublicationHistory(siteId);
+      const foodHistory = await getSitePublicationHistory(foodSiteId);
+      const localHistory = await getSitePublicationHistory(localServiceSiteId);
+
+      expect(restaurantHistory.length).toBeGreaterThan(0);
+      expect(restaurantHistory.every((item) => item.id)).toBe(true);
+      expect(foodHistory.map((item) => item.id)).not.toEqual(
+        expect.arrayContaining(restaurantHistory.map((item) => item.id)),
+      );
+      expect(localHistory.map((item) => item.id)).not.toEqual(
+        expect.arrayContaining(restaurantHistory.map((item) => item.id)),
+      );
+
+      const foreignVersionId = restaurantHistory[0]?.id;
+      if (!foreignVersionId) {
+        throw new Error("Expected a restaurant publication to isolate against");
+      }
+      await expect(
+        rollbackPublishedSiteVersion({
+          siteId: foodSiteId,
+          slug: foodSlug,
+          vertical: Vertical.FOOD_RETAIL,
+          targetSiteVersionId: foreignVersionId,
+          actor,
+        }),
+      ).rejects.toThrow("Published site version not found");
+      await expect(
+        rollbackPublishedSiteVersion({
+          siteId: localServiceSiteId,
+          slug: localServiceSlug,
+          vertical: Vertical.LOCAL_SERVICE,
+          targetSiteVersionId: foreignVersionId,
+          actor,
+        }),
+      ).rejects.toThrow("Published site version not found");
+      await expect(
+        publishSiteDraft({
+          siteId: foodSiteId,
+          slug,
+          vertical: Vertical.FOOD_RETAIL,
+          actor,
+          changeSummary: "Cross-tenant slug must not publish",
+          expectedRevision: 0,
+        }),
+      ).rejects.toThrow("Site not found");
+    });
+
+    test("rejects a stale food-retail owner save and publish revision", async () => {
+      const loaded = await findOwnerSiteDraft(foodSlug);
+      if (!loaded) throw new Error("Expected the food-retail owner draft");
+      const firstSave = await updateSiteDraft(
+        foodSlug,
+        {
+          ...(loaded.draft as typeof sampleFoodRetailDraft),
+          description: "Food-retail first independent tab save.",
+        },
+        Vertical.FOOD_RETAIL,
+        { actor, expectedRevision: loaded.revision },
+      );
+      await expect(
+        updateSiteDraft(
+          foodSlug,
+          {
+            ...(loaded.draft as typeof sampleFoodRetailDraft),
+            description: "Stale food-retail tab must not overwrite.",
+          },
+          Vertical.FOOD_RETAIL,
+          { actor, expectedRevision: loaded.revision },
+        ),
+      ).rejects.toMatchObject({
+        name: "DraftRevisionConflictError",
+        currentRevision: firstSave.revision,
+      });
+      expect(DraftRevisionConflictError).toBeDefined();
+
+      await expect(
+        publishSiteDraft({
+          siteId: foodSiteId,
+          slug: foodSlug,
+          vertical: Vertical.FOOD_RETAIL,
+          actor,
+          changeSummary: "Stale food-retail publish",
+          expectedRevision: loaded.revision,
+        }),
+      ).rejects.toMatchObject({
+        name: "DraftRevisionConflictError",
+        currentRevision: firstSave.revision,
+      });
+    });
+
+    test("rejects a stale local-service owner save and publish revision", async () => {
+      const loaded = await findOwnerSiteDraft(localServiceSlug);
+      if (!loaded) throw new Error("Expected the local-service owner draft");
+      const firstSave = await updateSiteDraft(
+        localServiceSlug,
+        {
+          ...(loaded.draft as typeof sampleLocalServiceDraft),
+          description: "Local-service first independent tab save.",
+        },
+        Vertical.LOCAL_SERVICE,
+        { actor, expectedRevision: loaded.revision },
+      );
+      await expect(
+        updateSiteDraft(
+          localServiceSlug,
+          {
+            ...(loaded.draft as typeof sampleLocalServiceDraft),
+            description: "Stale local-service tab must not overwrite.",
+          },
+          Vertical.LOCAL_SERVICE,
+          { actor, expectedRevision: loaded.revision },
+        ),
+      ).rejects.toMatchObject({
+        name: "DraftRevisionConflictError",
+        currentRevision: firstSave.revision,
+      });
+
+      await expect(
+        publishSiteDraft({
+          siteId: localServiceSiteId,
+          slug: localServiceSlug,
+          vertical: Vertical.LOCAL_SERVICE,
+          actor,
+          changeSummary: "Stale local-service publish",
+          expectedRevision: loaded.revision,
+        }),
+      ).rejects.toMatchObject({
+        name: "DraftRevisionConflictError",
+        currentRevision: firstSave.revision,
+      });
     });
   },
 );

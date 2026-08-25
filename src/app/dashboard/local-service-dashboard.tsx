@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 import { AccountActions } from "@/components/account-actions";
 import { Brand } from "@/components/brand";
+import {
+  OwnerBillingBanner,
+  OwnerBillingButton,
+  OwnerPaidOperationsSection,
+  useOwnerPaidOperations,
+} from "@/components/owner-paid-operations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +26,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import type { BillingAccess } from "@/lib/billing-access";
 import type { BrandIdentity } from "@/lib/brand";
+import {
+  isOwnerOperationEnabled,
+  localServiceOwnerOperations,
+  ownerOperationUnavailableMessage,
+  type ClientPublicationHistoryItem,
+} from "@/lib/owner-operations";
+import type { VerticalOwnerOperations } from "@/lib/verticals/types";
 import {
   canEnableOwnerIntegration,
   createOwnerIntegration,
@@ -91,6 +105,9 @@ export function LocalServiceDashboard({
   canSwitchWorkspace,
   initiallyPublished,
   platformUrl,
+  ownerOperations = localServiceOwnerOperations,
+  billingAccess = null,
+  publicationHistory = [],
 }: {
   initialDraft: LocalServiceSiteDraft;
   initialRevision: number;
@@ -99,6 +116,9 @@ export function LocalServiceDashboard({
   canSwitchWorkspace: boolean;
   initiallyPublished: boolean;
   platformUrl: string;
+  ownerOperations?: VerticalOwnerOperations;
+  billingAccess?: BillingAccess | null;
+  publicationHistory?: ClientPublicationHistoryItem[];
 }) {
   const [draft, setDraftState] = useState(initialDraft);
   const draftRef = useRef(initialDraft);
@@ -106,9 +126,17 @@ export function LocalServiceDashboard({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const [published, setPublished] = useState(initiallyPublished);
   const [savedRevision, setSavedRevision] = useState(initialRevision);
+  const paidOps = useOwnerPaidOperations({
+    siteSlug: initialDraft.slug,
+    platformUrl,
+    brandName: brand.name,
+    capabilities: ownerOperations,
+    billingAccess,
+    initialPublicationHistory: publicationHistory,
+  });
+  const publishedVersion = paidOps.publishedVersion;
+  const published = initiallyPublished || paidOps.isPublished;
   const savedRevisionRef = useRef(initialRevision);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +223,17 @@ export function LocalServiceDashboard({
   }
 
   async function publish() {
+    if (!isOwnerOperationEnabled(ownerOperations.publicationMutation)) {
+      setError(
+        ownerOperationUnavailableMessage(
+          "publicationMutation",
+          ownerOperations.publicationMutation === "enabled"
+            ? "gated"
+            : ownerOperations.publicationMutation,
+        ),
+      );
+      return;
+    }
     const changeSummary = window
       .prompt(
         "Summarize what will change on the public site:",
@@ -220,13 +259,23 @@ export function LocalServiceDashboard({
       });
       const result = (await response.json()) as {
         error?: string;
-        published?: { version: number };
+        published?: {
+          id: string;
+          version: number;
+          publishedAt: string;
+          theme: { id: string; version: string };
+        };
       };
       if (!response.ok || !result.published) {
         throw new Error(result.error ?? "Publish failed");
       }
-      setPublished(true);
-      setPublishedVersion(result.published.version);
+      paidOps.recordPublished({
+        id: result.published.id,
+        version: result.published.version,
+        publishedAt: result.published.publishedAt,
+        changeSummary,
+        theme: result.published.theme,
+      });
       setNotice(`Published version ${result.published.version}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Publish failed");
@@ -244,10 +293,20 @@ export function LocalServiceDashboard({
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {email}
             </span>
+            <OwnerBillingButton
+              billingAccess={paidOps.billingAccess}
+              portalLoading={paidOps.portalLoading}
+              onOpenPortal={() => void paidOps.openBillingPortal()}
+            />
             <AccountActions canSwitch={canSwitchWorkspace} />
           </div>
         </div>
       </header>
+      <OwnerBillingBanner
+        billingAccess={paidOps.billingAccess}
+        portalLoading={paidOps.portalLoading}
+        onOpenPortal={() => void paidOps.openBillingPortal()}
+      />
 
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -268,7 +327,7 @@ export function LocalServiceDashboard({
             <Button
               render={
                 <Link
-                  href={published ? platformUrl : `/preview/${draft.slug}`}
+                  href={published ? paidOps.liveUrl : `/preview/${draft.slug}`}
                   target="_blank"
                 />
               }
@@ -312,14 +371,18 @@ export function LocalServiceDashboard({
             </span>
           ) : null}
         </div>
-        {error ? (
+        {error || paidOps.operationError ? (
           <p
             role="alert"
             className="mt-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
           >
-            {error}
+            {error ?? paidOps.operationError}
           </p>
         ) : null}
+
+        <div className="mt-8">
+          <OwnerPaidOperationsSection paid={paidOps} />
+        </div>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Card>
