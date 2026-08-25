@@ -210,13 +210,6 @@ function unnamedPlanMarketing(): VerticalMarketing {
   };
 }
 
-function requirePricing(marketing: VerticalMarketing) {
-  if (!marketing.pricing) {
-    throw new Error("expected a priced marketing fixture");
-  }
-  return marketing.pricing;
-}
-
 function blankEmailMarketing(): VerticalMarketing {
   return {
     ...foodRetailMarketing,
