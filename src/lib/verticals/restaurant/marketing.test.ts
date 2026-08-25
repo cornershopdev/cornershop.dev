@@ -1,9 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { beautyMarketing } from "@/lib/verticals/beauty/marketing";
+import { Vertical } from "@/generated/prisma/enums";
 import { foodRetailMarketing } from "@/lib/verticals/food-retail/marketing";
 import { localServiceMarketing } from "@/lib/verticals/local-service/marketing";
 import { restaurantMarketing } from "@/lib/verticals/restaurant/marketing";
+import {
+  isVerticalClaimEnabled,
+  listVerticalIds,
+  resolveVerticalConfig,
+} from "@/lib/verticals/registry";
 
 /**
  * GTM audit + first-customer runbook: launch is one $49/month founding plan.
@@ -39,18 +44,26 @@ describe("Restofront founding offer", () => {
     );
   });
 
-  it("shares one founding price while keeping vertical feature lists scoped", () => {
-    for (const marketing of [
-      restaurantMarketing,
-      beautyMarketing,
-      foodRetailMarketing,
-      localServiceMarketing,
-    ]) {
-      expect(marketing.pricing.plans).toHaveLength(1);
-      expect(marketing.pricing.plans[0]?.price).toBe("$49");
-      expect(marketing.pricing.copy).toContain("Local currency");
+  it("shares one founding price on claim-enabled verticals while keeping feature lists scoped", () => {
+    const claimEnabledMarketing = listVerticalIds()
+      .filter(isVerticalClaimEnabled)
+      .map((id) => resolveVerticalConfig(id).marketing);
+
+    expect(claimEnabledMarketing.map((marketing) => marketing.brand.name)).toEqual(
+      expect.arrayContaining([
+        restaurantMarketing.brand.name,
+        foodRetailMarketing.brand.name,
+        localServiceMarketing.brand.name,
+      ]),
+    );
+    expect(isVerticalClaimEnabled(Vertical.BEAUTY)).toBe(false);
+
+    for (const marketing of claimEnabledMarketing) {
+      expect(marketing.pricing?.plans).toHaveLength(1);
+      expect(marketing.pricing?.plans[0]?.price).toBe("$49");
+      expect(marketing.pricing?.copy).toContain("Local currency");
     }
-    expect(beautyMarketing.pricing.plans[0]?.features).not.toEqual(
+    expect(foodRetailMarketing.pricing.plans[0]?.features).not.toEqual(
       restaurantMarketing.pricing.plans[0]?.features,
     );
   });

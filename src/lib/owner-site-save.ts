@@ -4,7 +4,10 @@ import {
   DraftRevisionConflictError,
   updateSiteDraft,
 } from "@/lib/site-persistence";
-import { resolveVerticalConfig } from "@/lib/verticals/registry";
+import {
+  isVerticalOwnerReviewSupported,
+  resolveVerticalConfig,
+} from "@/lib/verticals/registry";
 
 type OwnerSiteSaveAccess = {
   site: { vertical: Vertical };
@@ -25,11 +28,11 @@ export async function saveAuthorizedSiteDraft(
   input: unknown,
   saveDraft: OwnerSiteDraftUpdater = updateSiteDraft,
 ) {
-  if (access.site.vertical === Vertical.BEAUTY) {
+  if (!isVerticalOwnerReviewSupported(access.site.vertical)) {
     return Response.json(
       {
         error:
-          "Owner editing for this vertical is not available yet. Use import and claim flows until the vertical editor ships.",
+          "Owner editing for this vertical is not available yet. Use the private preview until the vertical editor ships.",
       },
       { status: 409 },
     );

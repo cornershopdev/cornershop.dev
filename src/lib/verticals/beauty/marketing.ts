@@ -1,9 +1,11 @@
 import type { VerticalMarketing } from "@/lib/verticals/types";
 
 /**
- * Built for public preview, but owner claim stays disabled until its dedicated
- * dashboard and evidence review are complete. It has no standalone domain —
- * hence no `hostnames` and a null `domain`.
+ * Built for public preview. Owner acquisition stays disabled until its
+ * dedicated dashboard and evidence review are complete. It has no standalone
+ * domain — hence no `hostnames` and a null `domain`. Pricing and founding-plan
+ * copy are omitted: this is an explicitly non-chargeable pilot, not a sellable
+ * niche.
  *
  * `heroVisual: "none"` because the restaurant transformation mock is a menu PDF
  * turning into a menu — dressing it up as a salon would be a lie about what the
@@ -18,14 +20,18 @@ export const beautyMarketing = {
   // record, a verified sender, and these two strings — in that order.
   email: null,
   audience: "salons and barbers",
-  tagline: "A service list and a booking button, always up to date.",
+  tagline: "A service list and a booking button, recovered from the source.",
   heroVisual: "none",
   hero: {
-    badge: "Your old site in. A finished one out.",
+    badge: "Your old site in. A finished preview out.",
     headline: "Every service, priced and bookable.",
     subheadline:
-      "Give us the salon. Get back a mobile-first website with the full service list, durations and prices already inside—and keep the booking system your clients already use.",
-    proofPoints: ["No setup call", "Private preview first", "$49/month"],
+      "Give us the salon. Get back a private mobile-first preview with the full service list, durations and prices already inside—keeping the booking system your clients already use.",
+    proofPoints: [
+      "No setup call",
+      "Private preview first",
+      "Non-chargeable pilot",
+    ],
   },
   form: {
     placeholder: "Salon website or name",
@@ -34,11 +40,11 @@ export const beautyMarketing = {
     pendingLabel: "Opening your salon",
   },
   signIn: {
-    title: "Open your salon.",
+    title: "Open your salon preview.",
     description:
-      "Enter the owner email used when the website was claimed. No password needed.",
+      "Enter the email used when this private preview was created. No password needed.",
     emailPlaceholder: "owner@salon.com",
-    emptyPrompt: "No site yet?",
+    emptyPrompt: "No preview yet?",
     createLabel: "Build a preview",
     createHref: "/create?vertical=beauty",
   },
@@ -55,8 +61,8 @@ export const beautyMarketing = {
     },
     {
       number: "03",
-      title: "Claim it and go live",
-      copy: "Claim the founding plan, connect the domain, and keep the booking system already taking appointments.",
+      title: "Keep it private for now",
+      copy: "This is a non-chargeable pilot. The preview stays private while Salonfront is still in preview.",
     },
   ],
   valueProps: {
@@ -81,8 +87,8 @@ export const beautyMarketing = {
       },
       {
         icon: "refresh",
-        title: "Always-current presence",
-        copy: "Prices, hours and integration checks become an ongoing service, not another redesign project.",
+        title: "A recovered snapshot of today",
+        copy: "Prices, hours and booking links come from the current source site, ready to inspect in the private preview.",
       },
     ],
   },
@@ -92,7 +98,7 @@ export const beautyMarketing = {
     imageAlt: "Salon interior photographed in natural light",
     eyebrow: "Credible imagery, not fantasy results",
     headline: "Fill the visual gaps without faking the work.",
-    copy: "Salonfront prioritises real source photography, then creates complementary editorial images for missing categories. Skin, hair and nail results are never regenerated, and every generated asset stays reviewable before publishing.",
+    copy: "Salonfront prioritises real source photography, then creates complementary editorial images for missing categories. Skin, hair and nail results are never regenerated.",
     assurances: [
       {
         icon: "shield",
@@ -100,34 +106,13 @@ export const beautyMarketing = {
       },
       {
         icon: "cursor",
-        copy: "One click to regenerate, replace or remove any image",
-      },
-    ],
-  },
-  pricing: {
-    eyebrow: "Simple ongoing care",
-    headline: "Less than one empty chair.",
-    copy: "Preview first. Pay only when the salon wants to claim and publish it. Local currency is shown at checkout.",
-    plans: [
-      {
-        name: "Founding",
-        price: "$49",
-        cadence: "/month",
-        copy: "One maintained, mobile-first salon website on the business's own domain.",
-        features: [
-          "Mobile-first website and service list",
-          "Existing booking links",
-          "Custom domain and SSL",
-          "Owner editing and source monitoring",
-        ],
-        featured: true,
-        badge: "Founding offer",
+        copy: "Every recovered image stays inspectable in the private preview",
       },
     ],
   },
   closing: {
     headline: "See the salon before asking it to change.",
-    copy: "Paste one website. Salonfront will do the first draft.",
+    copy: "Paste one website. Salonfront will do the first draft. Nothing is billed.",
   },
   footerTagline: "Every service, priced and bookable.",
 } satisfies VerticalMarketing;

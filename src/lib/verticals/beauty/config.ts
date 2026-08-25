@@ -79,6 +79,7 @@ export const beautyConfig = {
   marketing: beautyMarketing,
   claimMode: "disabled",
   publicationEnabled: true,
+  publicationMutationEnabled: false,
   integrationTypes: ["booking", "social"],
   attributesSchema: beautyAttributesSchema,
   attributeDefaults: {
