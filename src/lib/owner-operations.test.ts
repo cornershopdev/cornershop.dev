@@ -64,6 +64,8 @@ describe("owner operations capability model", () => {
     expect(dashboardPage).toContain("getSourceMonitoringDashboard(access.site.id)");
     expect(foodRetailDashboard).toContain("SourceMonitoringPanel");
     expect(localServiceDashboard).toContain("SourceMonitoringPanel");
+    expect(foodRetailDashboard).toContain("PhotoLibraryPanel");
+    expect(localServiceDashboard).toContain("PhotoLibraryPanel");
   });
 
   it("enables billing, publication, domain, and workspace switching for owner-review verticals", () => {
@@ -81,20 +83,20 @@ describe("owner operations capability model", () => {
     }
   });
 
-  it("enables source monitoring for owner-review verticals and keeps later surfaces explicit not-yet", () => {
+  it("enables source monitoring and the photo library for owner-review verticals", () => {
     for (const id of [
       Vertical.RESTAURANT,
       Vertical.FOOD_RETAIL,
       Vertical.LOCAL_SERVICE,
     ] as const) {
       expect(resolveOwnerOperations(id).sourceMonitoring).toBe("enabled");
+      expect(resolveOwnerOperations(id).photoLibrary).toBe("enabled");
     }
     for (const ops of [
       resolveOwnerOperations(Vertical.FOOD_RETAIL),
       resolveOwnerOperations(Vertical.LOCAL_SERVICE),
     ]) {
       expect(ops.articles).toBe("not-yet");
-      expect(ops.photoLibrary).toBe("not-yet");
       expect(ops.analytics).toBe("not-yet");
       expect(ops.bookingInbox).toBe("not-yet");
     }

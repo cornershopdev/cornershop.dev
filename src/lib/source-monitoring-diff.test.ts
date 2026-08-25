@@ -192,7 +192,14 @@ describe("lossless source-monitoring diffs", () => {
     current.catalogSections = [
       {
         ...current.catalogSections[0],
-        items: [current.catalogSections[0].items[0]],
+        items: [
+          {
+            ...current.catalogSections[0].items[0],
+            imageUrl: "https://assets.example/original-focaccia.jpg",
+            originalImageUrl: "https://assets.example/original-focaccia.jpg",
+            imageProvenance: "official",
+          },
+        ],
       },
     ];
     const proposed = structuredClone(current);
@@ -201,7 +208,9 @@ describe("lossless source-monitoring diffs", () => {
       description: "Rosemary, sea salt, cultured butter, extra virgin oil",
       available: false,
       attributes: { dietaryLabels: ["vegan"] },
-      imageUrl: null,
+      imageUrl: "https://example.com/invented-focaccia.jpg",
+      originalImageUrl: "https://example.com/invented-focaccia.jpg",
+      imageProvenance: "owner",
     };
     proposed.catalogSections[0].items.push({
       name: "Olives",
@@ -231,6 +240,9 @@ describe("lossless source-monitoring diffs", () => {
       description: "Rosemary, sea salt, cultured butter, extra virgin oil",
       available: current.catalogSections[0].items[0].available,
       attributes: current.catalogSections[0].items[0].attributes,
+      imageUrl: "https://assets.example/original-focaccia.jpg",
+      originalImageUrl: "https://assets.example/original-focaccia.jpg",
+      imageProvenance: "official",
     });
     expect(suggested.catalogSections[0].items.at(-1)).toMatchObject({
       name: "Olives",

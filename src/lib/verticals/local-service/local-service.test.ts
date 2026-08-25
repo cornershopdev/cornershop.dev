@@ -41,6 +41,17 @@ describe("local-service vertical", () => {
         projects: [{ title: "Claimed project", imageUrl: "javascript:alert(1)" }],
       }).success,
     ).toBe(false);
+    expect(
+      localServiceAttributesSchema.safeParse({
+        ...localServiceConfig.attributeDefaults,
+        projects: [
+          {
+            title: "Claimed project",
+            imageUrl: "https://assets.example/rewire.jpg",
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps availability, insurance and price posture unstated by default", () => {

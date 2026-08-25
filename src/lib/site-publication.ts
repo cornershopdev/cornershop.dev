@@ -17,6 +17,10 @@ import {
   SitePublicationCapabilityError,
 } from "@/lib/site-publication-capability";
 import {
+  catalogItemHasUnselectedRemoteImage,
+  projectHasUnselectedRemoteImage,
+} from "@/lib/reviewed-photo-projection";
+import {
   projectPublishedSiteVersion,
   projectSiteDraft,
   siteDraftRelations,
@@ -307,6 +311,55 @@ function assertPublishablePhotoProjection(
     )
   ) {
     throw new SitePublicationPhotoError();
+  }
+
+  const catalogItems = site.catalogSections.flatMap((section) => section.items);
+  for (const item of catalogItems) {
+    const selected = selectedPhotos.find(
+      (photo) =>
+        photo.selectedUsage === "CATALOG" &&
+        photo.selectedCatalogItemId === item.id,
+    );
+    if (
+      catalogItemHasUnselectedRemoteImage({
+        imageUrl: item.imageUrl,
+        originalImageUrl: item.originalImageUrl,
+        imageProvenance: item.imageProvenance
+          ? item.imageProvenance.toLowerCase().replace("_", "-")
+          : null,
+        selected: selected ?? null,
+      })
+    ) {
+      throw new SitePublicationPhotoError();
+    }
+    if (selected && !isStoredAndApproved(selected)) {
+      throw new SitePublicationPhotoError();
+    }
+  }
+
+  const projects = Array.isArray(
+    (site.attributes as { projects?: unknown }).projects,
+  )
+    ? ((site.attributes as { projects: unknown[] }).projects)
+    : [];
+  const gallery = selectedPhotos.filter(
+    (photo) => photo.selectedUsage === "GALLERY",
+  );
+  for (const [index, project] of projects.entries()) {
+    const record =
+      typeof project === "object" && project !== null
+        ? (project as Record<string, unknown>)
+        : {};
+    if (
+      projectHasUnselectedRemoteImage({
+        imageUrl: record.imageUrl,
+        originalImageUrl: record.originalImageUrl,
+        imageProvenance: record.imageProvenance,
+        selected: gallery[index] ?? null,
+      })
+    ) {
+      throw new SitePublicationPhotoError();
+    }
   }
 }
 
