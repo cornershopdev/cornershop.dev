@@ -3,8 +3,9 @@
 `LOCAL_SERVICE` is the bounded local-trade implementation for plumbers,
 electricians, builders, repair businesses, and artisans. It is registered in
 the existing vertical registry and uses the shared crawler, import workflow,
-site tables, renderer, owner editing, analytics, domain routing, and
-source-monitoring engine. It does not fork the app and it
+site tables, renderer, owner editing, domain routing, and
+source-monitoring engine. Owner analytics, lead inbox, and articles are
+not-yet. It does not fork the app and it
 does not accept model-authored HTML, CSS, class names, or components.
 
 ## Data contract
@@ -90,13 +91,26 @@ use the shared billing, same-origin, optimistic-revision, immutable snapshot,
 and audit boundaries. The editor saves before publication and requires a
 3–280 character change summary plus explicit confirmation.
 
+## Capability row
+
+Matches the README matrix and `resolveOwnerOperations(LOCAL_SERVICE)`:
+
+| Vertical | Factory visibility | Standalone launch | Claim mode | Owner mutation | Platform publication | Custom domains | Monitoring | Leads | Articles |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Local Service | private | unlaunched | factory | enabled | enabled | enabled | enabled | not-yet | not-yet |
+
+Owner photo library is enabled. Owner analytics, lead inbox, and articles stay
+`not-yet`. The renderer disables the restaurant booking-request form.
+
 ## Launch gate
 
 Tradefront has no standalone niche storefront. Its marketing config therefore
 keeps hostname, domain, and niche sender empty, while `claimMode: "factory"`
 allows an approved private preview to use Cornershopdev's verified sender,
-shared $49 checkout, and `<slug>.cornershop.dev` public URL. A future standalone
-niche still must satisfy `verticalLaunchReadiness`:
+shared $49 checkout, and `<slug>.cornershop.dev` public URL.
+`publicationEnabled` and `publicationMutationEnabled` are both true for that
+factory path. A future standalone niche still must satisfy
+`verticalLaunchReadiness`:
 
 1. a configured public domain;
 2. that exact domain registered in the proxy hostname list;

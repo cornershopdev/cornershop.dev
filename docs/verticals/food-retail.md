@@ -13,7 +13,8 @@ flowchart LR
   C --> D[(Shared Site and Catalog tables)]
   D --> E[Private preview]
   D --> F[Food retail owner dashboard]
-  F --> G[Private owner review]
+  F --> G[Factory claim]
+  G --> H[Publish on platform subdomain]
 ```
 
 ## Vertical boundary
@@ -89,6 +90,18 @@ carry the vertical data, so no existing rows are rewritten and the migration
 does not seed product facts. The owner PUT route parses FOOD_RETAIL drafts with
 the registered schema before the shared optimistic-revision persistence path.
 
+## Capability row
+
+Matches the README matrix and `resolveOwnerOperations(FOOD_RETAIL)`:
+
+| Vertical | Factory visibility | Standalone launch | Claim mode | Owner mutation | Platform publication | Custom domains | Monitoring | Leads | Articles |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Food Retail | private | unlaunched | factory | enabled | enabled | enabled | enabled | not-yet | not-yet |
+
+Owner photo library is enabled. Owner analytics, lead inbox, and articles stay
+`not-yet`. This vertical does not inherit restaurant reservations or booking
+leads.
+
 ## Factory claim and standalone launch gates
 
 Standalone niche marketing stays closed:
@@ -96,8 +109,10 @@ Standalone niche marketing stays closed:
 - `marketing.hostnames = []`
 - `marketing.domain = null`
 - `marketing.email = null`
+- `marketing.publiclyAccessible = false`
 - `claimMode = "factory"`
 - `publicationEnabled = true`
+- `publicationMutationEnabled = true`
 
 An approved private preview can claim the shared Cornershopdev $49 plan and
 publish at `<slug>.cornershop.dev`. That factory path requires:
