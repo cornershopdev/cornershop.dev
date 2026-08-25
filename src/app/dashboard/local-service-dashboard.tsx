@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   ExternalLink,
@@ -59,6 +59,12 @@ import {
   type LocalServiceAttributes,
   type LocalServiceSiteDraft,
 } from "@/lib/verticals/local-service/schema";
+import {
+  OwnerDraftDirtyGuard,
+  acknowledgeOwnerDraftSave,
+  ownerDraftNavigationProps,
+  useOwnerDraftDirtyState,
+} from "@/lib/owner-draft-dirty-state";
 
 const tradeTypes: LocalServiceAttributes["tradeType"][] = [
   "plumber",
@@ -93,13 +99,26 @@ export function reconcileLocalServiceDraftAfterSave(input: {
   currentMutationVersion: number;
   savedRevision: number;
 }) {
-  const hadNewerEdits =
-    input.currentMutationVersion !== input.submittedMutationVersion;
+  const acknowledged = acknowledgeOwnerDraftSave(
+    {
+      draft: input.currentDraft,
+      baseline: input.submittedDraft,
+      revision: 0,
+      mutationVersion: input.currentMutationVersion,
+      dirty: true,
+    },
+    {
+      submittedDraft: input.submittedDraft,
+      persistedDraft: input.persistedDraft,
+      submittedMutationVersion: input.submittedMutationVersion,
+      savedRevision: input.savedRevision,
+    },
+  );
   return {
-    draft: hadNewerEdits ? input.currentDraft : input.persistedDraft,
-    revision: input.savedRevision,
-    dirty: hadNewerEdits,
-    hadNewerEdits,
+    draft: acknowledged.state.draft,
+    revision: acknowledged.state.revision,
+    dirty: acknowledged.state.dirty,
+    hadNewerEdits: acknowledged.hadNewerEdits,
   };
 }
 
@@ -128,13 +147,19 @@ export function LocalServiceDashboard({
   publicationHistory?: ClientPublicationHistoryItem[];
   sourceMonitoring?: SourceMonitoringDashboardDto;
 }) {
-  const [draft, setDraftState] = useState(initialDraft);
-  const draftRef = useRef(initialDraft);
-  const mutationVersionRef = useRef(0);
-  const [dirty, setDirty] = useState(false);
+  const {
+    draft,
+    revision: savedRevision,
+    dirty,
+    setDraft,
+    applyAuxiliary,
+    setRevision,
+    beginSave,
+    acknowledgeSave,
+    acknowledgeSnapshot,
+  } = useOwnerDraftDirtyState(initialDraft, initialRevision);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [savedRevision, setSavedRevision] = useState(initialRevision);
   const paidOps = useOwnerPaidOperations({
     siteSlug: initialDraft.slug,
     platformUrl,
@@ -145,17 +170,18 @@ export function LocalServiceDashboard({
   });
   const publishedVersion = paidOps.publishedVersion;
   const published = initiallyPublished || paidOps.isPublished;
-  const savedRevisionRef = useRef(initialRevision);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [integrationIssues, setIntegrationIssues] = useState<
     OwnerIntegrationIssue[]
   >([]);
 
-  const handlePhotoRevision = useCallback((nextRevision: number) => {
-    savedRevisionRef.current = nextRevision;
-    setSavedRevision(nextRevision);
-  }, []);
+  const handlePhotoRevision = useCallback(
+    (nextRevision: number) => {
+      setRevision(nextRevision);
+    },
+    [setRevision],
+  );
   const handlePhotoHeroChange = useCallback(
     (
       hero: {
@@ -164,16 +190,14 @@ export function LocalServiceDashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       } | null,
     ) => {
-      const next = {
-        ...draftRef.current,
+      applyAuxiliary((current) => ({
+        ...current,
         heroImageUrl: hero?.url ?? null,
         heroOriginalImageUrl: hero?.originalUrl ?? null,
         heroImageProvenance: hero?.provenance ?? null,
-      };
-      draftRef.current = next;
-      setDraftState(next);
+      }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoGalleryChange = useCallback(
     (
@@ -183,8 +207,7 @@ export function LocalServiceDashboard({
         provenance: "official" | "owner" | "permissioned-ugc";
       }>,
     ) => {
-      const current = draftRef.current;
-      const next = {
+      applyAuxiliary((current) => ({
         ...current,
         galleryImages,
         attributes: {
@@ -200,11 +223,9 @@ export function LocalServiceDashboard({
             };
           }),
         },
-      };
-      draftRef.current = next;
-      setDraftState(next);
+      }));
     },
-    [],
+    [applyAuxiliary],
   );
   const handlePhotoCatalogChange = useCallback(
     (change: {
@@ -214,8 +235,7 @@ export function LocalServiceDashboard({
       originalUrl: string | null;
       provenance: "official" | "owner" | "permissioned-ugc" | null;
     }) => {
-      const current = draftRef.current;
-      const next = {
+      applyAuxiliary((current) => ({
         ...current,
         catalogSections: current.catalogSections.map((section, sectionIndex) =>
           sectionIndex !== change.sectionIndex
@@ -234,28 +254,25 @@ export function LocalServiceDashboard({
                 ),
               },
         ),
-      };
-      draftRef.current = next;
-      setDraftState(next);
+      }));
     },
-    [],
+    [applyAuxiliary],
   );
 
   function change(mutator: (next: LocalServiceSiteDraft) => void) {
-    const next = structuredClone(draftRef.current);
-    mutator(next);
-    draftRef.current = next;
-    mutationVersionRef.current += 1;
-    setDraftState(next);
-    setDirty(true);
+    setDraft((current) => {
+      const next = structuredClone(current);
+      mutator(next);
+      return next;
+    });
     setNotice(null);
     setError(null);
     setIntegrationIssues([]);
   }
 
   async function save(): Promise<number | null> {
-    const submittedDraft = draftRef.current;
-    const submittedMutationVersion = mutationVersionRef.current;
+    const submitted = beginSave();
+    const submittedDraft = submitted.submittedDraft;
     const ownerIssues = validateOwnerIntegrations(submittedDraft.integrations);
     const parsed = localServiceSiteDraftSchema.safeParse(submittedDraft);
     if (ownerIssues.length > 0 || !parsed.success) {
@@ -278,7 +295,7 @@ export function LocalServiceDashboard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...parsed.data,
-          expectedRevision: savedRevisionRef.current,
+          expectedRevision: submitted.expectedRevision,
         }),
       });
       const result = (await response.json()) as {
@@ -292,25 +309,18 @@ export function LocalServiceDashboard({
       ) {
         throw new Error("Save succeeded without a draft revision");
       }
-      const reconciled = reconcileLocalServiceDraftAfterSave({
+      const reconciled = acknowledgeSave({
         submittedDraft,
         persistedDraft: parsed.data,
-        currentDraft: draftRef.current,
-        submittedMutationVersion,
-        currentMutationVersion: mutationVersionRef.current,
+        submittedMutationVersion: submitted.submittedMutationVersion,
         savedRevision: result.revision,
       });
-      draftRef.current = reconciled.draft;
-      savedRevisionRef.current = reconciled.revision;
-      setDraftState(reconciled.draft);
-      setSavedRevision(reconciled.revision);
-      setDirty(reconciled.dirty);
       setNotice(
         reconciled.hadNewerEdits
-          ? `Draft revision ${reconciled.revision} saved; newer edits remain unsaved`
+          ? `Draft revision ${reconciled.state.revision} saved; newer edits remain unsaved`
           : "Private draft saved",
       );
-      return reconciled.hadNewerEdits ? null : reconciled.revision;
+      return reconciled.hadNewerEdits ? null : reconciled.state.revision;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Save failed");
       return null;
@@ -386,17 +396,17 @@ export function LocalServiceDashboard({
     draft: unknown;
   }) {
     const accepted = localServiceSiteDraftSchema.parse(input.draft);
-    draftRef.current = accepted;
-    savedRevisionRef.current = input.revision;
-    setDraftState(accepted);
-    setSavedRevision(input.revision);
-    setDirty(false);
+    acknowledgeSnapshot(accepted, input.revision);
     setNotice("Source suggestion saved to the private draft.");
     setError(null);
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <OwnerDraftDirtyGuard dirty={dirty}>
+    <div
+      className="min-h-screen bg-background text-foreground"
+      {...ownerDraftNavigationProps(dirty)}
+    >
       <header className="border-b border-border/70">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
           <Brand {...brand} />
@@ -1157,6 +1167,7 @@ export function LocalServiceDashboard({
         </EditorSection>
       </main>
     </div>
+    </OwnerDraftDirtyGuard>
   );
 }
 
