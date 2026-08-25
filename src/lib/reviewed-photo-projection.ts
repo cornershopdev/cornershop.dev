@@ -1,5 +1,4 @@
 import type { ImageProvenance, PhotoUsage } from "@/generated/prisma/enums";
-import { isPlaceholderIntegrationHostname } from "@/lib/owner-integration";
 
 export type LibraryPhotoProjection = {
   originalUrl: string;
@@ -68,19 +67,34 @@ export function libraryPhotoMatchesUrl(
 }
 
 /**
- * Owner-typed placeholder hosts (example.com / .net / .org). Historical
- * imported photography — Unsplash fixtures, first-party HTTPS, local paths —
- * must remain readable without living in the photo library yet.
+ * Restaurant publication fixtures that may appear on a draft without a
+ * PhotoAsset row: local `/approved` and `/themes` paths, plus Unsplash
+ * photography on the sample restaurant catalog. Everything else remote is
+ * owner-typed and must be an approved tenant library asset.
  */
+const PRESERVED_IMPORTED_IMAGE_HOSTS = new Set(["images.unsplash.com"]);
+
+export function isPreservedImportedImageUrl(
+  value: string | null | undefined,
+): boolean {
+  if (isLocalImportedImageUrl(value)) return true;
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      PRESERVED_IMPORTED_IMAGE_HOSTS.has(url.hostname.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function isInventedOwnerImageUrl(
   value: string | null | undefined,
 ): boolean {
-  if (!value || isLocalImportedImageUrl(value)) return false;
-  try {
-    return isPlaceholderIntegrationHostname(new URL(value).hostname);
-  } catch {
-    return true;
-  }
+  if (!value || isPreservedImportedImageUrl(value)) return false;
+  return true;
 }
 
 export function isArbitraryRemoteImageUrl(
@@ -90,11 +104,11 @@ export function isArbitraryRemoteImageUrl(
     "originalUrl" | "enhancedUrl"
   >[],
 ): boolean {
-  if (!value || isLocalImportedImageUrl(value)) return false;
+  if (!value || isPreservedImportedImageUrl(value)) return false;
   if (library.some((photo) => libraryPhotoMatchesUrl(photo, value))) {
     return false;
   }
-  return isInventedOwnerImageUrl(value);
+  return true;
 }
 
 export function activeReviewedPhotoUrl(
@@ -140,8 +154,7 @@ function keepImportedImageSlot(submitted: ClientImageSlot): ClientImageSlot {
     url,
     originalUrl:
       submitted.originalUrl &&
-      (isLocalImportedImageUrl(submitted.originalUrl) ||
-        !isInventedOwnerImageUrl(submitted.originalUrl))
+      isPreservedImportedImageUrl(submitted.originalUrl)
         ? submitted.originalUrl
         : url,
     provenance: submitted.provenance,
@@ -175,7 +188,7 @@ export function bindImageSlot(
       photo.reviewStatus === "APPROVED" && libraryPhotoMatchesUrl(photo, url),
   );
   if (adopted) return slotFromLibraryPhoto(adopted);
-  if (isLocalImportedImageUrl(url) || !isInventedOwnerImageUrl(url)) {
+  if (isPreservedImportedImageUrl(url)) {
     return keepImportedImageSlot(submitted);
   }
   return emptySlot;
