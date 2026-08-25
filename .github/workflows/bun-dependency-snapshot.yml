@@ -1,0 +1,106 @@
+name: Bun dependency snapshot
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - "src/lib/bun-dependency-snapshot.ts"
+      - "src/lib/bun-dependency-snapshot.test.ts"
+      - "src/lib/bun-dependency-snapshot-contract.test.ts"
+      - "scripts/build-bun-dependency-snapshot.ts"
+      - ".github/workflows/bun-dependency-snapshot.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - "src/lib/bun-dependency-snapshot.ts"
+      - "src/lib/bun-dependency-snapshot.test.ts"
+      - "src/lib/bun-dependency-snapshot-contract.test.ts"
+      - "scripts/build-bun-dependency-snapshot.ts"
+      - ".github/workflows/bun-dependency-snapshot.yml"
+  schedule:
+    - cron: "47 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Check snapshot parser and permission contract
+        run: bun test src/lib/bun-dependency-snapshot.test.ts src/lib/bun-dependency-snapshot-contract.test.ts
+
+      - name: Build lockfile snapshot
+        run: bun scripts/build-bun-dependency-snapshot.ts --output bun-dependency-snapshot.json
+
+      - name: Upload snapshot evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bun-dependency-snapshot
+          path: bun-dependency-snapshot.json
+          if-no-files-found: warn
+
+  submit:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Build lockfile snapshot
+        run: bun scripts/build-bun-dependency-snapshot.ts --output bun-dependency-snapshot.json
+
+      - name: Submit snapshot to GitHub
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots"
+          http_code="$(curl -sS -o snapshot-submit-response.json -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            --data-binary @bun-dependency-snapshot.json \
+            "${api_url}")"
+          if [[ "${http_code}" != "201" ]]; then
+            echo "Dependency snapshot submission failed with HTTP ${http_code}" >&2
+            cat snapshot-submit-response.json >&2
+            exit 1
+          fi
+          result="$(bun -e 'const response = await Bun.file("snapshot-submit-response.json").json(); if (response === null) { throw new Error("missing result"); } if (typeof response !== "object") { throw new Error("missing result"); } if (Array.isArray(response)) { throw new Error("missing result"); } const result = response.result; if (typeof result !== "string") { throw new Error("missing result"); } if (result.length === 0) { throw new Error("missing result"); } process.stdout.write(result)')"
+          if [[ "${result}" == "INVALID" ]]; then
+            echo "GitHub rejected the dependency snapshot as INVALID" >&2
+            cat snapshot-submit-response.json >&2
+            exit 1
+          fi
+          echo "Submitted bun.lock snapshot result=${result}"

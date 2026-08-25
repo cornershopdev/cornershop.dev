@@ -97,9 +97,54 @@ sent to that registry instead and can be skipped if it has no advisory endpoint.
 This repository's audit is an intentional disclosure of its public
 package/version graph to npm. The workflow supplies no source, secrets, customer
 data, private-registry credentials, registry configuration, or writable token,
-and none may be added to make an audit pass. This workflow does not submit a
-dependency graph to GitHub; complete Bun dependency submission is tracked
-separately in #153.
+and none may be added to make an audit pass. Complete Bun dependency submission
+is owned by `.github/workflows/bun-dependency-snapshot.yml` and is not part of
+this audit job.
+
+### Bun lockfile dependency submission
+
+GitHub's automatic dependency submission has no Bun builder, so the live SBOM
+endpoint otherwise reports only the repository root, direct `package.json`
+entries, and Actions dependencies. `.github/workflows/bun-dependency-snapshot.yml`
+parses the committed text `bun.lock` with `scripts/build-bun-dependency-snapshot.ts`
+and `src/lib/bun-dependency-snapshot.ts`. It does not run `bun install`, resolve
+floating versions, or mutate `package.json` / `bun.lock`.
+
+The workflow default permission is `contents: read`. A `validate` job runs on
+path-filtered pull requests, path-filtered `main` pushes, the daily 04:47 UTC
+schedule, and `workflow_dispatch`. It reconstructs the snapshot, runs the parser
+and permission contract tests, and uploads a `bun-dependency-snapshot` artifact.
+The `submit` job is the only job with `contents: write`. It runs only when
+`github.ref == refs/heads/main` and the event is `push`, `schedule`, or
+`workflow_dispatch`, after `validate` succeeds. Pull requests never receive
+write permission and never POST to the dependency-graph API. The workflow uses
+the default `github.token` only; no repository, package-registry, customer, or
+deployment secrets are in scope.
+
+Idempotency depends on a stable pair that GitHub keeps unique:
+
+- `job.correlator` = `Bun dependency snapshot submit`
+- `detector.name` = `cornershopdev-bun-lockfile`
+
+Do not rename the workflow, the `submit` job, or the detector. Repeating the
+same lockfile replaces the previous snapshot for that pair; a changed lockfile
+replaces it without accumulating stale packages. Failure fails this workflow
+only. It is not a required runtime merge check and must not be folded into
+`ci.yml`.
+
+To inspect evidence, download the `bun-dependency-snapshot` artifact from the
+workflow run and confirm the resolved package count, representative production
+transitives, and representative development transitives. After this workflow
+reaches `main`, reconcile the live SBOM endpoint
+(`/repos/{owner}/{repo}/dependency-graph/sbom`) and record the resulting
+package count before closing #153. Do not call live SBOM mutate APIs from a
+laptop or from an untrusted pull request.
+
+To roll back, disable the "Bun dependency snapshot" workflow in the Actions
+tab or revert the workflow file. The last accepted snapshot remains until
+another trusted run submits a replacement with the same correlator and
+detector. Do not add `pull_request_target`, registry credentials, or
+`contents: write` on the validate/pull-request path.
 
 When the audit fails:
 
