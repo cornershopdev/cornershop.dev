@@ -119,6 +119,22 @@ describe("owner site save revision contract", () => {
     expect(updateSiteDraft).not.toHaveBeenCalled();
   });
 
+  it("rejects beauty owner saves without promising claim or checkout", async () => {
+    const response = await saveAuthorizedSiteDraft(
+      "atelier-coupe",
+      { ...access, site: { vertical: Vertical.BEAUTY } },
+      { expectedRevision: currentRevision },
+      updateSiteDraft,
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error:
+        "Owner editing for this vertical is not available yet. Use the private preview until the vertical editor ships.",
+    });
+    expect(updateSiteDraft).not.toHaveBeenCalled();
+  });
+
   it("persists a schema-valid local-service draft with optimistic concurrency", async () => {
     const response = await saveAuthorizedSiteDraft(
       sampleLocalServiceSiteDraft.slug,
