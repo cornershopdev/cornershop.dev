@@ -29,7 +29,7 @@ launch. Full report deleted after distillation; this file is the record.
 - Best compliant channel produces fewer than 8% conversations from at least
   50 delivered previews.
 - Fewer than 5 paying customers from ~60 previews, or under 4% preview→paid.
-- CAC exceeds €200 at €49/month.
+- CAC exceeds $200 at $49/month.
 - Ongoing support exceeds 30 minutes per customer per month.
 - Claim completion takes over 20 minutes, or under 60% of owners who start
   the claim finish it.
@@ -38,10 +38,12 @@ launch. Full report deleted after distillation; this file is the record.
 
 ## Pricing
 
-- Launch: single €49/month tier or ~€399/year founding offer.
-- Later: €89/month presence tier (custom-domain concierge, multilingual
+- Launch: single $49/month tier or ~$399/year founding offer. The Stripe
+  contract is USD 49.00; Adaptive Pricing presents local currency at
+  checkout, so EUR only ever appears as presentment, never as the price.
+- Later: $89/month presence tier (custom-domain concierge, multilingual
   menus, Google Business Profile sync, maintenance).
-- Do not headline €25: it sits above €12–€19 DIY competitors while leaving
+- Do not headline $25: it sits above €12–€19 DIY competitors while leaving
   too little margin for DNS, corrections, and support.
 - Competitive anchors (July 2026): Owner.com $249–499/mo, Popmenu ~CAD $199/mo,
   Sociavore $49/mo, Flavor Plate $49/mo, UpMenu €49–169/mo, Fisherman $249/mo.
