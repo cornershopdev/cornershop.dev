@@ -119,6 +119,7 @@ export default async function DashboardPage({
   }
 
   if (access?.ok && access.site.vertical !== Vertical.RESTAURANT) {
+    const paid = await loadOwnerPaidWorkspace(access);
     return (
       <EditorialFontScope>
         <UnsupportedVerticalDashboard
@@ -126,6 +127,7 @@ export default async function DashboardPage({
           slug={access.site.slug}
           vertical={access.site.vertical}
           brand={await resolveRequestBrand()}
+          canSwitchWorkspace={paid.canSwitchWorkspace}
         />
       </EditorialFontScope>
     );

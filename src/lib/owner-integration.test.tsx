@@ -312,6 +312,9 @@ describe("owner dashboard workspace switching", () => {
     expect(foodRetailDashboardSource).not.toContain(
       "<AccountActions canSwitch />",
     );
+    expect(dashboardPage).toMatch(
+      /vertical !== Vertical\.RESTAURANT[\s\S]*loadOwnerPaidWorkspace\(access\)[\s\S]*canSwitchWorkspace=\{paid\.canSwitchWorkspace\}/,
+    );
   });
 
   it("hides Switch workspace for a single membership and shows it for multiple", () => {

@@ -61,6 +61,7 @@ import {
 } from "@/lib/cornershop-pro";
 import {
   isOwnerOperationEnabled,
+  ownerOperationUnavailableMessage,
   restaurantOwnerOperations,
   type ClientPublicationHistoryItem,
 } from "@/lib/owner-operations";
@@ -361,6 +362,17 @@ export function Dashboard({
   }
 
   async function publish() {
+    if (!isOwnerOperationEnabled(ownerOperations.publicationMutation)) {
+      setPublishError(
+        ownerOperationUnavailableMessage(
+          "publicationMutation",
+          ownerOperations.publicationMutation === "enabled"
+            ? "gated"
+            : ownerOperations.publicationMutation,
+        ),
+      );
+      return;
+    }
     if (hasUnreviewedRestaurantTranslations(draft)) {
       setPublishError(
         "Review every stale or regenerated translation before publishing",

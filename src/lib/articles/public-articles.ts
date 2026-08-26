@@ -39,9 +39,7 @@ export async function listPublishedArticles(input: {
   const db = getDb();
   const rows = await db.article.findMany({
     where: {
-      site: { slug: input.slug },
-      status: "PUBLISHED",
-      publishedAt: { not: null },
+      ...publishedArticleWhere(input.slug),
       ...(input.locale ? { locale: input.locale } : {}),
     },
     orderBy: { publishedAt: "desc" },
@@ -153,10 +151,8 @@ export async function getPublishedArticle(input: {
   const db = getDb();
   const row = await db.article.findFirst({
     where: {
-      site: { slug: input.slug },
+      ...publishedArticleWhere(input.slug),
       slug: input.articleSlug,
-      status: "PUBLISHED",
-      publishedAt: { not: null },
     },
     select: {
       slug: true,

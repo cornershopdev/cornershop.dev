@@ -113,6 +113,7 @@ export const restaurantConfig = {
   },
   marketing: restaurantMarketing,
   claimMode: "niche",
+  supportsOwnerReview: true,
   publicationEnabled: true,
   publicationMutationEnabled: true,
   ownerOperations: restaurantOwnerOperations,

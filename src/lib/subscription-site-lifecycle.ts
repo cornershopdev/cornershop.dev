@@ -55,6 +55,8 @@ export async function reconcileSiteSubscriptionLifecycle(
       });
     }
   }
+  // Any other status — notably INCOMPLETE, the pre-first-payment state —
+  // deliberately leaves an already-provisioned site untouched.
 
   if (nextStatus === site.status) return;
   await tx.site.update({

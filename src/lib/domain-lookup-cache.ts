@@ -1,4 +1,7 @@
-import type { PublishedDomainRecord } from "@/lib/domain-routing";
+import type {
+  PlatformSubdomainSite,
+  PublishedDomainRecord,
+} from "@/lib/domain-routing";
 
 type CacheEntry = {
   expiresAt: number;
@@ -14,6 +17,13 @@ const MAX_ENTRIES = 512;
  * making TLS/domain detach feel sticky for long.
  */
 const cache = new Map<string, CacheEntry>();
+
+type PlatformCacheEntry = {
+  expiresAt: number;
+  site: PlatformSubdomainSite | null;
+};
+
+const platformCache = new Map<string, PlatformCacheEntry>();
 
 function cacheKey(hostnames: string[]): string {
   return hostnames.slice().sort().join("|");
@@ -51,6 +61,7 @@ export function setCachedDomainRecords(
 
 export function clearDomainLookupCache(): void {
   cache.clear();
+  platformCache.clear();
 }
 
 /** Drop every cache key that mentions one of these hostnames. */
@@ -63,4 +74,35 @@ export function invalidateDomainLookupHostnames(hostnames: string[]): void {
       cache.delete(key);
     }
   }
+}
+
+export function getCachedPlatformSite(
+  slug: string,
+): PlatformSubdomainSite | null | undefined {
+  const entry = platformCache.get(slug);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    platformCache.delete(slug);
+    return undefined;
+  }
+  platformCache.delete(slug);
+  platformCache.set(slug, entry);
+  return entry.site;
+}
+
+export function setCachedPlatformSite(
+  slug: string,
+  site: PlatformSubdomainSite | null,
+  ttlMs = DEFAULT_TTL_MS,
+): void {
+  platformCache.set(slug, { expiresAt: Date.now() + ttlMs, site });
+  while (platformCache.size > MAX_ENTRIES) {
+    const oldest = platformCache.keys().next().value;
+    if (oldest === undefined) break;
+    platformCache.delete(oldest);
+  }
+}
+
+export function invalidatePlatformSiteSlug(slug: string): void {
+  platformCache.delete(slug);
 }

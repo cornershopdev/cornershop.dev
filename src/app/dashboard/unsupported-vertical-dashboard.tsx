@@ -15,11 +15,13 @@ export function UnsupportedVerticalDashboard({
   slug,
   vertical,
   brand,
+  canSwitchWorkspace,
 }: {
   email: string;
   slug: string;
   vertical: Vertical;
   brand: BrandIdentity;
+  canSwitchWorkspace: boolean;
 }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -30,7 +32,7 @@ export function UnsupportedVerticalDashboard({
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {email}
             </span>
-            <AccountActions canSwitch />
+            <AccountActions canSwitch={canSwitchWorkspace} />
           </div>
         </div>
       </header>

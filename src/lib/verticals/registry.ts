@@ -195,16 +195,8 @@ export function isVerticalClaimEnabled(id: VerticalId): boolean {
   return mode === "factory" || isVerticalPubliclyLaunched(id);
 }
 
-/**
- * Dedicated owner-review dashboards currently exist for restaurant,
- * food-retail and local-service. Beauty still uses UnsupportedVerticalDashboard.
- */
 export function isVerticalOwnerReviewSupported(id: VerticalId): boolean {
-  return (
-    id === Vertical.RESTAURANT ||
-    id === Vertical.FOOD_RETAIL ||
-    id === Vertical.LOCAL_SERVICE
-  );
+  return resolveVerticalConfig(id).supportsOwnerReview;
 }
 
 /**

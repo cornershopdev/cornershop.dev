@@ -2,9 +2,15 @@ import { describe, expect, it } from "bun:test";
 import {
   clearDomainLookupCache,
   getCachedDomainRecords,
+  getCachedPlatformSite,
+  invalidatePlatformSiteSlug,
   setCachedDomainRecords,
+  setCachedPlatformSite,
 } from "@/lib/domain-lookup-cache";
-import type { PublishedDomainRecord } from "@/lib/domain-routing";
+import type {
+  PlatformSubdomainSite,
+  PublishedDomainRecord,
+} from "@/lib/domain-routing";
 
 const sample: PublishedDomainRecord[] = [
   {
@@ -24,6 +30,11 @@ const sample: PublishedDomainRecord[] = [
   },
 ];
 
+const platformSite: PlatformSubdomainSite = {
+  ...sample[0]!.site,
+  verifiedDomains: [{ hostname: "example.com", verified: true }],
+};
+
 describe("domain lookup cache", () => {
   it("stores and returns records for a hostname set", () => {
     clearDomainLookupCache();
@@ -39,5 +50,23 @@ describe("domain lookup cache", () => {
     expect(getCachedDomainRecords(["short.example"])).toEqual(sample);
     await Bun.sleep(15);
     expect(getCachedDomainRecords(["short.example"])).toBeNull();
+  });
+
+  it("stores, expires, and invalidates platform sites by slug", async () => {
+    clearDomainLookupCache();
+    setCachedPlatformSite("example", platformSite, 5);
+    expect(getCachedPlatformSite("example")).toEqual(platformSite);
+    await Bun.sleep(15);
+    expect(getCachedPlatformSite("example")).toBeUndefined();
+
+    setCachedPlatformSite("example", platformSite);
+    invalidatePlatformSiteSlug("example");
+    expect(getCachedPlatformSite("example")).toBeUndefined();
+  });
+
+  it("caches missing platform sites", () => {
+    clearDomainLookupCache();
+    setCachedPlatformSite("missing", null);
+    expect(getCachedPlatformSite("missing")).toBeNull();
   });
 });
