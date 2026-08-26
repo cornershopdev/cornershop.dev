@@ -69,4 +69,44 @@ describe("domain lookup cache", () => {
     setCachedPlatformSite("missing", null);
     expect(getCachedPlatformSite("missing")).toBeNull();
   });
+
+  // Regression: a request that arrives while a site is still unpublished must
+  // not pin the pre-publish row, or the owner's own subdomain keeps 404ing for
+  // the whole TTL after they hit Publish.
+  it("refuses to cache a platform site that is not publicly serving", () => {
+    clearDomainLookupCache();
+    setCachedPlatformSite("example", {
+      ...platformSite,
+      status: "CLAIMED",
+      publishedSiteVersionId: null,
+      publishedSiteVersion: null,
+    });
+    expect(getCachedPlatformSite("example")).toBeUndefined();
+  });
+
+  it("refuses to cache domain records whose site is not publicly serving", () => {
+    clearDomainLookupCache();
+    setCachedDomainRecords(
+      ["pending.example"],
+      [
+        {
+          ...sample[0]!,
+          hostname: "pending.example",
+          site: {
+            ...sample[0]!.site,
+            status: "CLAIMED",
+            publishedSiteVersionId: null,
+            publishedSiteVersion: null,
+          },
+        },
+      ],
+    );
+    expect(getCachedDomainRecords(["pending.example"])).toBeNull();
+  });
+
+  it("still caches an unknown hostname as an empty result", () => {
+    clearDomainLookupCache();
+    setCachedDomainRecords(["unknown.example"], []);
+    expect(getCachedDomainRecords(["unknown.example"])).toEqual([]);
+  });
 });

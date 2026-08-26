@@ -1,6 +1,7 @@
-import type {
-  PlatformSubdomainSite,
-  PublishedDomainRecord,
+import {
+  hasPublicPublishedSnapshot,
+  type PlatformSubdomainSite,
+  type PublishedDomainRecord,
 } from "@/lib/domain-routing";
 
 type CacheEntry = {
@@ -10,6 +11,22 @@ type CacheEntry = {
 
 const DEFAULT_TTL_MS = 5_000;
 const MAX_ENTRIES = 512;
+
+/**
+ * A row that is not yet publicly serving is one publish or one domain
+ * verification away from changing, and both of those are owner actions with the
+ * owner watching the result. Caching such a row would keep 404ing the site for
+ * the whole TTL right after the owner acts, so only settled, serving rows enter
+ * either cache.
+ *
+ * An empty/absent result is still cached: that is the unknown-hostname flood
+ * guard, and a site or domain row appearing is not a hot loop.
+ */
+function isCacheableSite(
+  site: PublishedDomainRecord["site"] | PlatformSubdomainSite,
+): boolean {
+  return hasPublicPublishedSnapshot(site);
+}
 
 /**
  * Short-lived process cache for custom-domain hostname → site resolution.
@@ -50,6 +67,7 @@ export function setCachedDomainRecords(
   records: PublishedDomainRecord[],
   ttlMs = DEFAULT_TTL_MS,
 ): void {
+  if (records.some((record) => !isCacheableSite(record.site))) return;
   const key = cacheKey(hostnames);
   cache.set(key, { expiresAt: Date.now() + ttlMs, records });
   while (cache.size > MAX_ENTRIES) {
@@ -95,6 +113,7 @@ export function setCachedPlatformSite(
   site: PlatformSubdomainSite | null,
   ttlMs = DEFAULT_TTL_MS,
 ): void {
+  if (site && !isCacheableSite(site)) return;
   platformCache.set(slug, { expiresAt: Date.now() + ttlMs, site });
   while (platformCache.size > MAX_ENTRIES) {
     const oldest = platformCache.keys().next().value;
