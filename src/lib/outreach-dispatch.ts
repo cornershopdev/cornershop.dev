@@ -4,6 +4,8 @@ import type { OutreachStatus } from "@/generated/prisma/enums";
 import { getDb } from "@/lib/db";
 import { evaluateLeadOutreachEligibility } from "@/lib/operator-lead-attributes";
 import type { OutreachEligibilityReason } from "@/lib/electronic-outreach-eligibility";
+import { mutableLeadStatuses } from "@/lib/lead-status";
+import { isVerticalOutreachConfigured } from "@/lib/lead-generation/registry";
 import { lockOutreachSite } from "@/lib/outreach-lock";
 
 const INITIAL_TEMPLATE = "preview_ready";
@@ -61,7 +63,12 @@ export async function reserveInitialOutreachDispatch(input: {
     await lockOutreachSite(tx, input.siteId);
     const site = await tx.site.findUnique({
       where: { id: input.siteId },
-      select: { attributes: true, leadContactEmail: true },
+      select: {
+        attributes: true,
+        leadContactEmail: true,
+        status: true,
+        vertical: true,
+      },
     });
     const eligibility = evaluateLeadOutreachEligibility(
       site?.attributes,
@@ -71,6 +78,8 @@ export async function reserveInitialOutreachDispatch(input: {
       !site?.leadContactEmail ||
       site.leadContactEmail.trim().toLowerCase() !==
         input.recipient.trim().toLowerCase() ||
+      !mutableLeadStatuses.has(site.status) ||
+      !isVerticalOutreachConfigured(site.vertical) ||
       !eligibility.allowed
     ) {
       throw new OutreachDispatchAuthorizationError(

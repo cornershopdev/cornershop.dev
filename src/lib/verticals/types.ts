@@ -297,6 +297,8 @@ export type VerticalConfig<
    * site's platform subdomain; disabled keeps a review-only vertical private.
    */
   claimMode: "disabled" | "factory" | "niche";
+  /** Whether this vertical ships a dedicated owner-review dashboard. */
+  supportsOwnerReview: boolean;
   /**
    * Whether an already-published snapshot may be rendered on the public
    * storefront. Independent of whether owners may create or roll back

@@ -37,49 +37,45 @@ export function ArticlesPanel({ siteSlug }: { siteSlug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/sites/${siteSlug}/articles`, {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("Could not load articles.");
-      const data = (await response.json()) as { articles: DashboardArticle[] };
-      setArticles(data.articles);
-    } catch {
-      setError("Could not load articles. Reload to try again.");
-    }
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch(
+      `/api/sites/${encodeURIComponent(siteSlug)}/articles`,
+      { cache: "no-store", signal },
+    );
+    if (!response.ok) throw new Error("Could not load articles.");
+    const data = (await response.json()) as { articles: DashboardArticle[] };
+    return data.articles;
   }, [siteSlug]);
 
   useEffect(() => {
-    let active = true;
-    void fetch(`/api/sites/${encodeURIComponent(siteSlug)}/articles`, {
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load articles.");
-        const data = (await response.json()) as {
-          articles: DashboardArticle[];
-        };
-        if (active) setArticles(data.articles);
+    const controller = new AbortController();
+    void load(controller.signal)
+      .then((loaded) => {
+        if (!controller.signal.aborted) setArticles(loaded);
       })
       .catch(() => {
-        if (active) setError("Could not load articles. Reload to try again.");
+        if (!controller.signal.aborted) {
+          setError("Could not load articles. Reload to try again.");
+        }
       });
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [siteSlug]);
+  }, [load]);
 
   const act = async (articleId: string, action: "publish" | "unpublish") => {
     setBusyId(articleId);
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch(`/api/sites/${siteSlug}/articles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ articleId, action }),
-      });
+      const response = await fetch(
+        `/api/sites/${encodeURIComponent(siteSlug)}/articles`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ articleId, action }),
+        },
+      );
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
@@ -91,7 +87,7 @@ export function ArticlesPanel({ siteSlug }: { siteSlug: string }) {
           ? "Published. It is live on your blog now."
           : "Unpublished. The page is gone from your site.",
       );
-      await load();
+      setArticles(await load());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That action failed.");
     } finally {
@@ -104,11 +100,14 @@ export function ArticlesPanel({ siteSlug }: { siteSlug: string }) {
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch(`/api/sites/${siteSlug}/articles/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 4 }),
-      });
+      const response = await fetch(
+        `/api/sites/${encodeURIComponent(siteSlug)}/articles/generate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ count: 4 }),
+        },
+      );
       const data = (await response.json().catch(() => null)) as {
         error?: string;
       } | null;

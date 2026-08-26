@@ -136,6 +136,7 @@ export const foodRetailConfig = {
   },
   marketing: foodRetailMarketing,
   claimMode: "factory",
+  supportsOwnerReview: true,
   publicationEnabled: true,
   publicationMutationEnabled: true,
   ownerOperations: foodRetailOwnerOperations,

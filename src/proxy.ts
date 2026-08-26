@@ -9,7 +9,9 @@ import {
 } from "@/lib/domain-routing";
 import {
   getCachedDomainRecords,
+  getCachedPlatformSite,
   setCachedDomainRecords,
+  setCachedPlatformSite,
 } from "@/lib/domain-lookup-cache";
 import {
   parsePlatformSubdomain,
@@ -107,26 +109,44 @@ export async function proxy(request: NextRequest) {
   // a missing Site row 404s instead of falling through to an unknown-host lookup.
   const platform = parsePlatformSubdomain(hostname);
   if (platform) {
-    const site = await getDb().site.findUnique({
-      where: { slug: platform.slug },
-      select: {
-        id: true,
-        slug: true,
-        status: true,
-        publishedSiteVersionId: true,
-        publishedSiteVersion: {
-          select: {
-            id: true,
-            siteId: true,
-            publishedAt: true,
-          },
-        },
-        domains: {
-          where: { verified: true },
-          select: { hostname: true, verified: true },
-        },
-      },
-    });
+    const cachedSite = getCachedPlatformSite(platform.slug);
+    const site =
+      cachedSite !== undefined
+        ? cachedSite
+        : await getDb().site.findUnique({
+            where: { slug: platform.slug },
+            select: {
+              id: true,
+              slug: true,
+              status: true,
+              publishedSiteVersionId: true,
+              publishedSiteVersion: {
+                select: {
+                  id: true,
+                  siteId: true,
+                  publishedAt: true,
+                },
+              },
+              domains: {
+                where: { verified: true },
+                select: { hostname: true, verified: true },
+              },
+            },
+          }).then((row) =>
+            row
+              ? {
+                  id: row.id,
+                  slug: row.slug,
+                  status: row.status,
+                  publishedSiteVersionId: row.publishedSiteVersionId,
+                  publishedSiteVersion: row.publishedSiteVersion,
+                  verifiedDomains: row.domains,
+                }
+              : null,
+          );
+    if (cachedSite === undefined) {
+      setCachedPlatformSite(platform.slug, site);
+    }
     return respondForCustomerHost(
       request,
       upstreamHeaders,
@@ -134,16 +154,7 @@ export async function proxy(request: NextRequest) {
         hostname,
         pathname: request.nextUrl.pathname,
         parsed: platform,
-        site: site
-          ? {
-              id: site.id,
-              slug: site.slug,
-              status: site.status,
-              publishedSiteVersionId: site.publishedSiteVersionId,
-              publishedSiteVersion: site.publishedSiteVersion,
-              verifiedDomains: site.domains,
-            }
-          : null,
+        site,
       }),
       301,
     );

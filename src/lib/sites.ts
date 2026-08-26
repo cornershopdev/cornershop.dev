@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { cache } from "react";
 import { Prisma } from "@/generated/prisma/client";
 import { Vertical } from "@/generated/prisma/enums";
 import {
@@ -368,7 +369,9 @@ export function projectPublishedSiteVersion(
  * the editable storage read; live custom-domain requests switch to
  * `findPublishedSiteView` in the page before this is called.
  */
-export async function findSiteView(slug: string): Promise<SiteView | null> {
+export const findSiteView = cache(async function findSiteView(
+  slug: string,
+): Promise<SiteView | null> {
   if (!process.env.DATABASE_URL) {
     const draft =
       leadSiteDrafts[slug] ??
@@ -396,7 +399,7 @@ export async function findSiteView(slug: string): Promise<SiteView | null> {
     draft: site.draft as SiteDraftView,
     theme: site.theme,
   };
-}
+});
 
 /**
  * Same as `findSiteView`, but falls back to the **sample** site only when the

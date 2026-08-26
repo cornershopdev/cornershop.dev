@@ -139,6 +139,7 @@ jobs:
           retention-days: 30
       - run: shellcheck deploy/aws/*.sh
       - run: bash deploy/aws/test-host-launcher.sh
+      - run: bash deploy/aws/test-article-rollout.sh
       - run: bash deploy/aws/test-release-bundle.sh
 
   first-customer-browser-e2e:

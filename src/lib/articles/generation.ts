@@ -272,19 +272,7 @@ export async function persistArticleBatch(input: {
       address: site.address,
       phone: site.phone,
       businessHours: parseBusinessHours(site.businessHours),
-      catalogItems: catalogItems
-        .filter((item) =>
-          isVerticalCatalogItemVisible(site.vertical, {
-            available: item.available,
-            attributes: item.attributes,
-          }),
-        )
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: item.price === null ? null : Number(item.price),
-          currency: item.currency,
-        })),
+      catalogItems: buildFactsCatalogItems(site.vertical, catalogItems),
       integrationCapabilities: articleIntegrationCapabilities(integrations),
     };
     const accepted =
@@ -552,25 +540,40 @@ export async function loadGenerationInputs(siteId: string): Promise<{
       address: site.address,
       phone: site.phone,
       businessHours: parseBusinessHours(site.businessHours),
-      catalogItems: sections.flatMap((section) =>
-        section.items
-          .filter((item) =>
-            isVerticalCatalogItemVisible(site.vertical, {
-              available: item.available,
-              attributes: item.attributes,
-            }),
-          )
-          .map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price === null ? null : Number(item.price),
-            currency: item.currency,
-          })),
+      catalogItems: buildFactsCatalogItems(
+        site.vertical,
+        sections.flatMap((section) => section.items),
       ),
       integrationCapabilities: articleIntegrationCapabilities(integrations),
     },
     recentTopicKeys,
   };
+}
+
+function buildFactsCatalogItems(
+  vertical: SiteFacts["vertical"],
+  items: Array<{
+    id: string;
+    name: string;
+    price: unknown;
+    currency: string;
+    available: boolean | null;
+    attributes: unknown;
+  }>,
+): SiteFacts["catalogItems"] {
+  return items
+    .filter((item) =>
+      isVerticalCatalogItemVisible(vertical, {
+        available: item.available,
+        attributes: item.attributes,
+      }),
+    )
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      price: item.price === null ? null : Number(item.price),
+      currency: item.currency,
+    }));
 }
 
 function articleIntegrationCapabilities(

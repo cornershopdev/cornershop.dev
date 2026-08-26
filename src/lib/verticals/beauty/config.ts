@@ -79,6 +79,7 @@ export const beautyConfig = {
   },
   marketing: beautyMarketing,
   claimMode: "disabled",
+  supportsOwnerReview: false,
   publicationEnabled: true,
   publicationMutationEnabled: false,
   ownerOperations: beautyOwnerOperations,

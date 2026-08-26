@@ -22,7 +22,10 @@ import {
   type DomainHostnamePlan,
 } from "@/lib/domain-routing";
 import { checkDomainTls } from "@/lib/domain-tls";
-import { invalidateDomainLookupHostnames } from "@/lib/domain-lookup-cache";
+import {
+  invalidateDomainLookupHostnames,
+  invalidatePlatformSiteSlug,
+} from "@/lib/domain-lookup-cache";
 import {
   isFactoryHostname,
   isReservedPlatformHostname,
@@ -147,6 +150,7 @@ export async function POST(request: Request) {
     ]);
     if (!site) throw new Error("Site not found");
     invalidateDomainLookupHostnames(plan.hostnames);
+    invalidatePlatformSiteSlug(access.site.slug);
     return Response.json(
       domainSetup(
         plan,
@@ -295,6 +299,7 @@ export async function PATCH(request: Request) {
     revalidateTag(previewCacheTagFor(access.site.slug), { expire: 0 });
 
     invalidateDomainLookupHostnames(plan.hostnames);
+    invalidatePlatformSiteSlug(access.site.slug);
     return Response.json(
       domainSetup(
         plan,
@@ -377,6 +382,7 @@ export async function DELETE(request: Request) {
     revalidateTag(previewCacheTagFor(access.site.slug), { expire: 0 });
 
     invalidateDomainLookupHostnames(result.hostnames);
+    invalidatePlatformSiteSlug(access.site.slug);
     return Response.json({
       removed: true,
       hostnames: result.hostnames,

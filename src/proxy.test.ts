@@ -23,12 +23,17 @@ type PlatformSiteRow = {
 
 let platformSite: PlatformSiteRow = null;
 let customDomainRows: PublishedDomainRecord[] = [];
+let platformLookupCalls = 0;
 
 mock.module("@/lib/db", () => ({
   getDb: () => ({
     site: {
-      findUnique: async ({ where }: { where: { slug: string } }) =>
-        platformSite && platformSite.slug === where.slug ? platformSite : null,
+      findUnique: async ({ where }: { where: { slug: string } }) => {
+        platformLookupCalls += 1;
+        return platformSite && platformSite.slug === where.slug
+          ? platformSite
+          : null;
+      },
     },
     domain: {
       findMany: async () => customDomainRows,
@@ -99,7 +104,17 @@ describe("platform-subdomain routing", () => {
   beforeEach(() => {
     platformSite = null;
     customDomainRows = [];
+    platformLookupCalls = 0;
     clearDomainLookupCache();
+  });
+
+  it("reuses the slug lookup within the five-second cache window", async () => {
+    platformSite = claimedSite();
+
+    await proxy(request("/", `${SLUG}.restofront.com`));
+    await proxy(request("/blog", `${SLUG}.restofront.com`));
+
+    expect(platformLookupCalls).toBe(1);
   });
 
   it("serves a claimed site at its platform subdomain without DNS action", async () => {

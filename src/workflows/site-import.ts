@@ -181,9 +181,9 @@ async function ingestPhotos(
     console.log(
       `site-import photos DONE slug=${persisted.draft.slug} ingested=${summary.ingested} deduplicated=${summary.deduplicated} failed=${summary.failed}`,
     );
-  } catch {
+  } catch (error) {
     console.warn(
-      `site-import photos FALLBACK slug=${persisted.draft.slug}`,
+      `site-import photos FALLBACK slug=${persisted.draft.slug} error=${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
