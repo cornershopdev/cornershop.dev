@@ -52,7 +52,7 @@ real-world acceptance evidence.
 
 ## The one-price offer
 
-### Restofront Founding Restaurant — $49/month
+### Restofront Founding Restaurant — €49/month
 
 VAT is added when applicable. There is no setup fee, annual alternative,
 discount, trial, second tier, or usage charge in the first-customer offer. The
@@ -90,11 +90,11 @@ owner uploads, or explicitly permissioned customer imagery may go live.
 | Booking-request inbox and first-party analytics | Deployed in PR #59 | Analytics activate only on a verified customer domain; no customer-domain data exists yet. |
 | Safe private Save and atomic Publish | Merged on main; not production-deployed | Do not imply that production has the implementation until a SHA-bound release deploy proves it. Acceptance still requires a real owner save, unchanged-live-pointer evidence, and exact published-version evidence. |
 | Secure, owner-bound invitation | Merged on main; not production-deployed | Do not send a claim URL until production config/deploy gates pass and a real owner authorizes the exercise. Acceptance still requires authorized owner receipt, signed provider delivery, one acceptance, and rejected replay evidence. |
-| Durable one-plan billing lifecycle | Merged on main; not production-deployed | Do not initiate a live checkout until the exact release is deployed and the customer authorizes a live charge. Acceptance still requires an authorized settled live $49 charge and idempotent live webhook evidence. |
+| Durable one-plan billing lifecycle | Merged on main; not production-deployed | Do not initiate a live checkout until the exact release is deployed and the customer authorizes a live charge. Acceptance still requires an authorized settled live €49 charge and idempotent live webhook evidence. |
 
-Public Restofront marketing and the claim UI sell this same $49/month founding
+Public Restofront marketing and the claim UI sell this same €49/month founding
 plan and authentic-image policy. Live Stripe still has to match: create the one founding
-price at $49 USD and set SSM `STRIPE_PRICE_ID`. Code cannot
+price at EUR 49 and set SSM `STRIPE_PRICE_ID`. Code cannot
 change the Stripe dashboard.
 
 ## Production evidence snapshot
@@ -191,7 +191,7 @@ and evidence links.
 | City/country | `[city, country]` |
 | Authorized owner/representative verified at | `[timestamp — pending]` |
 | Offer revision shown | `[commit SHA]` |
-| Price | `$49/month + applicable VAT` |
+| Price | `€49/month + applicable VAT` |
 | First settled charge at | `[timestamp — pending]` |
 | Stripe non-sensitive evidence ID | `[pending]` |
 | Custom domain | `[pending]` |
@@ -200,7 +200,7 @@ and evidence links.
 
 ### One-time founder-assisted onboarding
 
-Record minutes, even when the activity is bundled into the $49 offer.
+Record minutes, even when the activity is bundled into the €49 offer.
 
 | Activity | Started | Finished | Founder minutes | External cost | Notes/evidence |
 | --- | --- | --- | ---: | ---: | --- |
@@ -238,14 +238,14 @@ Fill these with actual provider charges and an explicit internal founder-hour
 rate; do not silently value founder time at zero.
 
 ```text
-monthly revenue excluding VAT                    = $49.00
+monthly revenue excluding VAT                    = €49.00
 payment processing                               = [actual]
 incremental hosting/storage/AI/email              = [actual]
 other customer-variable cost                     = [actual]
 gross profit before founder labour                = revenue - variable costs
 gross margin                                      = gross profit / revenue
 
-internal founder hourly rate                      = [explicit $/hour]
+internal founder hourly rate                      = [explicit €/hour]
 recurring support cost                            = support minutes / 60 × rate
 monthly contribution after recurring support      = gross profit - support cost
 onboarding labour cost                            = onboarding minutes / 60 × rate
@@ -255,7 +255,7 @@ onboarding labour cost                            = onboarding minutes / 60 × r
 ```
 
 Record CAC separately. The existing commercial stop threshold is CAC above
-$200 at $49/month.
+€200 at €49/month.
 
 ## Second-qualified-lead gate
 
@@ -315,7 +315,7 @@ inventing a date would falsely imply that the 30-day clock has started.
 | Qualified conversations |  | Record channel and lawful contact basis. |
 | Paying customers |  | Fewer than 5 from roughly 60 previews, or below 4% preview-to-paid, is a stop/change signal. |
 | Preview-to-paid conversion |  | Compare with 4%. |
-| CAC |  | Above $200 at $49/month is a stop/change signal. |
+| CAC |  | Above €200 at €49/month is a stop/change signal. |
 | Claim completion time |  | Above 20 minutes is a stop/change signal. |
 | Claim completion rate |  | Below 60% is a stop/change signal. |
 | Founder onboarding minutes |  | Explain the largest manual steps. |
@@ -331,7 +331,7 @@ inventing a date would falsely imply that the 30-day clock has started.
 
 Choose exactly one:
 
-- `KEEP` — continue the same $49 offer and one-city wedge for the next cohort.
+- `KEEP` — continue the same €49 offer and one-city wedge for the next cohort.
 - `CHANGE` — state one falsifiable change to price, scope, onboarding, channel,
   or product, its owner, deadline, and success threshold.
 - `STOP` — stop acquiring or charging new restaurants, preserve customer
@@ -364,7 +364,7 @@ Issue/PR links:
    delegated to code or inferred.
 6. Have the owner review the source content, images, price, hours, and retained
    provider links.
-7. Only with explicit customer authorization, run one live $49 checkout and
+7. Only with explicit customer authorization, run one live €49 checkout and
    verify webhook-only provisioning.
 8. Have the owner sign in, make an intentional menu edit, prove Save isolation,
    then publish.

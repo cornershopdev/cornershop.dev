@@ -114,7 +114,7 @@ Standalone niche marketing stays closed:
 - `publicationEnabled = true`
 - `publicationMutationEnabled = true`
 
-An approved private preview can claim the shared Cornershopdev $49 plan and
+An approved private preview can claim the shared Cornershopdev €49 plan and
 publish at `<slug>.cornershop.dev`. That factory path requires:
 
 - [x] platform wildcard DNS and on-demand TLS cover the shared public URL;

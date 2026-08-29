@@ -123,7 +123,7 @@ const verticalCopy = {
     emptyStatePrompt:
       "Start with a trade website or business name. No account is needed to see the result.",
     claimHint:
-      "Review every service, availability statement, credential, project and contact link, then claim the $49 founding plan.",
+      "Review every service, availability statement, credential, project and contact link, then claim the €49 founding plan.",
     catalogStage: "Recover services and evidence",
     integrationsStage: "Preserve phone, WhatsApp and quote links",
     previewCatalogLabel: "Services",
@@ -146,7 +146,7 @@ const verticalCopy = {
     emptyStatePrompt:
       "Start with a food shop website or name. No account is needed to see the result.",
     claimHint:
-      "Review every product, price, availability note, allergen source and ordering link, then claim the $49 founding plan.",
+      "Review every product, price, availability note, allergen source and ordering link, then claim the €49 founding plan.",
     catalogStage: "Recover product ranges and prices",
     integrationsStage: "Preserve preorder, pickup and delivery links",
     previewCatalogLabel: "Product ranges",

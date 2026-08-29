@@ -16,13 +16,13 @@ The deployment requires all of:
 - `RESEND_API_KEY`
 
 The launch Checkout offers exactly one plan for every claim-enabled vertical:
-the Cornershopdev founding subscription at USD 49.00 per month. Its Stripe Price and Product must be live,
+the Cornershopdev founding subscription at EUR 49.00 per month. Its Stripe Price and Product must be live,
 active, non-metered, tax-exclusive, and recurring monthly. Test mode and live mode have separate keys,
 prices, Customer Portal configurations, webhook endpoints, and signing secrets.
 Never copy a test identifier into Production or a live identifier into local
 development.
 
-Checkout enables Adaptive Pricing so eligible customers see and pay in local currency while the durable integration contract remains USD 49. Checkout disables promotion codes for this offer, requires billing-address and
+Checkout enables Adaptive Pricing so eligible customers see and pay in local currency while the durable integration contract remains EUR 49. Checkout disables promotion codes for this offer, requires billing-address and
 tax-ID collection, and provisions only when Stripe reports
 `payment_status=paid`. A completed zero-payment session cannot create ownership.
 
@@ -148,7 +148,7 @@ membership, or owner.
 These are deliberate production changes and require explicit authority plus
 durable release evidence:
 
-1. Create or approve the one live founding Product and USD 49 Price. Record
+1. Create or approve the one live founding Product and EUR 49 Price. Record
    the approved amount, currency, interval, tax behavior, and live Price ID.
 2. Configure and test the live Customer Portal. Enable only the intended
    payment-method, cancellation, invoice, and plan-change features.
@@ -166,7 +166,7 @@ durable release evidence:
    `/shipshit/production/cornershopdev/`.
 5. Deploy the reviewed release. Before cutover, deployment runs
    `operator:preflight-stripe --mode live`; it fails if the live founding Price
-   drifts from USD 49.00 monthly or its Product/mode/tax contract. The frequent
+   drifts from EUR 49.00 monthly or its Product/mode/tax contract. The frequent
    `/api/health/ready` probe remains provider-read-free and reports missing
    billing configuration without returning any credential or identifier.
 6. Complete one explicitly authorized low-risk live Checkout, then verify one

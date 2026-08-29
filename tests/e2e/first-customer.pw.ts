@@ -73,7 +73,7 @@ test("claim, paid webhook, sign-in, workspace selection, private save, atomic pu
   await page.getByRole("button", { name: "Claim and continue" }).click();
   await expect(page).toHaveURL(/127\.0\.0\.1:4100\/checkout\/cs_test_/);
   await expect(
-    page.getByText("€43.00 local presentment for the $49 monthly plan"),
+    page.getByText("$53.00 local presentment for the €49 monthly plan"),
   ).toBeVisible();
   await page.getByRole("button", { name: "Pay €43 in test mode" }).click();
 

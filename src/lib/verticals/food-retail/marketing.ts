@@ -106,11 +106,11 @@ export const foodRetailMarketing = {
   pricing: {
     eyebrow: "One founding offer",
     headline: "A maintained local storefront.",
-    copy: "Claim the reviewed preview for $49/month through Cornershopdev. Local currency is shown at checkout.",
+    copy: "Claim the reviewed preview for €49/month through Cornershopdev. Local currency is shown at checkout.",
     plans: [
       {
         name: "Founding",
-        price: "$49",
+        price: "€49",
         cadence: "/month",
         copy: "One maintained, mobile-first food-retail website on the business's own domain.",
         features: [
