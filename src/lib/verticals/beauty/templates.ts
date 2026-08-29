@@ -2,6 +2,7 @@ import type {
   BeautyAttributes,
   ServiceStyle,
 } from "@/lib/verticals/beauty/schema";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
 /**
@@ -17,7 +18,7 @@ export type BeautyTemplate = {
   titleClassName: string;
   sectionClassName: string;
   showServiceImagesByDefault: boolean;
-  copy: Record<"en" | "fr", VerticalTemplateCopy>;
+  copy: Record<SiteUiLocale, VerticalTemplateCopy>;
 };
 
 /**
@@ -49,6 +50,12 @@ export const beautyTemplates: Record<ServiceStyle, BeautyTemplate> = {
         featuredHeading: "Au fauteuil",
         featuredSubheading: "Un travail net, au prix annoncé.",
       },
+      mt: {
+        catalogEyebrow: "Servizzi",
+        catalogHeading: "Qtugħ, tqaxxir u manutenzjoni.",
+        featuredHeading: "Fuq is-siġġu",
+        featuredSubheading: "Xogħol dirett, bi prezz mgħarraf minn qabel.",
+      },
     },
   },
   "classic-salon": {
@@ -72,6 +79,12 @@ export const beautyTemplates: Record<ServiceStyle, BeautyTemplate> = {
         catalogHeading: "Couleur, coupe et soin.",
         featuredHeading: "Au salon",
         featuredSubheading: "Chaque prestation, sa durée et son prix.",
+      },
+      mt: {
+        catalogEyebrow: "Is-servizzi tagħna",
+        catalogHeading: "Kulur, qtugħ u kura.",
+        featuredHeading: "Fis-salon",
+        featuredSubheading: "Kull servizz bil-ħin u l-prezz tiegħu.",
       },
     },
   },
@@ -98,6 +111,12 @@ export const beautyTemplates: Record<ServiceStyle, BeautyTemplate> = {
         featuredHeading: "Réalisations",
         featuredSubheading: "Ce que le studio fait vraiment.",
       },
+      mt: {
+        catalogEyebrow: "Il-menu tal-istudjo",
+        catalogHeading: "Xogħol maħsub, bi prezz ċar.",
+        featuredHeading: "Xogħol reċenti",
+        featuredSubheading: "Dak li fil-fatt jagħmel l-istudjo.",
+      },
     },
   },
   "spa-luxe": {
@@ -122,6 +141,12 @@ export const beautyTemplates: Record<ServiceStyle, BeautyTemplate> = {
         featuredHeading: "La carte des soins",
         featuredSubheading: "Chaque rituel avec sa durée.",
       },
+      mt: {
+        catalogEyebrow: "Trattamenti",
+        catalogHeading: "Ħin imwarrab għalik.",
+        featuredHeading: "Il-lista tat-trattamenti",
+        featuredSubheading: "Kull ritwal bit-tul tiegħu.",
+      },
     },
   },
   "express-nails": {
@@ -145,6 +170,12 @@ export const beautyTemplates: Record<ServiceStyle, BeautyTemplate> = {
         catalogHeading: "Vite fait, bien fait.",
         featuredHeading: "Dernières poses",
         featuredSubheading: "Des finitions telles qu’affichées.",
+      },
+      mt: {
+        catalogEyebrow: "Il-lista",
+        catalogHeading: "Tidħol u toħroġ, tidher fl-aqwa tiegħek.",
+        featuredHeading: "L-aħħar settijiet",
+        featuredSubheading: "Rifinituri eżattament kif murija.",
       },
     },
   },

@@ -21,6 +21,7 @@ import {
   type FoodRetailTemplate,
 } from "@/lib/verticals/food-retail/templates";
 import { foodRetailOwnerOperations } from "@/lib/owner-operations";
+import { siteUiLocale, type SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const foodRetailDictionaryExtensions = {
@@ -48,17 +49,59 @@ export const foodRetailDictionaryExtensions = {
     bookingRequestIntro: "",
     pickupHeading: "Retrait",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    language: "Lingwa",
+    reservationsVia: "Ordna permezz ta’",
+    bookingPartner: "is-sieħeb tal-ordnijiet tal-ħanut",
+    seasonalNotice:
+      "Id-dettalji tal-prodotti jistgħu jinbidlu. Ikkuntattja l-ħanut qabel ma tivvjaġġa.",
+    heroImageAlt: "Il-ħanut u l-prodotti ta’",
+    bookingHeading: "Ordnijiet",
+    bookingRequestHeading: "",
+    bookingRequestIntro: "",
+    pickupHeading: "Ġbir",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
-const shopTypeLabels: Record<FoodShopType, Record<"en" | "fr", string>> = {
-  bakery: { en: "Bakery", fr: "Boulangerie" },
-  patisserie: { en: "Patisserie", fr: "Pâtisserie" },
-  butcher: { en: "Butcher", fr: "Boucherie" },
-  deli: { en: "Deli", fr: "Traiteur" },
-  cheesemonger: { en: "Cheesemonger", fr: "Fromagerie" },
-  grocer: { en: "Grocer", fr: "Épicerie" },
-  "local-food-shop": { en: "Local food shop", fr: "Commerce alimentaire" },
+const shopTypeLabels: Record<FoodShopType, Record<SiteUiLocale, string>> = {
+  bakery: { en: "Bakery", fr: "Boulangerie", mt: "Furnara" },
+  patisserie: { en: "Patisserie", fr: "Pâtisserie", mt: "Pastizzerija" },
+  butcher: { en: "Butcher", fr: "Boucherie", mt: "Ħanut tal-laħam" },
+  deli: { en: "Deli", fr: "Traiteur", mt: "Delikatessen" },
+  cheesemonger: { en: "Cheesemonger", fr: "Fromagerie", mt: "Ħanut tal-ġobon" },
+  grocer: { en: "Grocer", fr: "Épicerie", mt: "Ħanut tal-merċa" },
+  "local-food-shop": {
+    en: "Local food shop",
+    fr: "Commerce alimentaire",
+    mt: "Ħanut tal-ikel lokali",
+  },
 };
+
+/**
+ * The product badges the renderer stamps on a catalog row. A table rather than a
+ * `fr ? … : …` ternary chain: a ternary answers "not French" with English, so a
+ * new locale would ship silently half-translated instead of failing to compile.
+ */
+const itemBadgeLabels = {
+  en: {
+    inStock: "In stock",
+    outOfStock: "Out of stock",
+    preorder: "Preorder",
+    allergens: "Allergens",
+  },
+  fr: {
+    inStock: "En stock",
+    outOfStock: "Rupture de stock",
+    preorder: "Précommande",
+    allergens: "Allergènes",
+  },
+  mt: {
+    inStock: "Fl-istokk",
+    outOfStock: "Mhux fl-istokk",
+    preorder: "Ordni bil-quddiem",
+    allergens: "Allerġeni",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 /**
  * FOOD_RETAIL treats the model as a presentation assistant, never an evidence
@@ -123,10 +166,6 @@ export function bindGeneratedFoodRetailDraftToEvidence({
   };
 }
 
-function language(locale: string): "en" | "fr" {
-  return locale.toLowerCase().startsWith("fr") ? "fr" : "en";
-}
-
 export const foodRetailConfig = {
   id: Vertical.FOOD_RETAIL,
   vocabulary: {
@@ -169,6 +208,14 @@ export const foodRetailConfig = {
       emptyCatalogDescription:
         "Aucune gamme de produits n’était présente dans les données source structurées.",
     },
+    mt: {
+      eyebrow: "Previżjoni privata tal-ħanut tal-ikel",
+      description:
+        "Previżjoni privata tal-ħanut tal-ikel mibnija biss mill-informazzjoni tas-sors disponibbli bħalissa.",
+      catalogName: "Firxiet ta’ prodotti",
+      emptyCatalogDescription:
+        "Ebda dettall ta’ firxa ta’ prodotti ma nstab fid-data strutturata tas-sors.",
+    },
   },
   itemAttributesSchema: foodRetailItemAttributesSchema,
   itemAttributeDefaults: {
@@ -203,26 +250,24 @@ export const foodRetailConfig = {
     buildEyebrow: (attributes, site) =>
       `${shopTypeLabels[attributes.shopType].en} · ${site.address ?? "Local"}`,
     itemBadges: (attributes, locale, available) => {
-      const localeLanguage = language(locale);
+      const labels = itemBadgeLabels[siteUiLocale(locale)];
       const badges: string[] = [];
       if (attributes.stockSourceUrl && available === true) {
-        badges.push(localeLanguage === "fr" ? "En stock" : "In stock");
+        badges.push(labels.inStock);
       }
       if (attributes.stockSourceUrl && available === false) {
-        badges.push(
-          localeLanguage === "fr" ? "Rupture de stock" : "Out of stock",
-        );
+        badges.push(labels.outOfStock);
       }
       if (attributes.seasonalAvailability) {
         badges.push(attributes.seasonalAvailability);
       }
       if (attributes.preorderRequired === true) {
-        badges.push(localeLanguage === "fr" ? "Précommande" : "Preorder");
+        badges.push(labels.preorder);
       }
       if (attributes.preorderNote) badges.push(attributes.preorderNote);
       if (attributes.allergens.length > 0 && attributes.allergenSourceUrl) {
         badges.push(
-          `${localeLanguage === "fr" ? "Allergènes" : "Allergens"}: ${attributes.allergens.join(", ")}`,
+          `${labels.allergens}: ${attributes.allergens.join(", ")}`,
         );
       }
       return badges;
