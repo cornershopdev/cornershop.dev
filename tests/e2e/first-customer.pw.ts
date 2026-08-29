@@ -75,7 +75,7 @@ test("claim, paid webhook, sign-in, workspace selection, private save, atomic pu
   await expect(
     page.getByText("$53.00 local presentment for the €49 monthly plan"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Pay €43 in test mode" }).click();
+  await page.getByRole("button", { name: "Pay $53 in test mode" }).click();
 
   await expect(page).toHaveURL(/\/workspace\/select$/);
   await expect(page.getByText(e2e.targetName)).toBeVisible();
