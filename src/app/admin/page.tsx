@@ -70,6 +70,13 @@ export default async function AdminPage() {
           ) : null}
           <AccountActions canSwitch />
           <Button
+            render={<Link href="/admin/inbox" />}
+            variant="outline"
+            size="sm"
+          >
+            Outreach inbox
+          </Button>
+          <Button
             render={<Link href="/admin/auth" />}
             variant="outline"
             size="sm"
