@@ -19,6 +19,7 @@
     "db:migrate:deploy": "bunx --bun prisma migrate deploy",
     "operator:grant-superadmin": "bun scripts/grant-superadmin.ts",
     "operator:import:le-petit-meunier": "bun scripts/import-le-petit-meunier.ts",
+    "operator:import:reviewed-drafts": "bun scripts/import-reviewed-drafts.ts",
     "operator:verify-environment-isolation": "bun scripts/verify-environment-isolation.ts",
     "operator:verify-image-storage": "bun scripts/verify-image-storage-roundtrip.ts",
     "operator:verify-first-customer": "bun scripts/verify-first-customer-production.ts",

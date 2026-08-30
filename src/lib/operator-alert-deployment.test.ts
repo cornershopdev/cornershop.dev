@@ -78,6 +78,9 @@ describe("production deployment contract", () => {
 
     for (const name of [
       "FIRST_CUSTOMER_EVIDENCE_PUBLIC_KEY",
+      "NEXT_PUBLIC_POSTHOG_HOST",
+      "NEXT_PUBLIC_POSTHOG_KEY",
+      "OPERATOR_LEAD_INGEST_TOKEN",
       "RESEND_INBOUND_WEBHOOK_SECRET",
       "RESEND_WEBHOOK_SECRET",
       "SUPERADMIN_EMAILS",
@@ -88,6 +91,22 @@ describe("production deployment contract", () => {
     expect(required).not.toContain("OUTREACH_INBOUND_FORWARD_TO");
     expect(optional).toContain("OUTREACH_INBOUND_FORWARD_TO");
     expect(environmentExample).toContain("OUTREACH_INBOUND_FORWARD_TO=\n");
+  });
+
+  it("proves analytics on factory previews and off customer storefronts before cutover", () => {
+    expect(deployScript).toContain(
+      'get("cornershop.dev", "/preview/le-petit-meunier")',
+    );
+    expect(deployScript).toContain('preview.includes("preview_view")');
+    expect(deployScript).toContain(
+      'get("le-petit-meunier.restofront.com", "/")',
+    );
+    expect(deployScript).toContain(
+      'customer.includes("id=\\\"factory-analytics\\\"")',
+    );
+    expect(deployScript).toContain(
+      "release-state factory-analytics-ready sha=",
+    );
   });
 
   it("propagates every documented photo model, cost, concurrency, and policy control", () => {

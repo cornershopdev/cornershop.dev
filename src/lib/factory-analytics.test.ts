@@ -26,7 +26,6 @@ const INSTRUMENTED_SURFACES = [
  */
 const UNINSTRUMENTED_SURFACES = [
   "src/app/layout.tsx",
-  "src/app/preview/layout.tsx",
   "src/app/pro/layout.tsx",
   "src/app/dashboard/page.tsx",
   "src/app/workspace/layout.tsx",
@@ -106,6 +105,21 @@ describe("factory analytics snippet", () => {
     expect(snippet).toContain("s.onload=function()");
     expect(snippet).toContain('window.posthog.init("phc_example"');
     expect(snippet).toContain('"capture_pageview":"history_change"');
+    expect(snippet).toContain("window.__factoryAnalyticsQueue");
+  });
+
+  it("queues a privacy-bounded initial event until PostHog is ready", () => {
+    expect(config).not.toBeNull();
+    const snippet = factoryAnalyticsSnippet(config!, {
+      name: "preview_view",
+      properties: { slug: "sample-preview", vertical: "RESTAURANT" },
+    });
+
+    expect(snippet).toContain('"name":"preview_view"');
+    expect(snippet).toContain('"slug":"sample-preview"');
+    expect(snippet).toContain('"vertical":"RESTAURANT"');
+    expect(snippet).not.toContain("email");
+    expect(snippet).not.toContain("token");
   });
 
   it("emits no character that could close the inline script element", () => {
@@ -135,5 +149,43 @@ describe("factory analytics mount points", () => {
     for (const path of UNINSTRUMENTED_SURFACES) {
       expect(await surfaceSource(path)).not.toContain("FactoryAnalytics");
     }
+  });
+
+  it("instruments factory previews without mounting analytics in their layout", async () => {
+    for (const path of [
+      "src/app/preview/[slug]/page.tsx",
+      "src/app/preview/[slug]/[locale]/page.tsx",
+    ]) {
+      const source = await surfaceSource(path);
+      expect(source).toContain("<FactoryAnalytics");
+      expect(source).toContain('name: "preview_view"');
+      expect(source).toContain("!isLiveSurface");
+    }
+    expect(await surfaceSource("src/app/preview/layout.tsx")).not.toContain(
+      "FactoryAnalytics",
+    );
+  });
+
+  it("captures checkout milestones without passing contact or claim data", async () => {
+    const source = await surfaceSource(
+      "src/app/claim/[slug]/claim-panel.tsx",
+    );
+    expect(source).toContain('name: "checkout_started"');
+    expect(source).toContain('name: "checkout_completed"');
+    expect(source).toContain("{ slug, vertical, plan: offer.planId }");
+    expect(source).not.toContain("properties: { email");
+    expect(source).not.toContain("properties: { invitationToken");
+  });
+
+  it("reads analytics configuration from the running container", async () => {
+    const source = await surfaceSource("src/components/factory-analytics.tsx");
+    expect(source).toContain("const runtimeEnvironment = process.env");
+    expect(source).not.toContain(
+      "process.env.NEXT_PUBLIC_POSTHOG_KEY",
+    );
+    expect(source).not.toContain(
+      "process.env.NEXT_PUBLIC_POSTHOG_HOST",
+    );
+    expect(source).toContain("isFactoryHostname(requestHostname(requestHeaders))");
   });
 });

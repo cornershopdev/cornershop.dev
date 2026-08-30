@@ -20,6 +20,24 @@ export type FactoryAnalyticsConfig = {
   assetHost: string;
 };
 
+export const FACTORY_ANALYTICS_EVENT_NAMES = [
+  "preview_view",
+  "checkout_started",
+  "checkout_completed",
+] as const;
+
+export type FactoryAnalyticsEventName =
+  (typeof FACTORY_ANALYTICS_EVENT_NAMES)[number];
+
+export type FactoryAnalyticsEvent = {
+  name: FactoryAnalyticsEventName;
+  properties: {
+    slug: string;
+    vertical: string;
+    plan?: string;
+  };
+};
+
 /**
  * Returns null — a complete no-op — whenever the project key is absent or the
  * host is unusable. An unconfigured deployment, a fork, and a local checkout all
@@ -51,7 +69,10 @@ export function resolveFactoryAnalytics(
  * before `array.js` arrives. Initialising in `onload` needs no queue, so the
  * loader stays readable in a public repository and still guarantees ordering.
  */
-export function factoryAnalyticsSnippet(config: FactoryAnalyticsConfig): string {
+export function factoryAnalyticsSnippet(
+  config: FactoryAnalyticsConfig,
+  initialEvent?: FactoryAnalyticsEvent,
+): string {
   const source = JSON.stringify(`${config.assetHost}/static/array.js`);
   const projectKey = JSON.stringify(config.projectKey);
   const options = JSON.stringify({
@@ -59,14 +80,21 @@ export function factoryAnalyticsSnippet(config: FactoryAnalyticsConfig): string 
     capture_pageview: "history_change",
     person_profiles: "identified_only",
   });
+  const queuedEvent = initialEvent
+    ? `window.__factoryAnalyticsQueue.push(${JSON.stringify(initialEvent)});`
+    : "";
   return [
     "(function(){",
+    "window.__factoryAnalyticsQueue=window.__factoryAnalyticsQueue||[];",
+    queuedEvent,
     'var s=document.createElement("script");',
     `s.src=${source};`,
     "s.async=true;",
     's.crossOrigin="anonymous";',
     "s.onload=function(){",
-    `if(window.posthog)window.posthog.init(${projectKey},${options});`,
+    `if(!window.posthog)return;window.posthog.init(${projectKey},${options});`,
+    "var q=window.__factoryAnalyticsQueue.splice(0);",
+    "q.forEach(function(e){window.posthog.capture(e.name,e.properties);});",
     "};",
     "document.head.appendChild(s);",
     "})();",

@@ -104,6 +104,33 @@ value-first rationales, and a bare `ELIGIBLE` flag do not authorize email.
 The operator can edit the record and must still review the current preview
 before delivery.
 
+Source-reviewed drafts that already exist in the private customer repository
+use `POST /api/admin/leads/reviewed-draft` with the same dedicated bearer token.
+One request carries a locked `{ batch, vertical, drafts }` envelope of at most
+20 rows; every row is validated by the selected vertical schema. This path
+never crawls, generates, or sends mail: it persists the reviewed content
+exactly, requires the approved slug and source to remain bound, updates only
+mutable prospect/preview rows, and fails closed for claimed sites or identity
+collisions. Re-running the same envelope is the supported idempotent recovery
+path.
+
+Run a locked private batch from a trusted operator machine without copying it
+into this repository:
+
+```bash
+bun run operator:import:reviewed-drafts -- \
+  --input /absolute/path/to/private/reviewed-drafts.json
+
+bun run operator:import:reviewed-drafts -- \
+  --input /absolute/path/to/private/reviewed-drafts.json \
+  --execute
+```
+
+The first command validates and prints only slugs. Execute requires
+`OPERATOR_LEAD_INGEST_TOKEN`, imports each exact draft over HTTPS, then requires
+its returned slug/database verification and a live `200` preview before moving
+to the next row. The command never sends outreach.
+
 Store the exact legal controller at
 `/shipshit/production/cornershopdev/OUTREACH_LEGAL_CONTROLLER`. Deployment
 requires the parameter and the no-send outreach preflight reports only its
@@ -171,18 +198,19 @@ niche receiving domain are rejected so forwarding cannot loop back through
 `email.received`. Changing this setting never changes root MX records or plus-tag
 thread routing.
 
-The webhook transaction commits the inbound `OutreachMessage`, its audit event,
-and a unique forwarding outbox intent together. The Postgres message and admin
-thread remain the source of truth; provider delivery happens later from the
-leased outbox worker. Webhook replay converges on the same outbox row, and every
-provider retry reuses the row's stable Resend idempotency key. The worker makes
-at most three attempts, retrying after one and five minutes while the key is
-inside the provider idempotency window. A terminal row is retained as
-`EXHAUSTED` and creates a content-free operator alert for reconciliation.
+The webhook transaction commits the inbound `OutreachMessage` and its audit
+event without creating a new forwarding intent. Postgres and the admin thread
+are the source of truth; receiving a reply therefore consumes no outbound send
+quota and never copies customer content to a personal mailbox. The separately
+deployed worker remains only to drain or reconcile forwarding rows created by a
+pre-#194 release. It makes at most three attempts for those legacy rows,
+retrying after one and five minutes while the key is inside the provider
+idempotency window. A terminal row is retained as `EXHAUSTED` and creates a
+content-free operator alert for reconciliation.
 
-Each provider request carries the immutable forwarding-row identifier as a
-Resend tag. Signed `sent`, `delivered`, `failed`, `suppressed`, `bounced`, and
-`complained` receipts are stored in a dedicated append-only provider-event
+Each legacy provider request carries the immutable forwarding-row identifier as
+a Resend tag. Signed `sent`, `delivered`, `failed`, `suppressed`, `bounced`,
+and `complained` receipts are stored in a dedicated append-only provider-event
 ledger keyed by the Svix event ID. `deliveryStatus` is deliberately separate
 from the forwarding outbox `status`: provider acceptance completes the outbox,
 while a later delivery failure advances only the receipt snapshot and enqueues
@@ -194,10 +222,11 @@ no-ops, older events cannot regress the snapshot, and a tagged row that is not
 visible yet returns a retryable response instead of acknowledging and losing
 the receipt.
 
-Read copies contain a bounded site name, slug, original sender/subject, and a
-bounded plain-text message body. Raw inbound HTML is never rendered. The copy is
-visibly marked read-only and deliberately has no `Reply-To` or threading header:
-reply from the admin outreach panel so the operator workflow stays authoritative.
+Legacy read copies contain a bounded site name, slug, original sender/subject,
+and a bounded plain-text message body. Raw inbound HTML is never rendered. The
+copy is visibly marked read-only and deliberately has no `Reply-To` or
+threading header: reply from the admin outreach panel so the operator workflow
+stays authoritative.
 Dispatcher output and application logs contain aggregate outcomes, row IDs, and
 generic failure codes only—never the destination, subject, message body, or raw
 provider response. The code path and provider acceptance do not prove personal
@@ -281,11 +310,12 @@ endpoint. Alert draining is deliberately isolated in
 most five rows per invocation. Five worst-case five-second delivery timeouts
 consume 25 seconds inside its 45-second service limit; a saturated alert queue
 therefore cannot delay or terminate the independent public health check.
-Inbound read-copy draining is separately isolated in
+Legacy inbound read-copy draining is separately isolated in
 `cornershopdev-inbound-forwards.timer`. It runs every minute and processes at
-most five rows; five worst-case eight-second provider timeouts remain inside its
-55-second service limit. All three timers use the existing host and providers;
-they create no separate billable monitoring service.
+most five rows left by pre-#194 releases; five worst-case eight-second provider
+timeouts remain inside its 55-second service limit. New inbound replies never
+enter that queue. All three timers use the existing host and providers; they
+create no separate billable monitoring service.
 
 Useful commands:
 
