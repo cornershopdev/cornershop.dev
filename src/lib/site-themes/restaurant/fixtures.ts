@@ -152,7 +152,7 @@ export const restaurantThemeFixtures: Record<
     palette: {
       background: "#fff7df",
       foreground: "#172118",
-      accent: "#d94028",
+      accent: "#d13a22",
     },
   defaultLocale: "en",
   businessHours: [],

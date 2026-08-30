@@ -44,6 +44,45 @@ export function accessibleForeground(
     : "#111111";
 }
 
+function channels(hex: string): [number, number, number] {
+  return [
+    Number.parseInt(hex.slice(1, 3), 16),
+    Number.parseInt(hex.slice(3, 5), 16),
+    Number.parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+function toHex(channel: number): string {
+  return Math.max(0, Math.min(255, Math.round(channel)))
+    .toString(16)
+    .padStart(2, "0");
+}
+
+/**
+ * Moves an accent toward black or white, in hue-preserving steps, until it can
+ * carry its own label. `accessibleForeground` only picks the better of two
+ * foregrounds, so a mid-tone accent can defeat both; without this pass a valid
+ * token override could ship an action button whose text fails AA.
+ */
+export function readableAccent(accent: string, foreground: string): string {
+  if (colorContrast(accent, foreground) >= MIN_TEXT_CONTRAST) return accent;
+
+  const [red, green, blue] = channels(accent);
+  const towardBlack = luminance(foreground) > luminance(accent);
+
+  for (let step = 1; step <= 20; step += 1) {
+    const ratio = step / 20;
+    const shift = (channel: number) =>
+      towardBlack ? channel * (1 - ratio) : channel + (255 - channel) * ratio;
+    const candidate = `#${toHex(shift(red))}${toHex(shift(green))}${toHex(shift(blue))}`;
+    if (colorContrast(candidate, foreground) >= MIN_TEXT_CONTRAST) {
+      return candidate;
+    }
+  }
+
+  return towardBlack ? "#000000" : "#ffffff";
+}
+
 /**
  * The five-colour surface every vertical theme publishes. Keeping the shape
  * identical across verticals is what lets one repair pass and one table-driven
@@ -77,6 +116,10 @@ export function repairThemeColorSurface<TColors extends ThemeColorSurface>(
     repaired.surface = repaired.background;
   }
   repaired.accentForeground = accessibleForeground(
+    repaired.accent,
+    repaired.accentForeground,
+  );
+  repaired.accent = readableAccent(
     repaired.accent,
     repaired.accentForeground,
   );

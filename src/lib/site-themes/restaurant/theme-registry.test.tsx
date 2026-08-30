@@ -22,7 +22,11 @@ import {
   selectOwnerRestaurantTheme,
   selectRestaurantTheme,
 } from "@/lib/site-themes/restaurant/selection";
-import { colorContrast } from "@/lib/site-themes/restaurant/tokens";
+import {
+  colorContrast,
+  mergeRestaurantThemeTokens,
+  MIN_TEXT_CONTRAST,
+} from "@/lib/site-themes/restaurant/tokens";
 import {
   fromRestaurantDraft,
   localizeRestaurantDraft,
@@ -272,6 +276,45 @@ describe("bounded restaurant theme selection", () => {
     expect(colorContrast(colors.accent, colors.accentForeground)).toBeGreaterThanOrEqual(
       4.5,
     );
+  });
+});
+
+describe("restaurant theme colour accessibility", () => {
+  const pairs = [
+    { label: "body text", left: "background", right: "foreground" },
+    { label: "surface text", left: "surface", right: "foreground" },
+    { label: "action labels", left: "accent", right: "accentForeground" },
+  ] as const;
+
+  for (const manifest of listRestaurantThemeManifests()) {
+    for (const pair of pairs) {
+      it(`${manifest.id} clears AA on ${pair.label} as published`, () => {
+        const { colors } = manifest.safeDefaultTokens;
+        expect(
+          colorContrast(colors[pair.left], colors[pair.right]),
+        ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+      });
+
+      it(`${manifest.id} still clears AA on ${pair.label} after merging`, () => {
+        const { colors } = mergeRestaurantThemeTokens(
+          manifest.safeDefaultTokens,
+        );
+        expect(
+          colorContrast(colors[pair.left], colors[pair.right]),
+        ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+      });
+    }
+  }
+
+  it("repairs a mid-tone accent that neither black nor white can label", () => {
+    const merged = mergeRestaurantThemeTokens(
+      getRestaurantThemeManifest("counter-service").safeDefaultTokens,
+      { colors: { accent: "#8a7fd4", accentForeground: "#ffffff" } },
+    );
+
+    expect(
+      colorContrast(merged.colors.accent, merged.colors.accentForeground),
+    ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 });
 

@@ -183,7 +183,7 @@ const manifests = {
         background: "#fff7df",
         foreground: "#172118",
         surface: "#ffffff",
-        accent: "#d94028",
+        accent: "#d13a22",
         accentForeground: "#ffffff",
       },
       style: {
@@ -382,7 +382,7 @@ const manifests = {
         foreground: "#3a3228",
         surface: "#ffffff",
         accent: "#c4783a",
-        accentForeground: "#ffffff",
+        accentForeground: "#111111",
       },
       style: {
         fontPair: "grotesk",
