@@ -19,7 +19,13 @@ export type ThemeTokenMergeParsers<TTokens> = {
    */
   parseOverride: (value: unknown) => {
     colors?: Partial<ThemeColorSurface>;
-    style?: Partial<Record<string, string>>;
+    /**
+     * Values stay `unknown` on purpose. A vertical builds its override schema
+     * from a generic style vocabulary, so the value type is not recoverable
+     * here — and it does not need to be: `parseTokens` re-parses the merged
+     * result against the strict schema, which is the actual gate.
+     */
+    style?: Record<string, unknown>;
   };
   parseTokens: (value: unknown) => TTokens;
 };
