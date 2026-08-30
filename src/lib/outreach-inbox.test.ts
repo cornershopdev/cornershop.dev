@@ -38,7 +38,11 @@ type FakeDispatch = {
   error: string | null;
   createdAt: Date;
   updatedAt: Date;
-  site: { name: string; slug: string } | null;
+  site: {
+    name: string;
+    slug: string;
+    outreachMessages: Array<{ id: string }>;
+  } | null;
 };
 
 function message(overrides: Partial<FakeMessage> = {}): FakeMessage {
@@ -75,7 +79,11 @@ function dispatch(overrides: Partial<FakeDispatch> = {}): FakeDispatch {
     error: null,
     createdAt: new Date("2026-08-19T09:00:00.000Z"),
     updatedAt: new Date("2026-08-20T10:00:00.000Z"),
-    site: { name: "Trattoria Vera", slug: "trattoria-vera" },
+    site: {
+      name: "Trattoria Vera",
+      slug: "trattoria-vera",
+      outreachMessages: [],
+    },
     ...overrides,
   };
 }
@@ -92,6 +100,7 @@ async function loadInbox(options: {
   messages?: FakeMessage[];
   dispatches?: FakeDispatch[];
   counts?: Partial<FakeCounts>;
+  pauseSettings?: Array<{ key: string; value: unknown }>;
 }) {
   const counts: FakeCounts = {
     sends: 1,
@@ -121,6 +130,9 @@ async function loadInbox(options: {
     },
     outreachInboundForward: {
       count: async () => counts.stalledForwards,
+    },
+    operatorSetting: {
+      findMany: async () => options.pauseSettings ?? [],
     },
   };
 
@@ -242,8 +254,56 @@ describe("getOutreachInbox", () => {
     expect(result.sequences).toHaveLength(1);
   });
 
+  it("surfaces per-lead pauses and inbound stops on dispatch sequences", async () => {
+    const result = await loadInbox({
+      dispatches: [
+        dispatch({
+          id: "guarded",
+          site: {
+            name: "Trattoria Vera",
+            slug: "trattoria-vera",
+            outreachMessages: [{ id: "reply-1" }],
+          },
+        }),
+        dispatch({
+          id: "active",
+          siteId: "site-2",
+          site: {
+            name: "Osteria Luna",
+            slug: "osteria-luna",
+            outreachMessages: [],
+          },
+        }),
+      ],
+      pauseSettings: [
+        { key: "outreach.paused.site.site-1", value: true },
+        { key: "outreach.paused.site.site-2", value: false },
+      ],
+    });
+
+    expect(result.sequences[0]).toMatchObject({
+      pauseScope: "lead",
+      inboundStopped: true,
+    });
+    expect(result.sequences[1]).toMatchObject({
+      pauseScope: null,
+      inboundStopped: false,
+    });
+  });
+
+  it("shows the global pause on every dispatch sequence", async () => {
+    const result = await loadInbox({
+      dispatches: [dispatch()],
+      pauseSettings: [{ key: "outreach.paused", value: true }],
+    });
+
+    expect(result.sequences[0].pauseScope).toBe("global");
+  });
+
   it("stays listing-only: no send path, no server action, no message bodies", async () => {
     const source = await Bun.file("src/lib/outreach-inbox.ts").text();
+    const pageSource = await Bun.file("src/app/admin/inbox/page.tsx").text();
+    const adminSource = await Bun.file("src/app/admin/page.tsx").text();
 
     expect(source).not.toContain("use server");
     expect(source).not.toContain("resend");
@@ -253,5 +313,12 @@ describe("getOutreachInbox", () => {
     expect(source).not.toContain("deliverOutreachInboundForward");
     expect(source).not.toContain("textBody");
     expect(source).not.toContain("htmlBody");
+    expect(pageSource).not.toContain("<form");
+    expect(pageSource).not.toContain("sendLeadEmail");
+    expect(pageSource).not.toContain("sendOperatorReply");
+    expect(pageSource).not.toContain("textBody");
+    expect(pageSource).not.toContain("htmlBody");
+    expect(pageSource).toContain('href={`/admin#outreach-${siteSlug}`}');
+    expect(adminSource).toContain('id={`outreach-${site.slug}`}');
   });
 });

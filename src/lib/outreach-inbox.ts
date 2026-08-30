@@ -6,6 +6,7 @@ import type {
   OutreachStatus,
 } from "@/generated/prisma/enums";
 import { getDb } from "@/lib/db";
+import { GLOBAL_OUTREACH_PAUSE_KEY } from "@/lib/outreach-pause";
 import { maskAccountEmail } from "@/lib/session";
 
 export const OUTREACH_INBOX_PAGE_SIZE = 100;
@@ -57,6 +58,8 @@ export type OutreachInboxSequenceDto = {
   recipient: string;
   status: OutreachStatus;
   attempt: number;
+  pauseScope: "global" | "lead" | null;
+  inboundStopped: boolean;
   reviewedAt: string | null;
   requestedBy: string | null;
   error: string | null;
@@ -99,6 +102,7 @@ export async function getOutreachInbox(): Promise<OutreachInboxDto> {
     sequenceTotal,
     failedMessages,
     stalledForwards,
+    outreachSettings,
   ] = await Promise.all([
     db.outreachMessage.findMany({
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -144,7 +148,17 @@ export async function getOutreachInbox(): Promise<OutreachInboxDto> {
         error: true,
         createdAt: true,
         updatedAt: true,
-        site: { select: { name: true, slug: true } },
+        site: {
+          select: {
+            name: true,
+            slug: true,
+            outreachMessages: {
+              where: { direction: "INBOUND" },
+              take: 1,
+              select: { id: true },
+            },
+          },
+        },
       },
     }),
     db.outreachMessage.count({ where: { direction: "OUTBOUND" } }),
@@ -161,7 +175,24 @@ export async function getOutreachInbox(): Promise<OutreachInboxDto> {
         ],
       },
     }),
+    db.operatorSetting.findMany({
+      where: { key: { startsWith: GLOBAL_OUTREACH_PAUSE_KEY } },
+      select: { key: true, value: true },
+    }),
   ]);
+
+  const globallyPaused = outreachSettings.some(
+    (setting) =>
+      setting.key === GLOBAL_OUTREACH_PAUSE_KEY && setting.value !== false,
+  );
+  const pausedSiteIds = new Set(
+    outreachSettings.flatMap((setting) =>
+      setting.key.startsWith(`${GLOBAL_OUTREACH_PAUSE_KEY}.site.`) &&
+      setting.value !== false
+        ? [setting.key.slice(`${GLOBAL_OUTREACH_PAUSE_KEY}.site.`.length)]
+        : [],
+    ),
+  );
 
   return {
     messages: messages.map((message) => ({
@@ -205,6 +236,12 @@ export async function getOutreachInbox(): Promise<OutreachInboxDto> {
       recipient: maskAddress(sequence.recipient),
       status: sequence.status,
       attempt: sequence.attempt,
+      pauseScope: globallyPaused
+        ? "global"
+        : pausedSiteIds.has(sequence.siteId)
+          ? "lead"
+          : null,
+      inboundStopped: Boolean(sequence.site?.outreachMessages.length),
       reviewedAt: sequence.reviewedAt?.toISOString() ?? null,
       requestedBy: sequence.requestedBy,
       error: sequence.error,

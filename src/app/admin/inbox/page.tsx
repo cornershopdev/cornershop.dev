@@ -34,6 +34,28 @@ function statusVariant(status: string): "secondary" | "outline" | "destructive" 
   return "outline";
 }
 
+function SiteThreadLink({
+  siteId,
+  siteName,
+  siteSlug,
+}: {
+  siteId: string;
+  siteName: string | null;
+  siteSlug: string | null;
+}) {
+  const label = siteName ?? siteId;
+  return siteSlug ? (
+    <Link
+      href={`/admin#outreach-${siteSlug}`}
+      className="font-medium text-primary underline-offset-4 hover:underline"
+    >
+      {label}
+    </Link>
+  ) : (
+    label
+  );
+}
+
 export default async function OutreachInboxPage() {
   if (!(await getCurrentSession())) redirect("/sign-in");
   if (!(await getSuperadminAccess())) notFound();
@@ -108,7 +130,13 @@ export default async function OutreachInboxPage() {
                         {row.direction.toLowerCase()}
                       </Badge>
                     </td>
-                    <td className="px-5 py-4">{row.siteName ?? row.siteId}</td>
+                    <td className="px-5 py-4">
+                      <SiteThreadLink
+                        siteId={row.siteId}
+                        siteName={row.siteName}
+                        siteSlug={row.siteSlug}
+                      />
+                    </td>
                     <td className="px-5 py-4 font-mono text-xs">
                       {row.counterparty}
                     </td>
@@ -155,13 +183,14 @@ export default async function OutreachInboxPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="border-b bg-muted/50 text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 <tr>
                   <th className="px-5 py-3">Template</th>
                   <th className="px-5 py-3">Site</th>
                   <th className="px-5 py-3">Recipient</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Follow-up</th>
                   <th className="px-5 py-3">Attempt</th>
                   <th className="px-5 py-3">Reviewed</th>
                   <th className="px-5 py-3">Updated</th>
@@ -173,7 +202,13 @@ export default async function OutreachInboxPage() {
                     <td className="px-5 py-4 font-mono text-xs">
                       {row.template}
                     </td>
-                    <td className="px-5 py-4">{row.siteName ?? row.siteId}</td>
+                    <td className="px-5 py-4">
+                      <SiteThreadLink
+                        siteId={row.siteId}
+                        siteName={row.siteName}
+                        siteSlug={row.siteSlug}
+                      />
+                    </td>
                     <td className="px-5 py-4 font-mono text-xs">
                       {row.recipient}
                     </td>
@@ -181,6 +216,23 @@ export default async function OutreachInboxPage() {
                       <Badge variant={statusVariant(row.status)}>
                         {row.status.toLowerCase()}
                       </Badge>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {row.pauseScope ? (
+                          <Badge variant="destructive">
+                            {row.pauseScope === "global"
+                              ? "global paused"
+                              : "lead paused"}
+                          </Badge>
+                        ) : null}
+                        {row.inboundStopped ? (
+                          <Badge variant="secondary">inbound stopped</Badge>
+                        ) : null}
+                        {!row.pauseScope && !row.inboundStopped ? (
+                          <Badge variant="outline">active</Badge>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-5 py-4 tabular-nums">{row.attempt}</td>
                     <td className="px-5 py-4 text-muted-foreground">

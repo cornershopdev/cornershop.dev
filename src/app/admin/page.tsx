@@ -351,7 +351,10 @@ function SiteRow({
 }) {
   const previewHref = `/preview/${site.slug}`;
   return (
-    <tr className="align-top hover:bg-muted/20">
+    <tr
+      id={`outreach-${site.slug}`}
+      className="scroll-mt-20 align-top hover:bg-muted/20 target:bg-primary/10"
+    >
       <td className="px-5 py-4">
         <p className="font-medium">{site.name}</p>
         <p className="mt-1 font-mono text-[11px] text-muted-foreground">
