@@ -12,6 +12,16 @@ import {
   previewBeautyThemeAlternate,
 } from "@/lib/site-themes/beauty/selection";
 import {
+  foodRetailRendererVersionId,
+  foodRetailSiteTheme,
+} from "@/lib/site-themes/food-retail/configuration";
+import { getFoodRetailThemeManifest } from "@/lib/site-themes/food-retail/registry";
+import {
+  foodRetailThemeOptions,
+  parseFoodRetailThemeSelection,
+  previewFoodRetailThemeAlternate,
+} from "@/lib/site-themes/food-retail/selection";
+import {
   restaurantRendererVersionId,
   restaurantSiteTheme,
 } from "@/lib/site-themes/restaurant/configuration";
@@ -163,6 +173,14 @@ const THEME_ADAPTERS: Partial<Record<VerticalId, VerticalThemeAdapter>> = {
     previewAlternate: previewBeautyThemeAlternate,
     describeTheme: getBeautyThemeManifest,
     siteTheme: beautySiteTheme,
+  }),
+  [Vertical.FOOD_RETAIL]: createThemeAdapter({
+    rendererVersionId: foodRetailRendererVersionId,
+    parseSelection: parseFoodRetailThemeSelection,
+    themeOptions: foodRetailThemeOptions,
+    previewAlternate: previewFoodRetailThemeAlternate,
+    describeTheme: getFoodRetailThemeManifest,
+    siteTheme: foodRetailSiteTheme,
   }),
 };
 
