@@ -1,13 +1,5 @@
-import { Vertical } from "@/generated/prisma/enums";
 import type { SiteDraftView, SiteThemeView } from "@/lib/site-draft";
-import { restaurantThemeIdSchema } from "@/lib/site-themes/restaurant/contracts";
-import { restaurantRendererVersionId } from "@/lib/site-themes/restaurant/configuration";
-import { getRestaurantThemeManifest } from "@/lib/site-themes/restaurant/registry";
-import {
-  parseRestaurantThemeSelection,
-  previewRestaurantThemeAlternate,
-  restaurantThemeOptions,
-} from "@/lib/site-themes/restaurant/selection";
+import { themeAdapterFor } from "@/lib/site-themes/adapters";
 import type { VerticalId } from "@/lib/verticals/types";
 
 export const PREVIEW_THEME_PARAM = "theme";
@@ -47,9 +39,9 @@ function firstParam(value: string | string[] | undefined): string | undefined {
  * Resolves the factory-only "View as" shortlist for one preview request.
  *
  * Returns null whenever there is nothing honest to offer: a vertical with no
- * theme registry, or a legacy restaurant whose draft carries no structured
- * selection. Callers must also skip it on the live customer surface, where
- * factory chrome has no business appearing.
+ * theme registry, or a legacy draft that carries no structured selection.
+ * Callers must also skip it on the live customer surface, where factory chrome
+ * has no business appearing.
  *
  * An unknown, malformed or non-shortlisted requested theme silently falls back
  * to the recorded selection instead of erroring, so a stale bookmark still
@@ -64,48 +56,36 @@ export function resolvePreviewThemeAlternates({
   draft: SiteDraftView;
   requestedTheme: string | string[] | undefined;
 }): PreviewThemeAlternates | null {
-  if (vertical !== Vertical.RESTAURANT) return null;
-  const recorded = parseRestaurantThemeSelection(
-    draft.attributes.themeSelection,
-  );
+  const adapter = themeAdapterFor(vertical);
+  if (!adapter) return null;
+  const recorded = adapter.parseSelection(draft.attributes.themeSelection);
   if (!recorded) return null;
 
-  const requested = restaurantThemeIdSchema.safeParse(
-    firstParam(requestedTheme),
-  );
-  const active =
-    (requested.success
-      ? previewRestaurantThemeAlternate(recorded, requested.data)
-      : null) ?? recorded;
+  const requested = firstParam(requestedTheme);
+  const active = (requested ? recorded.alternate(requested) : null) ?? recorded;
+  const unchanged = active.themeId === recorded.themeId;
 
   return {
-    draft:
-      active === recorded
-        ? draft
-        : {
-            ...draft,
-            attributes: { ...draft.attributes, themeSelection: active },
-          },
+    draft: unchanged
+      ? draft
+      : {
+          ...draft,
+          attributes: { ...draft.attributes, themeSelection: active.record },
+        },
     theme: {
       id: active.themeId,
-      version: restaurantRendererVersionId(active.rendererVersion),
-      selection: active,
+      version: adapter.rendererVersionId(active.rendererVersion),
+      selection: active.record,
     },
     // Options come from the recorded selection so the shortlist keeps a stable
     // order and membership as the visitor switches between its entries.
-    options: restaurantThemeOptions(recorded).map((id) => {
-      const manifest = getRestaurantThemeManifest(id);
-      return {
-        id,
-        name: manifest.name,
-        description: manifest.description,
-        active: id === active.themeId,
-      };
-    }),
+    options: recorded.options.map((option) => ({
+      ...option,
+      active: option.id === active.themeId,
+    })),
     reasons: recorded.reasons,
-    activeQuery:
-      active === recorded
-        ? ""
-        : `?${PREVIEW_THEME_PARAM}=${encodeURIComponent(active.themeId)}`,
+    activeQuery: unchanged
+      ? ""
+      : `?${PREVIEW_THEME_PARAM}=${encodeURIComponent(active.themeId)}`,
   };
 }

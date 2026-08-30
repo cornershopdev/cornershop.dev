@@ -43,6 +43,13 @@ export const themeColorsSchema = z
  * class name or a link into a reason fails the parse and the whole selection
  * falls back to the deterministic scorer.
  */
+/**
+ * The resolved colour surface of any registered theme. Shared across verticals
+ * so a renderer can apply theme colours without knowing which vertical produced
+ * them.
+ */
+export type ThemeSurfaceColors = z.infer<typeof themeColorsSchema>;
+
 export const selectionReasonSchema = z
   .string()
   .trim()

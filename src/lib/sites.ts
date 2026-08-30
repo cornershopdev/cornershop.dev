@@ -16,10 +16,9 @@ import type {
 import { LEGACY_THEME_VERSION } from "@/lib/site-draft";
 import { previewCacheTagFor } from "@/lib/site-surface";
 import {
-  restaurantRendererVersionId,
-  restaurantSiteTheme,
-} from "@/lib/site-themes/restaurant/configuration";
-import { parseRestaurantThemeSelection } from "@/lib/site-themes/restaurant/selection";
+  registeredSiteTheme,
+  themeAdapterFor,
+} from "@/lib/site-themes/adapters";
 import { sampleSiteDraft } from "@/lib/verticals/restaurant/schema";
 import {
   isVerticalPublicationEnabled,
@@ -437,7 +436,7 @@ function editableTheme(
   value: Prisma.JsonValue,
   version: string,
 ): SiteThemeView {
-  const registeredTheme = restaurantSiteTheme(vertical, attributes);
+  const registeredTheme = registeredSiteTheme(vertical, attributes);
   if (registeredTheme) return registeredTheme;
 
   const selection = jsonRecord(value);
@@ -461,25 +460,26 @@ function publishedTheme(
   version: string,
   attributes: Record<string, unknown>,
 ): SiteThemeView | null {
-  if (vertical === Vertical.RESTAURANT) {
-    const storedSelection = parseRestaurantThemeSelection(value);
+  const adapter = themeAdapterFor(vertical);
+  if (adapter) {
+    const storedSelection = adapter.parseSelection(value);
     if (storedSelection) {
-      const expectedVersion = restaurantRendererVersionId(
+      const expectedVersion = adapter.rendererVersionId(
         storedSelection.rendererVersion,
       );
       if (version !== expectedVersion) return null;
       return {
         id: storedSelection.themeId,
         version,
-        selection: storedSelection,
+        selection: storedSelection.record,
       };
     }
 
-    // PR #64 stored the structured selection inside the immutable content
-    // snapshot before the dedicated theme column was wired to the registry.
-    // Read those snapshots compatibly; the next owner Save/Publish promotes the
-    // same validated selection into the dedicated versioned theme fields.
-    const contentTheme = restaurantSiteTheme(vertical, attributes);
+    // PR #64 stored the structured restaurant selection inside the immutable
+    // content snapshot before the dedicated theme column was wired to the
+    // registry. Read those snapshots compatibly; the next owner Save/Publish
+    // promotes the same validated selection into the versioned theme fields.
+    const contentTheme = adapter.siteTheme(vertical, attributes);
     if (contentTheme) return contentTheme;
   }
 

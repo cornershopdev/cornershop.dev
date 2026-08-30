@@ -33,6 +33,7 @@ import {
   type SiteDraftView,
   type SiteThemeView,
 } from "@/lib/site-draft";
+import { themeAdapterFor } from "@/lib/site-themes/adapters";
 import { parseRestaurantThemeSelection } from "@/lib/site-themes/restaurant/selection";
 import { resolveVerticalConfig } from "@/lib/verticals/registry";
 import type { VerticalId } from "@/lib/verticals/types";
@@ -120,6 +121,13 @@ export function SiteRenderer({
   const template = theme
     ? (config.templates.definitions[theme.id] ?? resolvedTemplate)
     : resolvedTemplate;
+  // A registered theme owns the surface colours it was selected for. The draft
+  // palette stays the fallback for verticals with no theme registry and for
+  // drafts written before their vertical had one, so an existing site never
+  // changes colour just because a registry appeared behind it.
+  const themeColors =
+    themeAdapterFor(vertical)?.parseSelection(draft.attributes.themeSelection)
+      ?.colors ?? null;
   const capabilities = config.rendererCapabilities(draft.attributes);
   const bookingEmbed = booking ? resolveBookingEmbed(vertical, booking) : null;
   // Appointment-oriented verticals decide whether a missing or present booking
@@ -183,10 +191,14 @@ export function SiteRenderer({
       )}
       style={
         {
-          "--site-bg": draft.palette.background,
-          "--site-fg": draft.palette.foreground,
-          "--site-accent": draft.palette.accent,
-          "--site-accent-fg": draft.palette.accentForeground ?? "#ffffff",
+          "--site-bg": themeColors?.background ?? draft.palette.background,
+          "--site-fg": themeColors?.foreground ?? draft.palette.foreground,
+          "--site-surface": themeColors?.surface ?? draft.palette.background,
+          "--site-accent": themeColors?.accent ?? draft.palette.accent,
+          "--site-accent-fg":
+            themeColors?.accentForeground ??
+            draft.palette.accentForeground ??
+            "#ffffff",
           background: "var(--site-bg)",
           color: "var(--site-fg)",
         } as React.CSSProperties
