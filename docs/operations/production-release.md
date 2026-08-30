@@ -144,7 +144,7 @@ aws ssm put-parameter \
   --region us-east-1 \
   --name /shipshit/production/cornershopdev/EMAIL_REPLY_TO \
   --type String \
-  --value 'vincent@reply.cornershop.dev' \
+  --value 'vincent@reply.restofront.com' \
   --overwrite
 ```
 

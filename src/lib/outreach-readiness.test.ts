@@ -20,7 +20,7 @@ const configuredEnvironment = {
   GOOGLE_PLACES_API_KEY: "test-google-places-key",
   NEXT_PUBLIC_APP_URL: "https://cornershop.dev",
   EMAIL_FROM: "Vincent from Cornershopdev <vincent@send.cornershop.dev>",
-  EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
+  EMAIL_REPLY_TO: "vincent@reply.restofront.com",
   WORKFLOW_ENABLED: "true",
   WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
   WORKFLOW_POSTGRES_URL: "postgresql://workflow:private@example.test/workflow",
@@ -415,7 +415,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.cornershop.dev",
+            name: "reply.restofront.com",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
@@ -442,7 +442,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.cornershop.dev",
+            name: "reply.restofront.com",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
