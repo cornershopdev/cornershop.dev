@@ -118,7 +118,7 @@ An approved private preview can claim the shared Cornershopdev €49 plan and
 publish at `<slug>.cornershop.dev`. That factory path requires:
 
 - [x] platform wildcard DNS and on-demand TLS cover the shared public URL;
-- [x] `send.cornershop.dev` and the receiving-only `reply.cornershop.dev`
+- [x] `send.cornershop.dev` and the receiving-only root `cornershop.dev`
       identities are provider-verified;
 - [x] production billing product/price and checkout configuration are present in
       the reviewed environment without secret values entering git;
