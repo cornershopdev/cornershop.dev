@@ -236,7 +236,7 @@ Dockerfile.
 
 - Next.js 16 App Router and React 19
 - Bun 1.4.0 for installs, Prisma/Workflow migrations, and operator tooling;
-  pinned Node.js 24.19.0 LTS for Next.js builds and the production standalone
+  pinned Node.js 24.20.0 LTS for Next.js builds and the production standalone
   server
 - Tailwind CSS v4 and shadcn/ui
 - Prisma 7 with PostgreSQL and the `pg` driver adapter

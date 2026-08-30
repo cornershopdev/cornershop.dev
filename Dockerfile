@@ -8,7 +8,7 @@ ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
 RUN apk add --no-cache libgcc libstdc++ \
   && ln -s /usr/local/bin/bun /usr/local/bin/bunx \
-  && test "$(node --version)" = "v24.19.0" \
+  && test "$(node --version)" = "v24.20.0" \
   && test "$(bun --version)" = "1.4.0"
 
 FROM node-toolchain AS dependencies

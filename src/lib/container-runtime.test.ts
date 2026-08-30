@@ -19,7 +19,7 @@ const workflow = await Bun.file(
 describe("production container runtime", () => {
   it("serves Next standalone with pinned Node while retaining pinned Bun tools", () => {
     expect(dockerfile).toContain(
-      "FROM node:24.19.0-alpine3.24 AS node-toolchain",
+      "FROM node:24.20.0-alpine3.24 AS node-toolchain",
     );
     expect(dockerfile).toContain("FROM node-toolchain AS dependencies");
     expect(dockerfile).toContain("FROM node-toolchain AS runner");
