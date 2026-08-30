@@ -37,7 +37,7 @@ describe("dependency security migration", () => {
     expect(packageJson.devDependencies["@lhci/cli"]).toBeUndefined();
     expect(packageJson.devDependencies["chrome-launcher"]).toBe("1.2.1");
     expect(packageJson.devDependencies.lighthouse).toBe("13.4.1");
-    expect(packageJson.devDependencies["puppeteer-core"]).toBe("25.8.0");
+    expect(packageJson.devDependencies["puppeteer-core"]).toBe("25.9.0");
     expect(packageJson.overrides["deepmerge-ts"]).toBe("8.0.0");
     expect(packageJson.overrides.nanoid).toBeUndefined();
     expect(packageJson.overrides.undici).toBeUndefined();

@@ -196,23 +196,23 @@ describe("committed bun.lock graph", () => {
     expect(summary.runtime).toBeGreaterThan(0);
     expect(summary.development).toBeGreaterThan(0);
 
-    expect(resolved[npmPackageUrl("next", "16.3.1")]?.relationship).toBe(
+    expect(resolved[npmPackageUrl("next", "16.3.3")]?.relationship).toBe(
       "direct",
     );
-    expect(resolved[npmPackageUrl("next", "16.3.1")]?.scope).toBe("runtime");
+    expect(resolved[npmPackageUrl("next", "16.3.3")]?.scope).toBe("runtime");
     expect(resolved[npmPackageUrl("typescript", "6.0.3")]?.relationship).toBe(
       "direct",
     );
     expect(resolved[npmPackageUrl("typescript", "6.0.3")]?.scope).toBe(
       "development",
     );
-    expect(resolved[npmPackageUrl("@ai-sdk/gateway", "4.0.59")]).toEqual({
-      package_url: "pkg:npm/%40ai-sdk/gateway@4.0.59",
+    expect(resolved[npmPackageUrl("@ai-sdk/gateway", "4.0.67")]).toEqual({
+      package_url: "pkg:npm/%40ai-sdk/gateway@4.0.67",
       relationship: "indirect",
       scope: "runtime",
       dependencies: [
-        "pkg:npm/%40ai-sdk/provider-utils@5.0.28",
-        "pkg:npm/%40ai-sdk/provider@4.0.7",
+        "pkg:npm/%40ai-sdk/provider-utils@5.0.32",
+        "pkg:npm/%40ai-sdk/provider@4.0.8",
         "pkg:npm/%40vercel/oidc@3.2.0",
       ],
     });
@@ -230,7 +230,7 @@ describe("committed bun.lock graph", () => {
     );
     expect(packageJson.dependencies?.["@ai-sdk/gateway"]).toBeUndefined();
     expect(packageJson.devDependencies?.["axe-core"]).toBeUndefined();
-    expect(lockfileSource).toContain('"@ai-sdk/gateway@4.0.59"');
+    expect(lockfileSource).toContain('"@ai-sdk/gateway@4.0.67"');
     expect(lockfileSource).toContain('"axe-core@');
   });
 });

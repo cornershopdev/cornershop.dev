@@ -1,5 +1,5 @@
 export type BoundCheckoutSession = {
-  status: "open" | "complete" | "expired" | null;
+  status: string | null;
   url: string | null;
   priceId: string | null;
 };
@@ -36,10 +36,8 @@ export function checkoutSessionAction(
   if (!session) return "create";
   if (session.status === "complete") return "await_provisioning";
   if (session.status === "expired") return "replace";
-  if (session.status === "open" && !session.url) {
-    return "expire_and_replace";
-  }
-  if (!session.url) return "replace";
+  if (session.status !== "open") return "replace";
+  if (!session.url) return "expire_and_replace";
   if (session.priceId === requestedPriceId) return "reuse";
   return "expire_and_replace";
 }

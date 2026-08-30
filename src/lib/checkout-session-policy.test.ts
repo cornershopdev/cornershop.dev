@@ -43,6 +43,25 @@ describe("bound Checkout session lifecycle", () => {
       ),
     ).toBe("await_provisioning");
   });
+
+  it("fails closed for unknown or missing session statuses", () => {
+    expect(
+      checkoutSessionAction(
+        {
+          status: "future_status",
+          url: "https://checkout.test",
+          priceId: "price_a",
+        },
+        "price_a",
+      ),
+    ).toBe("replace");
+    expect(
+      checkoutSessionAction(
+        { status: null, url: "https://checkout.test", priceId: "price_a" },
+        "price_a",
+      ),
+    ).toBe("replace");
+  });
 });
 
 describe("founding Checkout configuration", () => {
