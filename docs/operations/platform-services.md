@@ -151,7 +151,7 @@ Restofront uses two Resend domains on the same niche:
 | `send.restofront.com`  | `send.send.restofront.com` MX/TXT + DKIM          | Outbound `from`                                                |
 | `restofront.com`       | root MX + `resend._domainkey` TXT; receiving only | Inbound `replyTo` (`vincent@restofront.com`)                   |
 | `send.cornershop.dev`  | `send.send.cornershop.dev` MX/TXT + DKIM          | Factory SMB outbound `from`                                    |
-| `reply.cornershop.dev` | receiving MX + DKIM                               | Factory SMB inbound `replyTo` (`vincent@reply.cornershop.dev`) |
+| `cornershop.dev`       | root MX + DKIM; receiving only                    | Factory SMB inbound `replyTo` (`vincent@cornershop.dev`)       |
 
 Inbound mail is webhook-driven (`email.received`); there is no IMAP mailbox.
 Operator threads live in the admin outreach panel and in Postgres, not in a

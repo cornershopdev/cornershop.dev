@@ -566,7 +566,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
       expect(
         await deliverForward(sentIdentityForwardId, {
           EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-          EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
+          EMAIL_REPLY_TO: "vincent@cornershop.dev",
           OUTREACH_INBOUND_FORWARD_TO: "operator@example.test",
         }),
       ).toBe("exhausted");
@@ -1231,7 +1231,7 @@ async function createForwardFixture(
 function forwardEnvironment() {
   return {
     EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-    EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
+    EMAIL_REPLY_TO: "vincent@cornershop.dev",
     OUTREACH_INBOUND_FORWARD_TO: "operator@example.test",
   };
 }
