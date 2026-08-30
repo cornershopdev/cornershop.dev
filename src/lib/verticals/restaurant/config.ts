@@ -26,6 +26,7 @@ import {
   type RestaurantTemplate,
 } from "@/lib/verticals/restaurant/templates";
 import { restaurantOwnerOperations } from "@/lib/owner-operations";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const restaurantDictionaryExtensions = {
@@ -66,6 +67,12 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Drop in while the light is good.",
     familyMenuEyebrow: "The full menu",
     familyMenuHeading: "Something for everyone.",
+    vesperArrivalEyebrow: "The room",
+    vesperMenuEyebrow: "Tonight, briefly",
+    vesperMenuHeading: "A short menu, read slowly.",
+    vesperMenuIntro:
+      "Four or five things at a time, written out plainly so the room stays the loudest part of the evening.",
+    vesperClosing: "Stay as long as the light does.",
   },
   fr: {
     language: "Langue",
@@ -101,8 +108,54 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Passez pendant qu’il fait jour.",
     familyMenuEyebrow: "Toute la carte",
     familyMenuHeading: "De quoi contenter tout le monde.",
+    vesperArrivalEyebrow: "La salle",
+    vesperMenuEyebrow: "Ce soir, brièvement",
+    vesperMenuHeading: "Une carte courte, lue lentement.",
+    vesperMenuIntro:
+      "Quatre ou cinq plats à la fois, écrits simplement pour que la salle reste le plus fort de la soirée.",
+    vesperClosing: "Restez aussi longtemps que la lumière.",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    language: "Lingwa",
+    reservationsVia: "Riżervazzjonijiet permezz ta’",
+    bookingPartner: "is-sieħeb tagħna tal-ibbukkjar",
+    seasonalNotice: "Il-menu u d-disponibbiltà jistgħu jinbidlu mal-istaġun.",
+    heroImageAlt: "Is-sala tal-ikel ta’",
+    bookingHeading: "Riżervazzjonijiet",
+    bookingRequestHeading: "Itlob mejda",
+    bookingRequestIntro:
+      "Għidilna meta tixtieq tiġi u aħna nikkonfermaw bl-email jew bit-telefon.",
+    themePlanVisit: "Ippjana żjara",
+    themeMenuEyebrow: "Il-menu",
+    terroirMenuHeading: "Iggwidati mill-istaġun.",
+    terroirVisitEyebrow: "Mal-mejda",
+    terroirVisitHeading: "Sib il-ħin għall-menu kollu.",
+    themeBrowseMenu: "Ara l-menu",
+    themeMenuCategories: "Kategoriji tal-menu",
+    counterMenuEyebrow: "Lest meta tkun lest",
+    counterMenuHeading: "Agħżel l-ordni tiegħek.",
+    afterDarkEventsEyebrow: "X’hemm għaddej",
+    afterDarkMenuEyebrow: "Ikel u xorb",
+    afterDarkMenuHeading: "Ibqa’ wara nżul ix-xemx.",
+    afterDarkMenuIntro:
+      "Xorb tad-dar u platti tard, ippreżentati b’mod ċar biżżejjed biex tagħżel fid-dawl baxx.",
+    afterDarkClosing: "Mejda, xarba, imbagħad kanzunetta oħra.",
+    neighborhoodMenuHeading: "X’hemm fuq il-mejda.",
+    neighborhoodVisitEyebrow: "Ejja għandna",
+    neighborhoodVisitHeading: "Sala familjari. Post irriżervat.",
+    daylightMenuEyebrow: "Mill-bank",
+    daylightMenuHeading: "Moħmi llum. Lest issa.",
+    daylightVisitHeading: "Għaddi minn hawn sakemm id-dawl ikun tajjeb.",
+    familyMenuEyebrow: "Il-menu sħiħ",
+    familyMenuHeading: "Xi ħaġa għal kulħadd.",
+    vesperArrivalEyebrow: "Is-sala",
+    vesperMenuEyebrow: "Illejla, fil-qosor",
+    vesperMenuHeading: "Menu qasir, moqri bil-mod.",
+    vesperMenuIntro:
+      "Erba’ jew ħames platti kull darba, miktuba sempliċi biex is-sala tibqa’ l-iktar parti qawwija tal-lejl.",
+    vesperClosing: "Ibqa’ sakemm jibqa’ d-dawl.",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 export const restaurantConfig = {
   id: Vertical.RESTAURANT,

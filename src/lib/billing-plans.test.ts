@@ -28,7 +28,7 @@ describe("Cornershopdev founding Stripe price", () => {
   const price = {
     id: "price_founding",
     active: true,
-    currency: "usd",
+    currency: "eur",
     unit_amount: 4_900,
     type: "recurring",
     livemode: true,
@@ -41,7 +41,7 @@ describe("Cornershopdev founding Stripe price", () => {
     product: { active: true },
   };
 
-  it("accepts only the approved live $49 USD monthly exclusive-tax offer", () => {
+  it("accepts only the approved live EUR 49 monthly exclusive-tax offer", () => {
     expect(() =>
       validateFoundingPrice(price, {
         expectedPriceId: "price_founding",
@@ -50,9 +50,10 @@ describe("Cornershopdev founding Stripe price", () => {
     ).not.toThrow();
   });
 
-  it("rejects wrong amount, mode, cadence, tax, or archived product", () => {
+  it("rejects wrong amount, currency, mode, cadence, tax, or archived product", () => {
     for (const candidate of [
       { ...price, unit_amount: 4_999 },
+      { ...price, currency: "usd" },
       { ...price, livemode: false },
       { ...price, recurring: { ...price.recurring, interval: "year" } },
       { ...price, tax_behavior: "inclusive" },

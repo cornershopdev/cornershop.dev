@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { PreviewThemeSwitcher } from "@/components/preview-theme-switcher";
 import { SiteRenderer } from "@/components/site-renderer";
 import { FACTORY_BRAND } from "@/lib/brand";
 import {
@@ -8,6 +9,10 @@ import {
   factoryMetadataOrigin,
   previewMetadata,
 } from "@/lib/preview-metadata";
+import {
+  PREVIEW_THEME_PARAM,
+  resolvePreviewThemeAlternates,
+} from "@/lib/preview-theme-alternates";
 import { getSiteLocales, localizeSiteDraft } from "@/lib/site-draft";
 import { resolveStorefrontBlogHref } from "@/lib/articles/public-articles";
 import { liveSiteVersionId } from "@/lib/site-surface";
@@ -18,6 +23,7 @@ import {
 
 type PageProps = {
   params: Promise<{ slug: string; locale: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export async function generateMetadata({
@@ -56,30 +62,57 @@ export async function generateMetadata({
   );
 }
 
-export default async function LocalizedPreviewPage({ params }: PageProps) {
+export default async function LocalizedPreviewPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { slug, locale } = await params;
   const versionId = liveSiteVersionId(await headers(), slug);
-  const [site, blogHref] = await Promise.all([
+  const [site, blogHref, query] = await Promise.all([
     versionId
       ? getCachedPublishedSiteView(slug, versionId)
       : findSiteView(slug),
     resolveStorefrontBlogHref({ slug, versionId }),
+    searchParams,
   ]);
   if (!site) notFound();
   const isLiveSurface = versionId !== null;
   const locales = getSiteLocales(site.draft);
   if (!locales.includes(locale)) notFound();
+  // The same factory-only shortlist as the default-locale preview. The active
+  // theme rides on `localeBasePath` below so switching language does not
+  // silently drop the theme a visitor is looking at.
+  const alternates = isLiveSurface
+    ? null
+    : resolvePreviewThemeAlternates({
+        vertical: site.vertical,
+        draft: site.draft,
+        requestedTheme: query[PREVIEW_THEME_PARAM],
+      });
 
   return (
-    <SiteRenderer
-      draft={localizeSiteDraft(site.draft, locale)}
-      vertical={site.vertical}
-      theme={site.theme}
-      locale={locale}
-      localeBasePath={isLiveSurface ? "/" : `/preview/${slug}`}
-      availableLocales={locales}
-      analyticsEnabled={isLiveSurface}
-      blogHref={blogHref}
-    />
+    <>
+      <SiteRenderer
+        draft={localizeSiteDraft(alternates?.draft ?? site.draft, locale)}
+        vertical={site.vertical}
+        theme={alternates?.theme ?? site.theme}
+        locale={locale}
+        localeBasePath={
+          isLiveSurface
+            ? "/"
+            : `/preview/${slug}${alternates?.activeQuery ?? ""}`
+        }
+        availableLocales={locales}
+        analyticsEnabled={isLiveSurface}
+        blogHref={blogHref}
+      />
+      {alternates ? (
+        <PreviewThemeSwitcher
+          basePath={`/preview/${slug}/${locale}`}
+          options={alternates.options}
+          reasons={alternates.reasons}
+        />
+      ) : null}
+    </>
   );
 }

@@ -79,7 +79,7 @@ The replacement runner continues to consume `lighthouserc.cjs` and preserves:
 
 Browser discovery is shared with the font audit. `BROWSER_PATH` and
 `CHROME_PATH` remain supported, Brave remains the first local default, and CI
-can use its installed Chrome. The verify and browser jobs pin Node 24.19.0 to
+can use its installed Chrome. The verify and browser jobs pin Node 24.20.0 to
 match the production build/runtime toolchain while Bun remains 1.3.14.
 
 ## Verification contract

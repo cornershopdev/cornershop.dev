@@ -1,3 +1,4 @@
+import { FactoryAnalytics } from "@/components/factory-analytics";
 import { AuthFontScope } from "@/components/fonts/auth-font-scope";
 
 export default function SignInLayout({
@@ -5,5 +6,10 @@ export default function SignInLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AuthFontScope>{children}</AuthFontScope>;
+  return (
+    <AuthFontScope>
+      <FactoryAnalytics />
+      {children}
+    </AuthFontScope>
+  );
 }

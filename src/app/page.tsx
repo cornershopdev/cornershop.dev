@@ -15,6 +15,7 @@ import {
   Terminal,
   Workflow,
 } from "lucide-react";
+import { FactoryAnalytics } from "@/components/factory-analytics";
 import { SiteHeader } from "@/components/site-header";
 import { factoryFontVariables } from "@/components/fonts/factory-font-scope";
 import { FACTORY_BRAND } from "@/lib/brand";
@@ -93,6 +94,7 @@ export default function Home() {
     <div
       className={`${factoryFontVariables} ${styles.factoryShell} min-h-screen font-sans`}
     >
+      <FactoryAnalytics />
       <SiteHeader
         brand={FACTORY_BRAND}
         inverse

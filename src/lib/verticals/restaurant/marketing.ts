@@ -43,7 +43,7 @@ export const restaurantMarketing = {
     headline: "Your front door, always current.",
     subheadline:
       "Give us the restaurant. Get back a polished mobile-first website with the menu already inside—and keep the booking and ordering tools that already work.",
-    proofPoints: ["No setup call", "Private preview first", "$49/month"],
+    proofPoints: ["No setup call", "Private preview first", "€49/month"],
   },
   form: {
     placeholder: "Restaurant website or name",
@@ -140,7 +140,7 @@ export const restaurantMarketing = {
     plans: [
       {
         name: "Founding",
-        price: "$49",
+        price: "€49",
         cadence: "/month",
         copy: "One maintained, mobile-first restaurant website on the restaurant's own domain.",
         features: [

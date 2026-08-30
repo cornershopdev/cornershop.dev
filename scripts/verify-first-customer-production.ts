@@ -11,7 +11,7 @@ import {
   type FirstCustomerProductionManifest,
 } from "@/lib/first-customer-evidence";
 import { getDb } from "@/lib/db";
-import { isStripeLiveApiKey } from "@/lib/billing-plans";
+import { FOUNDING_PRICE, isStripeLiveApiKey } from "@/lib/billing-plans";
 import {
   evidenceDigest,
   integrationUrlDigest,
@@ -523,13 +523,13 @@ async function inspectStripe(manifest: FirstCustomerProductionManifest) {
     paidInvoice?.id === invoiceId &&
     paidInvoice.livemode &&
     paidInvoice.status === "paid" &&
-    paidInvoice.currency.toLowerCase() === "usd" &&
-    paidInvoice.subtotal === 4_900 &&
+    paidInvoice.currency.toLowerCase() === FOUNDING_PRICE.currency &&
+    paidInvoice.subtotal === FOUNDING_PRICE.unitAmount &&
     (paidInvoice.total_discount_amounts ?? []).reduce(
       (total, discount) => total + discount.amount,
       0,
     ) === 0 &&
-    paidInvoice.amount_paid >= 4_900 &&
+    paidInvoice.amount_paid >= FOUNDING_PRICE.unitAmount &&
     invoiceSettledAt instanceof Date;
   return {
     checkoutCreatedAt: new Date(checkout.created * 1_000),
@@ -539,19 +539,19 @@ async function inspectStripe(manifest: FirstCustomerProductionManifest) {
       price.active &&
       activeProduct &&
       price.id === priceId &&
-      price.currency.toLowerCase() === "usd" &&
-      price.unit_amount === 4_900 &&
-      price.tax_behavior === "exclusive" &&
-      price.recurring?.interval === "month" &&
-      price.recurring.interval_count === 1 &&
+      price.currency.toLowerCase() === FOUNDING_PRICE.currency &&
+      price.unit_amount === FOUNDING_PRICE.unitAmount &&
+      price.tax_behavior === FOUNDING_PRICE.taxBehavior &&
+      price.recurring?.interval === FOUNDING_PRICE.interval &&
+      price.recurring.interval_count === FOUNDING_PRICE.intervalCount &&
       price.recurring.usage_type !== "metered",
     settledPayment:
       checkout.livemode &&
       checkout.mode === "subscription" &&
       checkout.status === "complete" &&
       checkout.payment_status === "paid" &&
-      checkout.currency?.toLowerCase() === "usd" &&
-      checkout.amount_subtotal === 4_900 &&
+      checkout.currency?.toLowerCase() === FOUNDING_PRICE.currency &&
+      checkout.amount_subtotal === FOUNDING_PRICE.unitAmount &&
       (checkout.total_details?.amount_discount ?? 0) === 0 &&
       checkoutSubscription === manifest.stripe.subscriptionId &&
       subscription.livemode &&

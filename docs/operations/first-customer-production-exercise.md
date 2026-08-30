@@ -48,7 +48,7 @@ Obtain and privately record each authorization before the related action:
 
 1. An owner or authorized representative consents to receive the one-time claim
    invitation and supplies evidence of authority.
-2. The same representative approves the exact $49/month offer and authorizes
+2. The same representative approves the exact €49/month offer and authorizes
    the live Stripe Checkout.
 3. The owner confirms the intended menu edit and source booking/ordering links.
 4. The domain administrator authorizes the exact DNS change.
@@ -64,7 +64,7 @@ an imported menu, or a successful test-mode exercise.
 - Record the deployed commit SHA, release URL, deployment run, and successful
   protected readiness result.
 - In Stripe live mode, review the configured founding Price. It must be active,
-  tax-exclusive, non-metered, USD 49.00, recurring monthly, and the same ID
+  tax-exclusive, non-metered, EUR 49.00, recurring monthly, and the same ID
   configured as `STRIPE_PRICE_ID`.
 - Confirm the live webhook endpoint and supported events are enabled.
 - Confirm claim and sign-in delivery status is driven by signed provider events,

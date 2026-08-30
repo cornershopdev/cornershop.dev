@@ -6,6 +6,7 @@ import {
   canonicalSiteLocale,
   liveSiteContext,
   liveSiteCanonicalPath,
+  localeHref,
   PUBLIC_SITE_VERSION_HEADER,
   previewCacheTagFor,
 } from "@/lib/site-surface";
@@ -91,5 +92,44 @@ describe("previewCacheTagFor", () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("localeHref", () => {
+  it("returns the base path untouched for the default locale", () => {
+    expect(localeHref("/preview/osteria-luna", "en", "en")).toBe(
+      "/preview/osteria-luna",
+    );
+    expect(localeHref("/preview/osteria-luna?theme=after-dark", "en", "en")).toBe(
+      "/preview/osteria-luna?theme=after-dark",
+    );
+  });
+
+  it("appends the locale as a path segment", () => {
+    expect(localeHref("/preview/osteria-luna", "fr", "en")).toBe(
+      "/preview/osteria-luna/fr",
+    );
+    expect(localeHref("/", "fr", "en")).toBe("/fr");
+  });
+
+  it("keeps a query string behind the locale segment", () => {
+    // The preview surface pins its "View as" theme on the base path. A locale
+    // link that dropped the query would silently bounce the visitor back to the
+    // recorded theme mid-comparison.
+    expect(localeHref("/preview/osteria-luna?theme=after-dark", "fr", "en")).toBe(
+      "/preview/osteria-luna/fr?theme=after-dark",
+    );
+    expect(localeHref("/preview/osteria-luna/?theme=after-dark", "fr", "en")).toBe(
+      "/preview/osteria-luna/fr?theme=after-dark",
+    );
+  });
+
+  it("keeps a fragment behind the locale segment", () => {
+    expect(localeHref("/preview/osteria-luna#menu", "fr", "en")).toBe(
+      "/preview/osteria-luna/fr#menu",
+    );
+    expect(
+      localeHref("/preview/osteria-luna?theme=after-dark#menu", "fr", "en"),
+    ).toBe("/preview/osteria-luna/fr?theme=after-dark#menu");
   });
 });

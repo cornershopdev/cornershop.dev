@@ -25,7 +25,7 @@ describe("claim panel offer identity", () => {
 
     expect(html).toContain("Claim Osteria Luna");
     expect(html).toContain("Founding");
-    expect(html).toContain("$49");
+    expect(html).toContain("€49");
     expect(html).toContain("/month");
     expect(html).toContain("mobile-first restaurant website");
     expect(html).toContain('placeholder="owner@restaurant.com"');
@@ -78,7 +78,7 @@ describe("claim panel offer identity", () => {
     expect(html).toContain("role=\"status\"");
     expect(html).toContain("launch offer for this site is not configured");
     expect(html).not.toContain("Founding");
-    expect(html).not.toContain("$49");
+    expect(html).not.toContain("€49");
     expect(html).not.toContain("owner@restaurant.com");
     expect(html).not.toContain("owner@shop.com");
     expect(html).not.toContain("Verify ownership by email");

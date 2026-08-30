@@ -223,7 +223,9 @@ describe("vertical registry", () => {
       beautyConfig,
     );
 
-    expect(draft.attributes).toEqual(beautyConfig.attributeDefaults);
+    expect(draft.attributes).toMatchObject(beautyConfig.attributeDefaults);
+    expect(draft.attributes.designProfile).toBeDefined();
+    expect(draft.attributes.themeSelection?.source).toBe("deterministic");
     expect(draft.catalogSections[0]?.name).toBe(
       beautyConfig.vocabulary.catalog,
     );

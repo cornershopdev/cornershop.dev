@@ -13,6 +13,12 @@ import {
   beautyProviders,
   beautyRelevantPathPattern,
 } from "@/lib/verticals/beauty/providers";
+import { getBeautyThemeManifest } from "@/lib/site-themes/beauty/registry";
+import {
+  DEFAULT_BEAUTY_DESIGN_PROFILE,
+  normalizeGeneratedBeautyThemeSelection,
+  selectDeterministicBeautyTheme,
+} from "@/lib/site-themes/beauty/selection";
 import { beautyMarketing } from "@/lib/verticals/beauty/marketing";
 import { beautyPrompt } from "@/lib/verticals/beauty/prompt";
 import {
@@ -21,6 +27,7 @@ import {
   type BeautyTemplate,
 } from "@/lib/verticals/beauty/templates";
 import { beautyOwnerOperations } from "@/lib/owner-operations";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const beautyDictionaryExtensions = {
@@ -46,7 +53,18 @@ export const beautyDictionaryExtensions = {
     bookingRequestIntro:
       "Dites-nous ce que vous souhaitez et quand, nous confirmerons par e-mail ou par téléphone.",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    language: "Lingwa",
+    reservationsVia: "Ibbukkja permezz ta’",
+    bookingPartner: "is-sieħeb tagħna tal-ibbukkjar",
+    seasonalNotice: "Is-servizzi u d-disponibbiltà jistgħu jinbidlu.",
+    heroImageAlt: "L-intern ta’",
+    bookingHeading: "Appuntamenti",
+    bookingRequestHeading: "Itlob appuntament",
+    bookingRequestIntro:
+      "Għidilna x’tixtieq u meta, u aħna nikkonfermaw bl-email jew bit-telefon.",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 const serviceStyleLabels: Record<ServiceStyle, string> = {
   barbershop: "Barbershop",
@@ -88,6 +106,14 @@ export const beautyConfig = {
   attributeDefaults: {
     serviceStyle: "modern-studio",
     showServiceImages: false,
+  },
+  deterministicAttributes: {
+    serviceStyle: "modern-studio",
+    showServiceImages: false,
+    designProfile: DEFAULT_BEAUTY_DESIGN_PROFILE,
+    themeSelection: selectDeterministicBeautyTheme(
+      DEFAULT_BEAUTY_DESIGN_PROFILE,
+    ),
   },
   itemAttributesSchema: beautyItemAttributesSchema,
   itemAttributeDefaults: {
@@ -137,10 +163,26 @@ export const beautyConfig = {
     definitions: beautyTemplates,
     resolve: resolveBeautyTemplateFromAttributes,
   },
-  normalizeGeneratedAttributes: (attributes, template) => ({
-    ...attributes,
-    showServiceImages: template.showServiceImagesByDefault,
-  }),
+  /**
+   * The theme ids are the template keys, so a model that classified the salon
+   * into a theme has implicitly chosen its template too. `serviceStyle` is
+   * realigned onto the scored theme rather than left to disagree with it.
+   */
+  normalizeGeneratedAttributes: (attributes, template) => {
+    const theme = normalizeGeneratedBeautyThemeSelection(
+      attributes.designProfile,
+      attributes.themeSelection,
+    );
+    return {
+      ...attributes,
+      ...theme,
+      serviceStyle: theme.themeSelection.themeId,
+      showServiceImages:
+        template.showServiceImagesByDefault ||
+        getBeautyThemeManifest(theme.themeSelection.themeId).capabilities
+          .galleryEmphasis,
+    };
+  },
   providers: beautyProviders,
   crawl: {
     relevantPathPattern: beautyRelevantPathPattern,

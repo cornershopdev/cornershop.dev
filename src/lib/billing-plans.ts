@@ -10,12 +10,19 @@ export type BillingPlan = {
 };
 
 export const FOUNDING_PRICE = {
-  currency: "usd",
+  currency: "eur",
   unitAmount: 4_900,
   interval: "month",
   intervalCount: 1,
   taxBehavior: "exclusive",
 } as const;
+
+/**
+ * Kept beside the price it renders. The offer is sold in euros to European
+ * businesses, so the amount and the symbol in front of it are one decision:
+ * changing the currency without the symbol prints the wrong money.
+ */
+export const FOUNDING_PRICE_SYMBOL = "€";
 
 export type StripePriceConfiguration = {
   id: string;

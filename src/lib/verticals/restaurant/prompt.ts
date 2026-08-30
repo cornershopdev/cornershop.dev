@@ -5,7 +5,7 @@ export const restaurantPrompt = {
 - Translate customer-facing cuisine, eyebrow, description, menu names, menu descriptions, dietary labels and link labels. Never translate restaurant names, provider names, URLs, prices, currencies or image references.
 - Never invent menu items. If menu data is incomplete, return an empty menu section with a factual explanation.
 - Classify designProfile from service model, customer intent, menu structure, price position, location count, photography evidence and brand language. Cuisine alone must never determine a theme.
-- themeSelection may use only themeId "terroir-editorial", "counter-service", "after-dark", "neighborhood-table", "daylight-cafe" or "family-feast", rendererVersion 1, schemaVersion 1, source "ai", two unique alternative IDs, plain-text reasons, and the declared token enums/hex colours.
+- themeSelection may use only themeId "terroir-editorial", "counter-service", "after-dark", "neighborhood-table", "daylight-cafe", "family-feast" or "vesper-room", rendererVersion 1, schemaVersion 1, source "ai", two unique alternative IDs, plain-text reasons, and the declared token enums/hex colours.
 - Never return CSS, HTML, class names, component names, font names or URLs in themeSelection.
 - Use concise, warm hospitality copy without AI clichés.`,
   classificationVocabulary:
