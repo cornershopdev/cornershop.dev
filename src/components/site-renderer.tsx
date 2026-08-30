@@ -164,6 +164,7 @@ export function SiteRenderer({
         Boolean(item.imageUrl),
     )
     .slice(0, 4);
+  const hasHeroImage = Boolean(draft.heroImageUrl);
   const immersiveHero = template.heroLayout === "immersive";
   const heroTitleClassName = cn(
     "min-w-0 break-words",
@@ -315,7 +316,10 @@ export function SiteRenderer({
         <section
           id="content"
           className={cn(
-            "grid overflow-hidden lg:grid-cols-[0.9fr_1.1fr]",
+            "overflow-hidden",
+            hasHeroImage
+              ? "grid lg:grid-cols-[0.9fr_1.1fr]"
+              : "bg-[var(--site-surface)]",
             embedded ? "min-h-[520px]" : "min-h-[78svh]",
           )}
         >
@@ -325,7 +329,7 @@ export function SiteRenderer({
               splitHeroPositionClassName,
             )}
           >
-            <div className="max-w-2xl">
+            <div className={hasHeroImage ? "max-w-2xl" : "max-w-4xl"}>
               <p
                 className="mb-5 text-xs font-bold uppercase tracking-[0.2em]"
                 style={{ color: "var(--site-accent)" }}
@@ -340,11 +344,13 @@ export function SiteRenderer({
               </p>
             </div>
           </div>
-          <HeroImage
-            draft={draft}
-            heroImageAlt={dictionary.heroImageAlt}
-            className="min-h-[420px] lg:min-h-full"
-          />
+          {hasHeroImage ? (
+            <HeroImage
+              draft={draft}
+              heroImageAlt={dictionary.heroImageAlt}
+              className="min-h-[420px] lg:min-h-full"
+            />
+          ) : null}
         </section>
       ) : template.heroLayout === "card" ? (
         <section id="content" className="p-4 pt-1 md:p-8 md:pt-2">

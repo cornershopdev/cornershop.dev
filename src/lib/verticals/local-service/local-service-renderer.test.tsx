@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+
+mock.module("next/navigation", () => ({
+  useRouter: () => ({
+    push: () => {},
+    replace: () => {},
+    refresh: () => {},
+    back: () => {},
+    prefetch: () => {},
+  }),
+  usePathname: () => "/dashboard",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import { ImportStudio } from "@/app/create/import-studio";
 import {
   LocalServiceDashboard,
@@ -185,6 +198,18 @@ describe("local-service surfaces", () => {
         trustSignals: [],
         projects: [],
         showProjectGallery: false,
+        designProfile: {
+          engagementModel: "callout",
+          primaryIntent: "quote",
+          catalogExperience: "service-list",
+          brandTraits: ["technical", "trusted"],
+          locationCount: 1,
+          photographyQuality: "none",
+        },
+        themeSelection: {
+          themeId: "direct-response",
+          source: "deterministic",
+        },
       },
       catalogSections: [
         {

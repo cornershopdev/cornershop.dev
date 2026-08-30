@@ -2,11 +2,12 @@ import type {
   LocalServiceAttributes,
   LocalServiceTradeType,
 } from "@/lib/verticals/local-service/schema";
+import type { LocalServiceThemeId } from "@/lib/site-themes/local-service/contracts";
 import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
 export type LocalServiceTemplate = {
-  id: LocalServiceTradeType;
+  id: LocalServiceTradeType | LocalServiceThemeId;
   heroLayout: "split" | "immersive" | "card";
   catalogLayout: "stack" | "columns" | "cards";
   brandClassName: string;
@@ -20,7 +21,7 @@ const sharedTitle =
   "font-extrabold leading-[0.9] tracking-[-0.055em] text-balance";
 
 export const localServiceTemplates: Record<
-  LocalServiceTradeType,
+  LocalServiceTradeType | LocalServiceThemeId,
   LocalServiceTemplate
 > = {
   plumber: template("plumber", "split", "stack", false, {
@@ -59,10 +60,28 @@ export const localServiceTemplates: Record<
     featuredHeading: "Projects",
     featuredSubheading: "Project information provided by the business.",
   }),
+  "direct-response": template("direct-response", "split", "stack", false, {
+    catalogEyebrow: "Services",
+    catalogHeading: "What the business can help with.",
+    featuredHeading: "Projects",
+    featuredSubheading: "Project information provided by the business.",
+  }),
+  "trusted-local": template("trusted-local", "card", "columns", false, {
+    catalogEyebrow: "Services",
+    catalogHeading: "Clear services, direct from the business.",
+    featuredHeading: "Projects",
+    featuredSubheading: "Project information provided by the business.",
+  }),
+  "project-led": template("project-led", "immersive", "cards", true, {
+    catalogEyebrow: "Services",
+    catalogHeading: "The work behind the projects.",
+    featuredHeading: "Selected projects",
+    featuredSubheading: "Project information provided by the business.",
+  }),
 };
 
 function template(
-  id: LocalServiceTradeType,
+  id: LocalServiceTradeType | LocalServiceThemeId,
   heroLayout: LocalServiceTemplate["heroLayout"],
   catalogLayout: LocalServiceTemplate["catalogLayout"],
   showProjectImagesByDefault: boolean,
@@ -79,13 +98,13 @@ function template(
     copy: {
       en: copy,
       fr: {
-        catalogEyebrow: tradeLabelFr(id),
+        catalogEyebrow: isTradeType(id) ? tradeLabelFr(id) : "Services",
         catalogHeading: "Services indiqués par l’entreprise.",
         featuredHeading: "Projets",
         featuredSubheading: "Informations de projet fournies par l’entreprise.",
       },
       mt: {
-        catalogEyebrow: tradeLabelMt(id),
+        catalogEyebrow: isTradeType(id) ? tradeLabelMt(id) : "Servizzi",
         catalogHeading: "Servizzi elenkati min-negozju.",
         featuredHeading: "Proġetti",
         featuredSubheading:
@@ -93,6 +112,19 @@ function template(
       },
     },
   };
+}
+
+function isTradeType(
+  id: LocalServiceTradeType | LocalServiceThemeId,
+): id is LocalServiceTradeType {
+  return [
+    "plumber",
+    "electrician",
+    "builder",
+    "repair",
+    "artisan",
+    "general-trades",
+  ].includes(id);
 }
 
 function tradeLabelFr(id: LocalServiceTradeType): string {
