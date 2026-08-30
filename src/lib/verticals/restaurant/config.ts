@@ -148,6 +148,12 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Għaddi minn hawn sakemm id-dawl ikun tajjeb.",
     familyMenuEyebrow: "Il-menu sħiħ",
     familyMenuHeading: "Xi ħaġa għal kulħadd.",
+    vesperArrivalEyebrow: "Is-sala",
+    vesperMenuEyebrow: "Illejla, fil-qosor",
+    vesperMenuHeading: "Menu qasir, moqri bil-mod.",
+    vesperMenuIntro:
+      "Erba’ jew ħames platti kull darba, miktuba sempliċi biex is-sala tibqa’ l-iktar parti qawwija tal-lejl.",
+    vesperClosing: "Ibqa’ sakemm jibqa’ d-dawl.",
   },
 } satisfies Record<SiteUiLocale, Record<string, string>>;
 
