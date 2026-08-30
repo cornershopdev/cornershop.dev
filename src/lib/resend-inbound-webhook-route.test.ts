@@ -156,7 +156,7 @@ function signedInbound(
     data: {
       email_id: "recv_1",
       from: "owner@chez-lea.test",
-      to: ["vincent@restofront.com"],
+      to: ["vincent@reply.restofront.com"],
       subject: "Re: your preview",
       message_id: "<reply@chez-lea.test>",
     },

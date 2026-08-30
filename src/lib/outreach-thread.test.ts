@@ -41,8 +41,8 @@ describe("outreach thread identifiers", () => {
   it("extracts plus-address tags from recipients", () => {
     expect(
       extractPlusTags([
-        "Vincent <vincent+chez-lea@restofront.com>",
-        "vincent@restofront.com",
+        "Vincent <vincent+chez-lea@reply.restofront.com>",
+        "vincent@reply.restofront.com",
       ]),
     ).toEqual(["chez-lea"]);
   });
@@ -51,7 +51,7 @@ describe("outreach thread identifiers", () => {
     expect(
       inboundThreadTokens({
         from: "owner@chez-lea.test",
-        to: ["vincent+chez-lea@restofront.com"],
+        to: ["vincent+chez-lea@reply.restofront.com"],
         inReplyTo: "<outreach_abc@send.restofront.com>",
         references: "<outreach_abc@send.restofront.com>",
         rfcMessageId: "<reply@owner.test>",
@@ -64,8 +64,10 @@ describe("outreach thread identifiers", () => {
   });
 
   it("preserves the registered reply-to mailbox with a plus tag", () => {
-    expect(plusAddressReplyTo("vincent@restofront.com", "chez-lea")).toBe(
-      "vincent+chez-lea@restofront.com",
+    expect(
+      plusAddressReplyTo("vincent@reply.restofront.com", "chez-lea"),
+    ).toBe(
+      "vincent+chez-lea@reply.restofront.com",
     );
   });
 

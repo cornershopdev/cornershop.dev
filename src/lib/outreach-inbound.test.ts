@@ -34,12 +34,12 @@ const fetchReceived = mock(
   } | null> => ({
     id: "recv_1",
     from: "owner@chez-lea.test",
-    to: ["vincent@restofront.com"],
+    to: ["vincent@reply.restofront.com"],
     subject: "Re: Chez Léa, your new site is ready to preview",
     text: "Looks great — can we talk?",
     html: "<p>Looks great — can we talk?</p>",
     messageId: "<reply@chez-lea.test>",
-    receivedFor: ["vincent@restofront.com"],
+    receivedFor: ["vincent@reply.restofront.com"],
     headers: {
       "in-reply-to": "<outreach_abc@send.restofront.com>",
       references: "<outreach_abc@send.restofront.com>",
@@ -273,10 +273,10 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_1",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<reply@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
 
@@ -309,10 +309,10 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_1",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<reply@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
 
@@ -331,7 +331,7 @@ describe("inbound outreach mailbox", () => {
 
   it("persists ingestion and a blocked intent when the configured target is unsafe", async () => {
     process.env.OUTREACH_INBOUND_FORWARD_TO =
-      "vincent+loop@restofront.com";
+      "vincent+loop@reply.restofront.com";
 
     const result = await recordInboundOutreachMessage({
       eventId: "svix_unsafe_forward",
@@ -339,10 +339,10 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_1",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<reply@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
 
@@ -359,12 +359,12 @@ describe("inbound outreach mailbox", () => {
     fetchReceived.mockResolvedValueOnce({
       id: "recv_headerless",
       from: "owner@chez-lea.test",
-      to: ["vincent@restofront.com"],
+      to: ["vincent@reply.restofront.com"],
       subject: "Re: preview",
       text: "Following up without reply headers",
       html: null,
       messageId: "<headerless@chez-lea.test>",
-      receivedFor: ["vincent@restofront.com"],
+      receivedFor: ["vincent@reply.restofront.com"],
       headers: {},
     });
 
@@ -374,10 +374,10 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_headerless",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<headerless@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
 
@@ -395,12 +395,12 @@ describe("inbound outreach mailbox", () => {
     fetchReceived.mockResolvedValueOnce({
       id: "recv_public",
       from: "bonjour@chez-lea.test",
-      to: ["vincent@restofront.com"],
+      to: ["vincent@reply.restofront.com"],
       subject: "Unrelated public-address mail",
       text: "This address must not identify the private lead thread.",
       html: null,
       messageId: "<public-address@chez-lea.test>",
-      receivedFor: ["vincent@restofront.com"],
+      receivedFor: ["vincent@reply.restofront.com"],
       headers: {},
     });
 
@@ -410,10 +410,10 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_public",
         from: "bonjour@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Unrelated public-address mail",
         rfcMessageId: "<public-address@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
 
@@ -433,7 +433,7 @@ describe("inbound outreach mailbox", () => {
       siteId: "site_1",
       providerMessageId: "recv_1",
       fromAddress: "owner@chez-lea.test",
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
     });
     const result = await recordInboundOutreachMessage({
       eventId: "svix_1",
@@ -441,7 +441,7 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_1",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<reply@chez-lea.test>",
         receivedFor: [],
@@ -471,7 +471,7 @@ describe("inbound outreach mailbox", () => {
       direction: "INBOUND",
       providerMessageId: "recv_1",
       fromAddress: "owner@chez-lea.test",
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
     });
     hideExistingInboundOutsideTransaction = true;
 
@@ -481,7 +481,7 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_1",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: "<reply@chez-lea.test>",
         receivedFor: [],
@@ -510,7 +510,7 @@ describe("inbound outreach mailbox", () => {
       metadata: {
         emailId: "recv_missing",
         from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: null,
         receivedFor: [],

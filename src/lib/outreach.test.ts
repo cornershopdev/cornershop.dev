@@ -84,7 +84,7 @@ mock.module("@/lib/resend", () => ({
       ? "Vincent from Restofrontapp <vincent@send.restofront.com>"
       : "Cornershopdev <onboarding@resend.dev>",
   emailReplyTo: (vertical?: string | null) =>
-    vertical === "RESTAURANT" ? "vincent@restofront.com" : undefined,
+    vertical === "RESTAURANT" ? "vincent@reply.restofront.com" : undefined,
 }));
 
 const fakeDb = {
@@ -535,7 +535,7 @@ describe("outreach delivery idempotency", () => {
     const [payload, idempotencyKey] = providerSend.mock.calls[0]!;
     expect(payload).toMatchObject({
       from: "Vincent from Restofrontapp <vincent@send.restofront.com>",
-      replyTo: "vincent+chez-lea@restofront.com",
+      replyTo: "vincent+chez-lea@reply.restofront.com",
       to: "owner@chez-lea.test",
       tags: [
         { name: "category", value: "lead_outreach" },
@@ -706,7 +706,7 @@ describe("outreach delivery idempotency", () => {
       provider: "resend",
       providerMessageId: null,
       fromAddress: "Vincent from Restofrontapp <vincent@send.restofront.com>",
-      replyToAddress: "vincent@restofront.com",
+      replyToAddress: "vincent@reply.restofront.com",
       toAddress: persistedContactEmail,
       subject: "Retryable outreach",
       textBody: "Stored",
@@ -753,7 +753,7 @@ describe("outreach delivery idempotency", () => {
       provider: "resend",
       providerMessageId: "resend_existing",
       fromAddress: "Vincent from Restofrontapp <vincent@send.restofront.com>",
-      replyToAddress: "vincent@restofront.com",
+      replyToAddress: "vincent@reply.restofront.com",
       toAddress: persistedContactEmail,
       subject: "Existing outreach",
       textBody: "Stored",

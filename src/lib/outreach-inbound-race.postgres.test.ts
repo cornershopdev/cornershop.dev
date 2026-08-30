@@ -73,18 +73,18 @@ if (enabled) {
     sendBoundedResendEmail: providerSend,
     emailSender: () =>
       "Vincent from Restofrontapp <vincent@send.restofront.com>",
-    emailReplyTo: () => "vincent@restofront.com",
+    emailReplyTo: () => "vincent@reply.restofront.com",
   }));
   mock.module("@/lib/resend-receiving", () => ({
     fetchReceivedResendEmail: async () => ({
       id: inboundProviderId,
       from: recipient,
-      to: ["vincent@restofront.com"],
+      to: ["vincent@reply.restofront.com"],
       subject: "Re: preview",
       text: "Please stop the follow-up.",
       html: null,
       messageId: `<reply-${safeSuffix}@example.test>`,
-      receivedFor: ["vincent@restofront.com"],
+      receivedFor: ["vincent@reply.restofront.com"],
       headers: {
         "in-reply-to": `<initial-${safeSuffix}@send.restofront.com>`,
         references: `<initial-${safeSuffix}@send.restofront.com>`,
@@ -157,7 +157,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
         providerMessageId: `initial-provider-${suffix}`,
         rfcMessageId: `initial-${safeSuffix}@send.restofront.com`,
         fromAddress: "vincent@send.restofront.com",
-        replyToAddress: "vincent@restofront.com",
+        replyToAddress: "vincent@reply.restofront.com",
         toAddress: recipient,
         subject: "Preview ready",
         textBody: "Preview ready",
@@ -319,10 +319,10 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
       metadata: {
         emailId: inboundProviderId,
         from: recipient,
-        to: ["vincent@restofront.com"],
+        to: ["vincent@reply.restofront.com"],
         subject: "Re: preview",
         rfcMessageId: `<reply-${safeSuffix}@example.test>`,
-        receivedFor: ["vincent@restofront.com"],
+        receivedFor: ["vincent@reply.restofront.com"],
       },
     });
     await waitForAdvisoryWaiter();
@@ -366,7 +366,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
         direction: "INBOUND" as const,
         providerMessageId: `inbound-forward-source-provider-${index}-${suffix}`,
         fromAddress: `owner-${index}@${slug}.example.test`,
-        toAddress: "vincent@restofront.com",
+        toAddress: "vincent@reply.restofront.com",
         subject: "Re: preview",
         textBody: "Provider uniqueness fixture.",
         status: "RECEIVED" as const,
@@ -423,7 +423,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
         direction: "INBOUND",
         providerMessageId: `forward-event-source-provider-${suffix}`,
         fromAddress: `forward-event-owner@${slug}.example.test`,
-        toAddress: "vincent@restofront.com",
+        toAddress: "vincent@reply.restofront.com",
         subject: "Re: preview",
         textBody: "Provider event race fixture.",
         status: "RECEIVED",
@@ -525,7 +525,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
         direction: "INBOUND",
         providerMessageId: `sent-identity-source-provider-${suffix}`,
         fromAddress: `sent-identity-owner@${slug}.example.test`,
-        toAddress: "vincent@restofront.com",
+        toAddress: "vincent@reply.restofront.com",
         subject: "Re: preview",
         textBody: "SENT identity fixture.",
         status: "RECEIVED",
@@ -566,7 +566,7 @@ describe.skipIf(!enabled)("PostgreSQL inbound suppression race", () => {
       expect(
         await deliverForward(sentIdentityForwardId, {
           EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-          EMAIL_REPLY_TO: "vincent@restofront.com",
+          EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
           OUTREACH_INBOUND_FORWARD_TO: "operator@example.test",
         }),
       ).toBe("exhausted");
@@ -1204,7 +1204,7 @@ async function createForwardFixture(
       direction: "INBOUND",
       providerMessageId: `${sourceId}-provider`,
       fromAddress: `fixture-owner@${slug}.example.test`,
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
       subject: "Re: preview",
       textBody: "Acceptance fence fixture.",
       status: "RECEIVED",
@@ -1231,7 +1231,7 @@ async function createForwardFixture(
 function forwardEnvironment() {
   return {
     EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-    EMAIL_REPLY_TO: "vincent@restofront.com",
+    EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
     OUTREACH_INBOUND_FORWARD_TO: "operator@example.test",
   };
 }

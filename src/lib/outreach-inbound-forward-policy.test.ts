@@ -10,7 +10,7 @@ import {
 } from "@/lib/outreach-inbound-forward-policy";
 
 const environment = {
-  EMAIL_REPLY_TO: "vincent@reply.restofront.com",
+  EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
 };
 
 describe("inbound read-copy forwarding policy", () => {
@@ -33,8 +33,8 @@ describe("inbound read-copy forwarding policy", () => {
       "Operator <operator@example.test>",
       "one@example.test,two@example.test",
       "operator@example.test\r\nBcc: victim@example.test",
-      "vincent+loop@restofront.com",
-      "elsewhere@reply.restofront.com",
+      "vincent+loop@reply.restofront.com",
+      "elsewhere@reply.cornershop.dev",
     ]) {
       expect(() =>
         configuredOutreachInboundForwardTarget({
@@ -57,8 +57,8 @@ describe("inbound read-copy forwarding policy", () => {
   it("rejects a receiving domain when Reply-To uses display-name syntax", () => {
     expect(() =>
       configuredOutreachInboundForwardTarget({
-        EMAIL_REPLY_TO: "Vincent <vincent@reply.restofront.com>",
-        OUTREACH_INBOUND_FORWARD_TO: "operator@reply.restofront.com",
+        EMAIL_REPLY_TO: "Vincent <vincent@reply.cornershop.dev>",
+        OUTREACH_INBOUND_FORWARD_TO: "operator@reply.cornershop.dev",
       }),
     ).toThrow("one valid operator mailbox");
   });

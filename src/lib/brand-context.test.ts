@@ -23,7 +23,7 @@ describe("brandContextForVertical", () => {
     expect(context.initials).toBe(restaurantMarketing.brand.initials);
     expect(context.vertical).toBe(Vertical.RESTAURANT);
     expect(context.homeUrl).toBe(`https://${restaurantMarketing.domain}`);
-    expect(context.supportEmail).toBe(restaurantMarketing.email!.replyTo);
+    expect(context.supportEmail).toBe("vincent@reply.restofront.com");
     expect(context.fromAddress).toBe(restaurantMarketing.email!.from);
   });
 

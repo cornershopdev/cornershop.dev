@@ -50,7 +50,7 @@ describe("emailSender", () => {
 describe("emailReplyTo", () => {
   it("points replies at a mailbox the niche reads", () => {
     expect(emailReplyTo(Vertical.RESTAURANT)).toBe(
-      restaurantMarketing.email!.replyTo,
+      "vincent@reply.restofront.com",
     );
   });
 

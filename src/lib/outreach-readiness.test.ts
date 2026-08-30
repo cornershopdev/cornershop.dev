@@ -20,7 +20,7 @@ const configuredEnvironment = {
   GOOGLE_PLACES_API_KEY: "test-google-places-key",
   NEXT_PUBLIC_APP_URL: "https://cornershop.dev",
   EMAIL_FROM: "Vincent from Cornershopdev <vincent@send.cornershop.dev>",
-  EMAIL_REPLY_TO: "vincent@reply.restofront.com",
+  EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
   WORKFLOW_ENABLED: "true",
   WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
   WORKFLOW_POSTGRES_URL: "postgresql://workflow:private@example.test/workflow",
@@ -139,7 +139,7 @@ describe("outreach environment readiness", () => {
     for (const target of [
       "Operator <operator@example.test>",
       "one@example.test,two@example.test",
-      "vincent+loop@restofront.com",
+      "vincent+loop@reply.restofront.com",
     ]) {
       const readiness = evaluateOutreachEnvironment({
         ...configuredEnvironment,
@@ -405,7 +405,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "restofront.com",
+            name: "reply.restofront.com",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
@@ -415,7 +415,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.restofront.com",
+            name: "reply.cornershop.dev",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
@@ -432,7 +432,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "restofront.com",
+            name: "reply.restofront.com",
             status: "pending",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
@@ -442,7 +442,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.restofront.com",
+            name: "reply.cornershop.dev",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },

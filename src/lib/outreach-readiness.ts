@@ -13,7 +13,7 @@ export const OUTREACH_MIGRATIONS = [
 ] as const;
 export const RESTOFRONT_OUTREACH_FROM =
   "Vincent from Restofrontapp <vincent@send.restofront.com>";
-export const RESTOFRONT_OUTREACH_REPLY_TO = "vincent@restofront.com";
+export const RESTOFRONT_OUTREACH_REPLY_TO = "vincent@reply.restofront.com";
 export const REQUIRED_RESEND_WEBHOOK_EVENTS = [
   "email.sent",
   "email.delivered",

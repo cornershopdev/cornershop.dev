@@ -237,7 +237,7 @@ const enqueueDb = fakeDb as unknown as Parameters<
 
 const configuredEnvironment = {
   EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-  EMAIL_REPLY_TO: "vincent@reply.restofront.com",
+  EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
   OUTREACH_INBOUND_FORWARD_TO: " Operator@Example.test ",
 };
 
@@ -264,7 +264,7 @@ describe("inbound read-copy outbox", () => {
     sites.set("site_1", { name: "Chez Léa", slug: "chez-lea" });
     messages.set("inbound_1", {
       fromAddress: "owner@chez-lea.test",
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
       subject: "Re: your preview",
       textBody: "Looks great — can we talk?",
     });
@@ -279,7 +279,7 @@ describe("inbound read-copy outbox", () => {
       await enqueueOutreachInboundForward(
         enqueueDb,
         inboundInput(),
-        { EMAIL_REPLY_TO: "vincent@reply.restofront.com" },
+        { EMAIL_REPLY_TO: "vincent@reply.cornershop.dev" },
       ),
     ).toBe(false);
     expect(forwards).toHaveLength(0);
@@ -312,7 +312,7 @@ describe("inbound read-copy outbox", () => {
   it("retains an invalid configured intent without blocking later safe delivery", async () => {
     await enqueueOutreachInboundForward(enqueueDb, inboundInput(), {
       ...configuredEnvironment,
-      OUTREACH_INBOUND_FORWARD_TO: "vincent+loop@restofront.com",
+      OUTREACH_INBOUND_FORWARD_TO: "vincent+loop@reply.restofront.com",
     });
     expect(forwards[0]).toMatchObject({
       targetAddress: null,
@@ -1146,14 +1146,14 @@ describe("inbound read-copy outbox", () => {
   it("continues past an unsafe poison row to send the next due copy", async () => {
     messages.set("inbound_poison", {
       fromAddress: "operator@example.test",
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
       subject: "Unsafe fixture",
       textBody: "Must not be sent back to its source.",
     });
     sites.set("site_2", { name: "Second lead", slug: "second-lead" });
     messages.set("inbound_2", {
       fromAddress: "owner@second-lead.test",
-      toAddress: "vincent@restofront.com",
+      toAddress: "vincent@reply.restofront.com",
       subject: "Safe fixture",
       textBody: "Please call tomorrow.",
     });
@@ -1163,7 +1163,7 @@ describe("inbound read-copy outbox", () => {
         outreachMessageId: "inbound_poison",
         siteId: "site_1",
         fromAddress: "operator@example.test",
-        toAddress: "vincent@restofront.com",
+        toAddress: "vincent@reply.restofront.com",
       },
       configuredEnvironment,
     );
@@ -1173,7 +1173,7 @@ describe("inbound read-copy outbox", () => {
         outreachMessageId: "inbound_2",
         siteId: "site_2",
         fromAddress: "owner@second-lead.test",
-        toAddress: "vincent@restofront.com",
+        toAddress: "vincent@reply.restofront.com",
       },
       configuredEnvironment,
     );
@@ -1203,7 +1203,7 @@ function inboundInput(
     outreachMessageId: "inbound_1",
     siteId: "site_1",
     fromAddress: "owner@chez-lea.test",
-    toAddress: "vincent@restofront.com",
+    toAddress: "vincent@reply.restofront.com",
     ...overrides,
   };
 }
