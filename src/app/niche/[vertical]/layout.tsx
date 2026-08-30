@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { FactoryAnalytics } from "@/components/factory-analytics";
 import { NicheFontScope } from "@/components/fonts/niche-font-scope";
 import { resolveVerticalBySlug } from "@/lib/verticals/registry";
 
@@ -13,5 +14,10 @@ export default async function NicheLayout({
   const id = resolveVerticalBySlug(vertical);
   if (!id) notFound();
 
-  return <NicheFontScope vertical={id}>{children}</NicheFontScope>;
+  return (
+    <NicheFontScope vertical={id}>
+      <FactoryAnalytics />
+      {children}
+    </NicheFontScope>
+  );
 }

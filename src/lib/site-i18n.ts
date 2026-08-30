@@ -1,3 +1,4 @@
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { ErasedVerticalConfig } from "@/lib/verticals/registry";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
@@ -6,7 +7,9 @@ import type { VerticalTemplateCopy } from "@/lib/verticals/types";
  * language, then `en`, then whatever the vertical shipped first. This replaces the
  * old hardcoded `fr`-or-`en` branch — with the same outcome for the restaurant
  * dictionaries (`fr`/`fr-FR` → fr, everything else → en) — so a vertical that
- * ships more locales, or fewer, needs no renderer change.
+ * ships more locales, or fewer, needs no renderer change. `SITE_UI_LOCALES` names
+ * which locales that is; this function is what makes an unshipped one degrade
+ * rather than crash.
  */
 function pickLocaleEntry<T>(byLocale: Record<string, T>, locale: string): T {
   const normalized = locale.toLowerCase();
@@ -65,7 +68,27 @@ const sharedSiteDictionary = {
     pickupHeading: "Retrait",
     blogNav: "Blog",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    bookingRequestName: "Ismek",
+    bookingRequestEmail: "Email",
+    bookingRequestPhone: "Telefon",
+    bookingRequestWhen: "Ħin preferut",
+    bookingRequestPartySize: "Numru ta’ persuni",
+    bookingRequestNotes: "Hemm xi ħaġa li għandna nkunu nafu?",
+    bookingRequestOptional: "mhux obbligatorju",
+    bookingRequestSubmit: "Ibgħat it-talba",
+    bookingRequestSending: "Qed tintbagħat…",
+    bookingRequestSuccess: "Grazzi — nikkuntattjawk dalwaqt.",
+    bookingRequestError:
+      "It-talba tiegħek ma setgħetx tintbagħat. Erġa’ pprova.",
+    bookingRequestPreviewNotice:
+      "Din hija previżjoni — it-talbiet ma jintbagħtux.",
+    bookingEmbedPreviewNotice:
+      "Il-widget tal-ibbukkjar jintwera fis-sit pubblikat.",
+    pickupHeading: "Ġbir",
+    blogNav: "Blog",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 /**
  * Shared copy first, the vertical's own copy on top: a vertical may override any

@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { normalizeAccountEmail } from "@/lib/account-email";
 import type { ExtractedSite } from "@/lib/importer";
 import { slugify } from "@/lib/site-draft";
+import { siteUiLocale } from "@/lib/site-locales";
 import type { RestaurantDraft } from "@/lib/restaurant";
 import { applyRegeneratedRestaurantTranslation } from "@/lib/restaurant-menu-editor";
 import { repairPalette } from "@/lib/source-reconstruction";
@@ -249,11 +250,8 @@ export function deterministicDraft<
 ): TDraft {
   const name = source.name || source.source;
   const locale = source.sourceLocale ?? "en";
-  const localeLanguage = locale.toLowerCase().split("-")[0];
   const deterministicCopy =
-    vertical.deterministicCopy?.[locale] ??
-    vertical.deterministicCopy?.[localeLanguage] ??
-    vertical.deterministicCopy?.en;
+    vertical.deterministicCopy?.[siteUiLocale(locale)];
   const verticalName = vertical.id.toLowerCase().replaceAll("_", " ");
   const catalogName =
     deterministicCopy?.catalogName ?? vertical.vocabulary.catalog;

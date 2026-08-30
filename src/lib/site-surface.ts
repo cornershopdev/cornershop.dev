@@ -43,13 +43,22 @@ export function liveSiteContext(
   return { slug, versionId, origin };
 }
 
+/**
+ * Appends a locale segment to a base path while preserving any query string or
+ * fragment already on it. The preview surface hangs `?theme=` off the base path
+ * so a visitor switching language keeps looking at the theme they picked; the
+ * locale segment belongs on the path, never after the `?`.
+ */
 export function localeHref(
   basePath: string,
   locale: string,
   defaultLocale: string,
 ): string {
   if (locale === defaultLocale) return basePath;
-  return `${basePath.replace(/\/$/, "")}/${locale}`;
+  const suffixIndex = basePath.search(/[?#]/);
+  const path = suffixIndex === -1 ? basePath : basePath.slice(0, suffixIndex);
+  const suffix = suffixIndex === -1 ? "" : basePath.slice(suffixIndex);
+  return `${path.replace(/\/$/, "")}/${locale}${suffix}`;
 }
 
 /** Canonical shape accepted by the shared site schema: `en` or `fr-CA`. */

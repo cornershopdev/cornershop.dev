@@ -92,7 +92,7 @@ describe("create funnel accessibility", () => {
       "salon.com or salon name",
     );
     expect(html).toContain("The preview stays private and is not chargeable.");
-    expect(html).not.toContain("$49");
+    expect(html).not.toContain("€49");
     expect(html).not.toContain("founding plan");
   });
 
@@ -188,7 +188,7 @@ describe("claim funnel accessibility", () => {
     expect(html).toContain(`id="${email.id}-description"`);
     expect(html).toContain("Verify ownership by email");
     expect(html).toContain('type="submit"');
-    expect(html).toContain("$49");
+    expect(html).toContain("€49");
   });
 
   it("announces checkout processing through a live status region", () => {

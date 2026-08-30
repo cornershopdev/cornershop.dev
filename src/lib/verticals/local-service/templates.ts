@@ -2,6 +2,7 @@ import type {
   LocalServiceAttributes,
   LocalServiceTradeType,
 } from "@/lib/verticals/local-service/schema";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
 export type LocalServiceTemplate = {
@@ -12,7 +13,7 @@ export type LocalServiceTemplate = {
   titleClassName: string;
   sectionClassName: string;
   showProjectImagesByDefault: boolean;
-  copy: Record<"en" | "fr", VerticalTemplateCopy>;
+  copy: Record<SiteUiLocale, VerticalTemplateCopy>;
 };
 
 const sharedTitle =
@@ -83,6 +84,13 @@ function template(
         featuredHeading: "Projets",
         featuredSubheading: "Informations de projet fournies par l’entreprise.",
       },
+      mt: {
+        catalogEyebrow: tradeLabelMt(id),
+        catalogHeading: "Servizzi elenkati min-negozju.",
+        featuredHeading: "Proġetti",
+        featuredSubheading:
+          "Informazzjoni dwar il-proġetti pprovduta min-negozju.",
+      },
     },
   };
 }
@@ -95,6 +103,17 @@ function tradeLabelFr(id: LocalServiceTradeType): string {
     repair: "Dépannage",
     artisan: "Artisan",
     "general-trades": "Entreprise locale",
+  }[id];
+}
+
+function tradeLabelMt(id: LocalServiceTradeType): string {
+  return {
+    plumber: "Plamer",
+    electrician: "Elettriċista",
+    builder: "Bennej",
+    repair: "Tiswijiet",
+    artisan: "Artiġjan",
+    "general-trades": "Negozju lokali",
   }[id];
 }
 

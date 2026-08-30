@@ -8,7 +8,20 @@ export const foodRetailPrompt = {
 - Set preorderRequired only when the source explicitly says a product must or need not be preordered. Otherwise use null. Preserve existing preorder, click-and-collect, ordering and delivery links as external links.
 - Do not create booking links, table reservations, restaurant seating, dining-room language or reservation availability.
 - Classify shopType only from explicit business evidence. Use local-food-shop when the subtype is uncertain.
+- Classify designProfile from how the shop is served, what a customer comes to do, how the range is presented, price position, location count, photography evidence and how fast the published range goes stale. The shop type alone must never determine a theme.
+- themeSelection may use only themeId "daily-counter", "craft-counter" or "market-shelves", rendererVersion 1, schemaVersion 1, source "ai", two unique alternative IDs, plain-text reasons, and the declared token enums/hex colours.
+- Never return CSS, HTML, class names, component names, font names or URLs in themeSelection.
 - Use concise retail copy focused on choosing products, checking hours, finding the shop and placing an existing preorder without AI clichés.`,
   classificationVocabulary:
-    "Food retail attributes include shopType, product-image presentation and sourced pickup details. shopType must be exactly one of bakery, patisserie, butcher, deli, cheesemonger, grocer, local-food-shop. Catalog content is described as product ranges, categories and products, never restaurant menus, dishes or reservations.",
+    `Food retail attributes include shopType, product-image presentation, sourced pickup details, designProfile and themeSelection. shopType must be exactly one of bakery, patisserie, butcher, deli, cheesemonger, grocer, local-food-shop.
+designProfile.fulfillmentModel: counter | click-collect | delivery.
+designProfile.primaryIntent: visit | order | browse.
+designProfile.catalogExperience: daily-list | showcase | aisles.
+designProfile.brandTraits (1–3): classic | craft | minimal | warm | rustic | modern.
+designProfile.pricePosition: value | midmarket | premium.
+designProfile.locationCount: integer from 1 to 50.
+designProfile.photographyQuality: none | limited | strong.
+designProfile.rangeVolatility: daily | seasonal | stable.
+themeSelection tokens are limited to six-digit hex colours plus fontPair editorial | grotesk | rounded, density airy | balanced | compact, radius none | soft | round, and imageTreatment natural | editorial | graphic.
+Catalog content is described as product ranges, categories and products, never restaurant menus, dishes or reservations.`,
 } as const;

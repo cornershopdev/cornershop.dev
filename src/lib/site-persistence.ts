@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { bindOwnerDraftImagesToLibrary } from "@/lib/reviewed-photo-projection";
 import { evidenceDigest, integrationUrlDigest } from "@/lib/evidence-digests";
 import { LEGACY_THEME_VERSION, slugify } from "@/lib/site-draft";
-import { restaurantSiteTheme } from "@/lib/site-themes/restaurant/configuration";
+import { registeredSiteTheme } from "@/lib/site-themes/adapters";
 import {
   buildImportUrls,
   importFailureMessage,
@@ -918,7 +918,7 @@ export function siteDraftScalarData(
   const config = resolveVerticalConfig(vertical);
   const attributes = config.attributesSchema.parse(draft.attributes);
   const theme = config.templates.resolve(attributes);
-  const registeredTheme = restaurantSiteTheme(vertical, attributes);
+  const registeredTheme = registeredSiteTheme(vertical, attributes);
   return {
     name: draft.name,
     eyebrow: draft.eyebrow,

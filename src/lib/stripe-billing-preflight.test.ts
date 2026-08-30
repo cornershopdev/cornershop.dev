@@ -17,7 +17,7 @@ function stripePrice(
         ({
           id: "price_founding",
           active: true,
-          currency: "usd",
+          currency: "eur",
           unit_amount: 4_900,
           type: "recurring",
           livemode: true,
@@ -46,7 +46,7 @@ describe("Stripe billing preflight", () => {
       ready: true,
       mode: "live",
       amount: 4_900,
-      currency: "usd",
+      currency: "eur",
       interval: "month",
       taxBehavior: "exclusive",
     });

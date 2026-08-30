@@ -9,6 +9,7 @@ import {
   type RestaurantThemeRendererProps,
 } from "@/components/restaurant-themes/shared";
 import { TerroirEditorialTheme } from "@/components/restaurant-themes/terroir-editorial";
+import { VesperRoomTheme } from "@/components/restaurant-themes/vesper-room";
 import { getSiteDictionary } from "@/lib/site-i18n";
 import type { RestaurantThemeId } from "@/lib/site-themes/restaurant/contracts";
 import { restaurantConfig } from "@/lib/verticals/restaurant/config";
@@ -24,6 +25,7 @@ const renderers = {
   "neighborhood-table": NeighborhoodTableTheme,
   "daylight-cafe": DaylightCafeTheme,
   "family-feast": FamilyFeastTheme,
+  "vesper-room": VesperRoomTheme,
 } satisfies Record<RestaurantThemeId, RestaurantThemeRenderer>;
 
 export function hasRestaurantThemeRenderer(id: RestaurantThemeId): boolean {

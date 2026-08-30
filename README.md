@@ -68,7 +68,7 @@ What happens after preview depends on the matrix above:
   on-demand TLS; monitor the menu, imagery, and links; review first-party
   booking leads; publish articles.
 - **Food Retail and Local Service (`factory`)** — an approved preview can
-  claim the shared $49 Cornershopdev plan and publish on
+  claim the shared €49 Cornershopdev plan and publish on
   `<slug>.cornershop.dev`. Custom domains and source monitoring are enabled.
   Owner analytics, lead inbox, and articles are not-yet.
 - **Beauty (`disabled`)** — the factory `/niche/beauty` preview stays
@@ -395,7 +395,7 @@ generation endpoint.
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID` (the one USD 49 monthly founding Price)
+- `STRIPE_PRICE_ID` (the one EUR 49 monthly founding Price)
 
 Configure the webhook endpoint as:
 
@@ -408,7 +408,7 @@ Customer Portal setup, and the production activation blockers are documented
 in [`docs/operations/stripe-billing.md`](docs/operations/stripe-billing.md).
 Checkout requires a valid hashed claim invitation; a public preview URL alone
 cannot authorize billing or ownership. Launch Checkout offers only the founding subscription; the deployment-time Stripe
-preflight proves that it is the active, tax-exclusive USD 49.00 monthly Price.
+preflight proves that it is the active, tax-exclusive EUR 49.00 monthly Price.
 
 ### Owner sign-in
 

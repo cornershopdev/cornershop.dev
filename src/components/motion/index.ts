@@ -1,0 +1,17 @@
+export {
+  FadeIn,
+  KenBurns,
+  MOTION_PRESETS,
+  MOTION_STAGGER_CLASS,
+  motionClassName,
+  motionProps,
+  motionStyle,
+  Reveal,
+  RiseIn,
+  ScaleIn,
+  Sheen,
+  Stagger,
+  type MotionOptions,
+  type MotionPreset,
+  type StaggerProps,
+} from "@/components/motion/motion";
