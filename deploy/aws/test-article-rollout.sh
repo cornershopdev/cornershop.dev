@@ -133,4 +133,34 @@ run_rollback_case 0 1 0 0
 run_rollback_case 0 0 1 0
 run_rollback_case 0 0 0 1
 
+# A production failure enters rollback from an ERR trap while errexit is on.
+# The handler may relax error handling internally, but the command after the
+# original failure must remain unreachable or the deploy can print false
+# success sentinels after restoring the predecessor.
+errexit_log="${root}/rollback-errexit.log"
+set +e
+(
+  set -Eeuo pipefail
+  source "$rollback_function"
+  container="api-cornershop-dev"
+  candidate="api-cornershop-dev-candidate"
+  previous="api-cornershop-dev-previous"
+  article_rollout_active=0
+  reload_caddy() { return 0; }
+  docker() { return 0; }
+  trap 'rollback_article_rollout $?' ERR
+  false
+  printf '%s\n' "continued-after-rollback" >"$errexit_log"
+) 2>>"$errexit_log"
+errexit_status="$?"
+set -e
+if [[ "$errexit_status" == 0 ]]; then
+  echo "Rollback swallowed the deployment failure" >&2
+  exit 1
+fi
+if grep -Fxq "continued-after-rollback" "$errexit_log"; then
+  echo "Deployment continued after rollback" >&2
+  exit 1
+fi
+
 echo "article rollout failure-path tests passed"

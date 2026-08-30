@@ -99,8 +99,9 @@ describe("production deployment contract", () => {
     );
     expect(deployScript).toContain('preview.includes("preview_view")');
     expect(deployScript).toContain(
-      'get("le-petit-meunier.restofront.com", "/")',
+      'get("le-petit-meunier.restofront.com", "/", false)',
     );
+    expect(deployScript).toContain("if (requireOk && !response.ok)");
     expect(deployScript).toContain(
       'customer.includes("id=\\\"factory-analytics\\\"")',
     );
