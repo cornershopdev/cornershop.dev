@@ -32,7 +32,7 @@ import {
 } from "@/lib/restaurant";
 
 describe("restaurant theme registry", () => {
-  it("publishes six complete themes with three featured ranks for the homepage", () => {
+  it("publishes seven complete themes with three featured ranks for the homepage", () => {
     const manifests = listRestaurantThemeManifests();
     expect(manifests.map(({ id }) => id)).toEqual([
       "terroir-editorial",
@@ -41,6 +41,7 @@ describe("restaurant theme registry", () => {
       "neighborhood-table",
       "daylight-cafe",
       "family-feast",
+      "vesper-room",
     ]);
     expect(new Set(manifests.map(({ id }) => id)).size).toBe(manifests.length);
 
@@ -386,6 +387,7 @@ describe("restaurant theme renderers", () => {
       "neighborhood-table": "Ce qu’il y a sur la table.",
       "daylight-cafe": "Cuit aujourd’hui. Prêt maintenant.",
       "family-feast": "De quoi contenter tout le monde.",
+      "vesper-room": "Une carte courte, lue lentement.",
     } as const;
 
     for (const manifest of listRestaurantThemeManifests()) {
