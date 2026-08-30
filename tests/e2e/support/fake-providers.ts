@@ -36,7 +36,7 @@ Bun.serve({
         object: "price",
         active: true,
         livemode: false,
-        currency: "usd",
+        currency: "eur",
         unit_amount: 4_900,
         type: "recurring",
         tax_behavior: "exclusive",
@@ -70,12 +70,12 @@ Bun.serve({
         mode: "subscription",
         status: "open",
         payment_status: "unpaid",
-        currency: "usd",
+        currency: "eur",
         amount_subtotal: 4_900,
         adaptive_pricing: { enabled: true },
         presentment_details: {
-          presentment_amount: 4_300,
-          presentment_currency: "eur",
+          presentment_amount: 5_300,
+          presentment_currency: "usd",
         },
         allow_promotion_codes: false,
         automatic_tax: { enabled: true },
@@ -117,7 +117,7 @@ Bun.serve({
       const session = sessions.get(checkoutPage[1]!);
       if (!session) return new Response("Not found", { status: 404 });
       return new Response(
-        `<!doctype html><html><body><h1>Stripe test-mode founding checkout</h1><p>€43.00 local presentment for the $49 monthly plan</p><form method="post" action="/checkout/${checkoutPage[1]}/pay"><button type="submit">Pay €43 in test mode</button></form></body></html>`,
+        `<!doctype html><html><body><h1>Stripe test-mode founding checkout</h1><p>$53.00 local presentment for the €49 monthly plan</p><form method="post" action="/checkout/${checkoutPage[1]}/pay"><button type="submit">Pay $53 in test mode</button></form></body></html>`,
         { headers: { "content-type": "text/html; charset=utf-8" } },
       );
     }

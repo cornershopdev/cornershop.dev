@@ -612,7 +612,7 @@ function checkoutFixture(
     mode: "subscription",
     status: "complete",
     payment_status: "paid",
-    currency: "usd",
+    currency: "eur",
     amount_subtotal: 4_900,
     total_details: {
       amount_discount: 0,

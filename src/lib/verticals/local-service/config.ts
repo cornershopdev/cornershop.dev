@@ -21,6 +21,7 @@ import {
   type LocalServiceTemplate,
 } from "@/lib/verticals/local-service/templates";
 import { localServiceOwnerOperations } from "@/lib/owner-operations";
+import { siteUiLocale, type SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 const tradeLabels: Record<LocalServiceTradeType, string> = {
@@ -33,7 +34,7 @@ const tradeLabels: Record<LocalServiceTradeType, string> = {
 };
 
 const availabilityLabels: Record<
-  "en" | "fr",
+  SiteUiLocale,
   Record<LocalServiceAttributes["availabilityPosture"], string | null>
 > = {
   en: {
@@ -52,11 +53,48 @@ const availabilityLabels: Record<
     "24-7-emergency": "Service d’urgence 24 h/24 indiqué",
     "by-appointment": "Sur rendez-vous",
   },
+  mt: {
+    "not-stated": null,
+    scheduled: "Xogħol skedat",
+    "same-day": "Disponibbiltà fl-istess ġurnata indikata",
+    "emergency-callout": "Sejħiet ta’ emerġenza indikati",
+    "24-7-emergency": "Servizz ta’ emerġenza 24/7 indikat",
+    "by-appointment": "B’appuntament",
+  },
 };
 
-function localServiceLanguage(locale: string): "en" | "fr" {
-  return locale.toLowerCase().split("-")[0] === "fr" ? "fr" : "en";
-}
+/**
+ * Every word the renderer stamps on a service row or a trust line, as a table
+ * rather than a chain of `fr ? … : …` ternaries. The ternary form answers "not
+ * French" with English, so a fourth locale would ship reading half-English
+ * instead of failing to compile.
+ */
+const localServiceLabels = {
+  en: {
+    quoteRequired: "Quote required",
+    priceFrom: "From",
+    hourly: "Hourly",
+    emergencyCallout: "Emergency callout",
+    insured: "Insurance stated by the business",
+    notInsured: "Business states that it is not insured",
+  },
+  fr: {
+    quoteRequired: "Devis requis",
+    priceFrom: "À partir de",
+    hourly: "Tarif horaire",
+    emergencyCallout: "Intervention d’urgence",
+    insured: "Assurance indiquée par l’entreprise",
+    notInsured: "L’entreprise indique ne pas être assurée",
+  },
+  mt: {
+    quoteRequired: "Kwotazzjoni meħtieġa",
+    priceFrom: "Minn",
+    hourly: "Rata bis-siegħa",
+    emergencyCallout: "Sejħa ta’ emerġenza",
+    insured: "Assigurazzjoni indikata min-negozju",
+    notInsured: "In-negozju jindika li mhuwiex assigurat",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 /**
  * LOCAL_SERVICE treats model output as an untrusted presentation proposal.
@@ -118,7 +156,22 @@ export const localServiceDictionaryExtensions = {
     trustHeading: "Éléments de confiance",
     projectsHeading: "Projets",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    language: "Lingwa",
+    reservationsVia: "Ikkuntattja permezz ta’",
+    bookingPartner: "is-sieħeb tagħna tal-iskedar",
+    seasonalNotice:
+      "Il-kopertura tas-servizz u d-disponibbiltà jistgħu jinbidlu. Ikkonferma qabel ma tibda x-xogħol.",
+    heroImageAlt: "Ritratt ta’",
+    bookingHeading: "Kuntatt",
+    bookingRequestHeading: "",
+    bookingRequestIntro: "",
+    serviceAreasHeading: "Żoni ta’ servizz",
+    credentialsHeading: "Kwalifiki u assigurazzjoni",
+    trustHeading: "Għaliex iċ-ċlijenti jċemplu",
+    projectsHeading: "Proġetti",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 const attributeDefaults: LocalServiceAttributes = {
   tradeType: "general-trades",
@@ -186,6 +239,14 @@ export const localServiceConfig = {
       emptyCatalogDescription:
         "Aucun service n’était présent dans les données source structurées.",
     },
+    mt: {
+      eyebrow: "Previżjoni privata tas-servizz lokali",
+      description:
+        "Previżjoni privata mibnija biss mill-informazzjoni tas-sors disponibbli bħalissa.",
+      catalogName: "Servizzi",
+      emptyCatalogDescription:
+        "Ebda dettall ta’ servizz ma nstab fid-data strutturata tas-sors.",
+    },
   },
   itemAttributesSchema: localServiceItemAttributesSchema,
   itemAttributeDefaults: {
@@ -218,29 +279,25 @@ export const localServiceConfig = {
     buildEyebrow: (attributes, site) =>
       `${tradeLabels[attributes.tradeType]} · ${site.address ?? "Local"}`,
     itemBadges: (attributes, locale) => {
-      const language = localServiceLanguage(locale);
+      const labels = localServiceLabels[siteUiLocale(locale)];
       const badges: string[] = [];
       if (attributes.pricingModel === "quote") {
-        badges.push(language === "fr" ? "Devis requis" : "Quote required");
+        badges.push(labels.quoteRequired);
       }
       if (attributes.pricingModel === "from") {
-        badges.push(language === "fr" ? "À partir de" : "From");
+        badges.push(labels.priceFrom);
       }
       if (attributes.pricingModel === "hourly") {
-        badges.push(
-          attributes.priceUnit ||
-            (language === "fr" ? "Tarif horaire" : "Hourly"),
-        );
+        badges.push(attributes.priceUnit || labels.hourly);
       } else if (attributes.priceUnit) badges.push(attributes.priceUnit);
       if (attributes.emergencyEligible) {
-        badges.push(
-          language === "fr" ? "Intervention d’urgence" : "Emergency callout",
-        );
+        badges.push(labels.emergencyCallout);
       }
       return badges;
     },
     businessDetails: (attributes, locale) => {
-      const language = localServiceLanguage(locale);
+      const language = siteUiLocale(locale);
+      const labels = localServiceLabels[language];
       return {
         availability:
           availabilityLabels[language][attributes.availabilityPosture],
@@ -252,18 +309,9 @@ export const localServiceConfig = {
         ),
         trustSignals: [
           ...(attributes.insuranceStatus === "insured"
-            ? [
-                attributes.insuranceDetail ||
-                  (language === "fr"
-                    ? "Assurance indiquée par l’entreprise"
-                    : "Insurance stated by the business"),
-              ]
+            ? [attributes.insuranceDetail || labels.insured]
             : attributes.insuranceStatus === "not-insured"
-              ? [
-                  language === "fr"
-                    ? "L’entreprise indique ne pas être assurée"
-                    : "Business states that it is not insured",
-                ]
+              ? [labels.notInsured]
               : []),
           ...attributes.trustSignals.map((signal) =>
             [signal.label, signal.detail].filter(Boolean).join(" · "),

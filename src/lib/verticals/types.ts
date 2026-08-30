@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { Vertical } from "@/generated/prisma/enums";
 import type { BrandIdentity } from "@/lib/brand";
+import type { SiteUiLocale } from "@/lib/site-locales";
 
 export type VerticalId = Vertical;
 
@@ -120,7 +121,7 @@ export type VerticalTemplateDefinition = {
   brandClassName: string;
   titleClassName: string;
   sectionClassName: string;
-  copy: Record<string, VerticalTemplateCopy>;
+  copy: Record<SiteUiLocale, VerticalTemplateCopy>;
 };
 
 export type LinkClassificationHint = {
@@ -335,7 +336,7 @@ export type VerticalConfig<
   }) => TAttributes;
   /** Locale-specific vocabulary for sparse no-model imports. */
   deterministicCopy?: Record<
-    string,
+    SiteUiLocale,
     {
       eyebrow: string;
       description: string;
@@ -440,7 +441,7 @@ export type VerticalConfig<
     relevantPathPattern: RegExp;
     linkKeywordHints: LinkClassificationHint[];
   };
-  i18n: Record<string, Record<string, string>>;
+  i18n: Record<SiteUiLocale, Record<string, string>>;
   rendererCapabilities: (attributes: TAttributes) => {
     showGallery: boolean;
     /** Which existing integration becomes the conversion-first header action. */

@@ -43,7 +43,7 @@ const claimInvitations = await Bun.file(
 
 const forbiddenLifecyclePromise = new RegExp(
   [
-    "\\$49",
+    "[€$]49",
     "\\bclaim(?:s|ed|ing)?\\b",
     "\\bpay(?:ment|ing)?\\b",
     "\\bpaid\\b",

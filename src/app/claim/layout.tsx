@@ -1,3 +1,4 @@
+import { FactoryAnalytics } from "@/components/factory-analytics";
 import { EditorialFontScope } from "@/components/fonts/editorial-font-scope";
 
 export default function ClaimLayout({
@@ -5,5 +6,10 @@ export default function ClaimLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <EditorialFontScope>{children}</EditorialFontScope>;
+  return (
+    <EditorialFontScope>
+      <FactoryAnalytics />
+      {children}
+    </EditorialFontScope>
+  );
 }

@@ -1,6 +1,7 @@
 import {
   FOUNDING_PLAN_ID,
   FOUNDING_PRICE,
+  FOUNDING_PRICE_SYMBOL,
   type BillingPlanId,
 } from "@/lib/billing-plans";
 import type { BrandIdentity } from "@/lib/brand";
@@ -76,14 +77,14 @@ export function foundingOfferDisplay(
     intervalCount: number;
   } = FOUNDING_PRICE,
 ): FoundingOfferDisplay | null {
-  if (price.currency !== "usd") return null;
+  if (price.currency !== FOUNDING_PRICE.currency) return null;
   if (price.intervalCount !== 1) return null;
   const majorUnits = price.unitAmount / 100;
   if (!Number.isInteger(majorUnits) || majorUnits <= 0) return null;
   return {
-    price: `$${majorUnits}`,
+    price: `${FOUNDING_PRICE_SYMBOL}${majorUnits}`,
     cadence: `/${price.interval}`,
-    currency: "usd",
+    currency: FOUNDING_PRICE.currency,
   };
 }
 

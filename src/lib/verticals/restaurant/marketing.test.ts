@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { Vertical } from "@/generated/prisma/enums";
+import { foundingOfferDisplay } from "@/lib/claim-launch-offer";
 import { foodRetailMarketing } from "@/lib/verticals/food-retail/marketing";
 import { localServiceMarketing } from "@/lib/verticals/local-service/marketing";
 import { restaurantMarketing } from "@/lib/verticals/restaurant/marketing";
@@ -11,20 +12,20 @@ import {
 } from "@/lib/verticals/registry";
 
 /**
- * GTM audit + first-customer runbook: launch is one $49/month founding plan.
+ * GTM audit + first-customer runbook: launch is one €49/month founding plan.
  * Headlining $25/$50 or generated food imagery as a paid extra is the
  * regression these assertions exist to catch.
  */
 describe("Restofront founding offer", () => {
-  it("sells only one $49/month founding plan", () => {
-    expect(restaurantMarketing.hero.proofPoints).toContain("$49/month");
+  it("sells only one €49/month founding plan", () => {
+    expect(restaurantMarketing.hero.proofPoints).toContain("€49/month");
     expect(restaurantMarketing.hero.proofPoints.join(" ")).not.toContain("$25");
 
     expect(restaurantMarketing.pricing.plans).toHaveLength(1);
     const [plan] = restaurantMarketing.pricing.plans;
     expect(plan).toMatchObject({
       name: "Founding",
-      price: "$49",
+      price: "€49",
       cadence: "/month",
       featured: true,
     });
@@ -60,7 +61,7 @@ describe("Restofront founding offer", () => {
 
     for (const marketing of claimEnabledMarketing) {
       expect(marketing.pricing?.plans).toHaveLength(1);
-      expect(marketing.pricing?.plans[0]?.price).toBe("$49");
+      expect(marketing.pricing?.plans[0]?.price).toBe(foundingOfferDisplay()?.price);
       expect(marketing.pricing?.copy).toContain("Local currency");
     }
     expect(foodRetailMarketing.pricing.plans[0]?.features).not.toEqual(
