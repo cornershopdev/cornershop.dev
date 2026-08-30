@@ -1,12 +1,9 @@
 import "server-only";
-import { normalizeAccountEmail } from "@/lib/account-email";
 import { getDb } from "@/lib/db";
-import { captureOperatorAlert } from "@/lib/operator-alerts";
 import {
   extractEmailAddress,
   extractEmailAddresses,
   htmlToPlainText,
-  inboundThreadTokens,
   normalizeRfcMessageId,
   outreachThreadKey,
   parseRfcMessageIds,
@@ -17,7 +14,11 @@ import { emailReplyTo } from "@/lib/email-identity";
 import { listOutreachVerticals } from "@/lib/lead-generation/registry";
 import type { VerticalId } from "@/lib/verticals/types";
 import { lockOutreachDelivery, lockOutreachSite } from "@/lib/outreach-lock";
-import { enqueueOutreachInboundForward } from "@/lib/outreach-inbound-forward";
+
+const INBOUND_SENDER_DOMAIN_ALLOWLIST = new Set([
+  "genfeed.ai",
+  "send.genfeed.ai",
+]);
 
 export type RecordInboundOutreachResult = {
   handled: boolean;
@@ -44,15 +45,9 @@ export async function recordInboundOutreachMessage(input: {
   const db = getDb();
   const existing = await db.outreachMessage.findUnique({
     where: { providerMessageId: input.metadata.emailId },
-    select: { id: true, siteId: true, fromAddress: true, toAddress: true },
+    select: { id: true, siteId: true },
   });
   if (existing) {
-    await enqueueOutreachInboundForward(db, {
-      outreachMessageId: existing.id,
-      siteId: existing.siteId,
-      fromAddress: existing.fromAddress,
-      toAddress: existing.toAddress,
-    });
     return {
       handled: true,
       created: false,
@@ -87,16 +82,10 @@ export async function recordInboundOutreachMessage(input: {
   };
   const matched = await matchInboundOutreachThread(fields);
   if (!matched) {
-    await captureOperatorAlert({
-      kind: "OUTREACH_REPLY",
-      dedupKey: `inbound-unmatched:${input.metadata.emailId}`,
-      title: "Inbound outreach reply could not be matched",
-      message:
-        "A signed inbound email did not match a configured outreach thread. Inspect the From/To headers and mailbox.",
-      context: {
-        emailId: input.metadata.emailId,
-        from: fields.from,
-      },
+    await recordUnmatchedInbound(db, {
+      eventId: input.eventId,
+      emailId: input.metadata.emailId,
+      from: fields.from,
       occurredAt: input.occurredAt,
     });
     return {
@@ -134,20 +123,9 @@ export async function recordInboundOutreachMessage(input: {
       await lockOutreachSite(tx, matched.siteId);
       const duplicate = await tx.outreachMessage.findUnique({
         where: { providerMessageId: input.metadata.emailId },
-        select: {
-          id: true,
-          siteId: true,
-          fromAddress: true,
-          toAddress: true,
-        },
+        select: { id: true, siteId: true },
       });
       if (duplicate) {
-        await enqueueOutreachInboundForward(tx, {
-          outreachMessageId: duplicate.id,
-          siteId: duplicate.siteId,
-          fromAddress: duplicate.fromAddress,
-          toAddress: duplicate.toAddress,
-        });
         return { created: false as const, message: duplicate };
       }
 
@@ -187,12 +165,6 @@ export async function recordInboundOutreachMessage(input: {
           createdAt: receivedAt,
         },
       });
-      await enqueueOutreachInboundForward(tx, {
-        outreachMessageId: created.id,
-        siteId: matched.siteId,
-        fromAddress,
-        toAddress,
-      });
       return { created: true as const, message: created };
     });
     if (!persisted.created) {
@@ -204,18 +176,6 @@ export async function recordInboundOutreachMessage(input: {
         messageId: persisted.message.id,
       };
     }
-    await captureOperatorAlert({
-      kind: "OUTREACH_REPLY",
-      dedupKey: `inbound:${input.metadata.emailId}`,
-      title: "A lead replied",
-      message:
-        "An inbound reply was stored on the lead thread. Follow-up campaign sends are stopped; reply from /admin.",
-      context: {
-        siteId: matched.siteId,
-        outreachMessageId: persisted.message.id,
-      },
-      occurredAt: receivedAt,
-    });
     return {
       handled: true,
       created: true,
@@ -226,15 +186,9 @@ export async function recordInboundOutreachMessage(input: {
   } catch (error) {
     const duplicate = await db.outreachMessage.findUnique({
       where: { providerMessageId: input.metadata.emailId },
-      select: { id: true, siteId: true, fromAddress: true, toAddress: true },
+      select: { id: true, siteId: true },
     });
     if (duplicate) {
-      await enqueueOutreachInboundForward(db, {
-        outreachMessageId: duplicate.id,
-        siteId: duplicate.siteId,
-        fromAddress: duplicate.fromAddress,
-        toAddress: duplicate.toAddress,
-      });
       return {
         handled: true,
         created: false,
@@ -251,70 +205,37 @@ export async function matchInboundOutreachThread(
   fields: InboundAddressFields,
 ): Promise<{ siteId: string; threadKey: string } | null> {
   const db = getDb();
-  const tokens = inboundThreadTokens(fields);
-  if (tokens.length > 0) {
-    const byHeader = await db.outreachMessage.findFirst({
-      where: {
-        OR: [
-          { rfcMessageId: { in: tokens } },
-          { id: { in: tokens } },
-          { providerMessageId: { in: tokens } },
-          {
-            threadKey: {
-              in: tokens.map((token) =>
-                token.startsWith("lead:") ? token : `lead:${token}`,
-              ),
-            },
-          },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      select: { siteId: true, threadKey: true },
-    });
-    if (byHeader) {
-      return {
-        siteId: byHeader.siteId,
-        threadKey: byHeader.threadKey ?? outreachThreadKey(byHeader.siteId),
-      };
-    }
-
-    const plusTags = tokens.filter((token) => !token.includes("@"));
-    const recipientVerticals = inboundRecipientVerticals(fields);
-    if (plusTags.length > 0 && recipientVerticals.length > 0) {
-      const byPlus = await db.site.findFirst({
-        where: {
-          vertical: { in: recipientVerticals },
-          OR: [{ slug: { in: plusTags } }, { id: { in: plusTags } }],
-        },
-        orderBy: { updatedAt: "desc" },
-        select: { id: true },
-      });
-      if (byPlus) {
-        return {
-          siteId: byPlus.id,
-          threadKey: outreachThreadKey(byPlus.id),
-        };
-      }
-    }
-  }
-
-  const from = safeEmail(fields.from);
-  const recipientVerticals = inboundRecipientVerticals(fields);
-  if (!from || recipientVerticals.length === 0) return null;
-  const byContact = await db.site.findMany({
-    where: {
-      vertical: { in: recipientVerticals },
-      leadContactEmail: from,
-    },
-    orderBy: { updatedAt: "desc" },
-    take: 2,
-    select: { id: true },
+  const tokens = inboundHeaderMessageIds({
+    "in-reply-to": fields.inReplyTo ?? "",
+    references: fields.references ?? "",
   });
-  if (byContact.length !== 1) return null;
-  return {
-    siteId: byContact[0]!.id,
-    threadKey: outreachThreadKey(byContact[0]!.id),
-  };
+  if (tokens.length === 0) return null;
+  const byHeader = await db.outreachMessage.findFirst({
+    where: {
+      direction: "OUTBOUND",
+      OR: [
+        { rfcMessageId: { in: tokens } },
+        { id: { in: tokens } },
+        { providerMessageId: { in: tokens } },
+        {
+          threadKey: {
+            in: tokens.map((token) =>
+              token.startsWith("lead:") ? token : `lead:${token}`,
+            ),
+          },
+        },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { siteId: true, threadKey: true },
+  });
+  if (byHeader) {
+    return {
+      siteId: byHeader.siteId,
+      threadKey: byHeader.threadKey ?? outreachThreadKey(byHeader.siteId),
+    };
+  }
+  return null;
 }
 
 export function inboundRecipientVerticals(
@@ -349,16 +270,6 @@ export function isRestofrontInboundRecipient(
   return inboundRecipientVerticals(fields).includes("RESTAURANT");
 }
 
-function safeEmail(value: string): string | null {
-  const extracted = extractEmailAddress(value);
-  if (!extracted) return null;
-  try {
-    return normalizeAccountEmail(extracted);
-  } catch {
-    return extracted;
-  }
-}
-
 export function inboundHeaderMessageIds(
   headers: Record<string, string>,
 ): string[] {
@@ -366,4 +277,57 @@ export function inboundHeaderMessageIds(
     ...parseRfcMessageIds(headers["in-reply-to"]),
     ...parseRfcMessageIds(headers.references),
   ];
+}
+
+export function isAllowlistedInboundSender(value: string): boolean {
+  const email = extractEmailAddress(value);
+  if (!email) return false;
+  return INBOUND_SENDER_DOMAIN_ALLOWLIST.has(
+    email.slice(email.lastIndexOf("@") + 1),
+  );
+}
+
+async function recordUnmatchedInbound(
+  db: ReturnType<typeof getDb>,
+  input: {
+    eventId: string;
+    emailId: string;
+    from: string;
+    occurredAt: Date;
+  },
+): Promise<void> {
+  const email = extractEmailAddress(input.from);
+  const senderDomain = email?.slice(email.lastIndexOf("@") + 1) ?? null;
+  const allowlisted = isAllowlistedInboundSender(input.from);
+  const action = allowlisted ? "retained_at_provider" : "dropped";
+
+  console.info("[outreach-inbound] unmatched email", {
+    emailId: input.emailId,
+    senderDomain,
+    allowlisted,
+    action,
+  });
+  try {
+    await db.operatorAuditEvent.create({
+      data: {
+        type: allowlisted
+          ? "outreach.inbound.allowlisted_unmatched"
+          : "outreach.inbound.unmatched_dropped",
+        actor: "system:resend-inbound",
+        metadata: {
+          eventId: input.eventId,
+          emailId: input.emailId,
+          senderDomain,
+          allowlisted,
+          action,
+        },
+        createdAt: input.occurredAt,
+      },
+    });
+  } catch {
+    console.error("[outreach-inbound] unmatched audit failed", {
+      emailId: input.emailId,
+      allowlisted,
+    });
+  }
 }

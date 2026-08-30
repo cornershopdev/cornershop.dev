@@ -4,6 +4,7 @@ mock.module("server-only", () => ({}));
 
 const alerts: Array<Record<string, unknown>> = [];
 const auditEvents: Array<Record<string, unknown>> = [];
+const operatorAuditEvents: Array<Record<string, unknown>> = [];
 const messages: Array<Record<string, unknown>> = [];
 const forwards: Array<Record<string, unknown>> = [];
 let transactionDepth = 0;
@@ -100,20 +101,25 @@ const fakeDb = {
     }) => {
       if (input.where.OR) {
         return (
-          messages.find((message) =>
-            input.where.OR?.some((clause) =>
-              Object.entries(clause).every(([key, value]) => {
-                if (
-                  value &&
-                  typeof value === "object" &&
-                  "in" in value &&
-                  Array.isArray((value as { in: unknown[] }).in)
-                ) {
-                  return (value as { in: unknown[] }).in.includes(message[key]);
-                }
-                return message[key] === value;
-              }),
-            ),
+          messages.find(
+            (message) =>
+              (!input.where.direction ||
+                message.direction === input.where.direction) &&
+              input.where.OR?.some((clause) =>
+                Object.entries(clause).every(([key, value]) => {
+                  if (
+                    value &&
+                    typeof value === "object" &&
+                    "in" in value &&
+                    Array.isArray((value as { in: unknown[] }).in)
+                  ) {
+                    return (value as { in: unknown[] }).in.includes(
+                      message[key],
+                    );
+                  }
+                  return message[key] === value;
+                }),
+              ),
           ) ?? null
         );
       }
@@ -197,6 +203,12 @@ const fakeDb = {
       return input.data;
     },
   },
+  operatorAuditEvent: {
+    create: async (input: { data: Record<string, unknown> }) => {
+      operatorAuditEvents.push(input.data);
+      return input.data;
+    },
+  },
   outreachInboundForward: {
     upsert: async (input: {
       where: { outreachMessageId: string };
@@ -235,13 +247,15 @@ const fakeDb = {
   },
 };
 
-const { recordInboundOutreachMessage } = await import("@/lib/outreach-inbound");
+const { isAllowlistedInboundSender, recordInboundOutreachMessage } =
+  await import("@/lib/outreach-inbound");
 const previousForwardTarget = process.env.OUTREACH_INBOUND_FORWARD_TO;
 
 describe("inbound outreach mailbox", () => {
   beforeEach(() => {
     alerts.length = 0;
     auditEvents.length = 0;
+    operatorAuditEvents.length = 0;
     messages.length = 0;
     forwards.length = 0;
     transactionDepth = 0;
@@ -266,7 +280,17 @@ describe("inbound outreach mailbox", () => {
     }
   });
 
-  it("matches In-Reply-To, stores RECEIVED mail, and alerts the operator", async () => {
+  it("allowlists only the two genfeed sender domains", () => {
+    expect(isAllowlistedInboundSender("Vincent <test@genfeed.ai>")).toBe(true);
+    expect(isAllowlistedInboundSender("test@send.genfeed.ai")).toBe(true);
+    expect(isAllowlistedInboundSender("test@other.genfeed.ai")).toBe(false);
+    expect(isAllowlistedInboundSender("test@genfeed.ai.example.test")).toBe(
+      false,
+    );
+  });
+
+  it("matches In-Reply-To and stores RECEIVED mail without scheduling an email", async () => {
+    process.env.OUTREACH_INBOUND_FORWARD_TO = "operator@example.test";
     const result = await recordInboundOutreachMessage({
       eventId: "svix_1",
       occurredAt: new Date("2026-08-19T09:00:00.000Z"),
@@ -296,11 +320,11 @@ describe("inbound outreach mailbox", () => {
     expect(auditEvents.map((event) => event.type)).toEqual([
       "outreach.inbound.received",
     ]);
-    expect(alerts[0]).toMatchObject({ kind: "OUTREACH_REPLY" });
+    expect(alerts).toHaveLength(0);
     expect(forwards).toHaveLength(0);
   });
 
-  it("commits one forward intent atomically with the inbound mailbox row", async () => {
+  it("does not enqueue an inbound email forward", async () => {
     process.env.OUTREACH_INBOUND_FORWARD_TO = " Operator@Example.test ";
 
     const result = await recordInboundOutreachMessage({
@@ -317,45 +341,11 @@ describe("inbound outreach mailbox", () => {
     });
 
     expect(result).toMatchObject({ handled: true, created: true });
-    expect(forwards).toEqual([
-      expect.objectContaining({
-        outreachMessageId: "inbound_1",
-        idempotencyKey: "outreach-inbound-forward:inbound_1",
-        targetAddress: "operator@example.test",
-        siteName: "Chez Léa",
-        siteSlug: "chez-lea",
-        createdInsideTransaction: true,
-      }),
-    ]);
+    expect(forwards).toHaveLength(0);
+    expect(alerts).toHaveLength(0);
   });
 
-  it("persists ingestion and a blocked intent when the configured target is unsafe", async () => {
-    process.env.OUTREACH_INBOUND_FORWARD_TO =
-      "vincent+loop@restofront.com";
-
-    const result = await recordInboundOutreachMessage({
-      eventId: "svix_unsafe_forward",
-      occurredAt: new Date("2026-08-19T09:00:00.000Z"),
-      metadata: {
-        emailId: "recv_1",
-        from: "owner@chez-lea.test",
-        to: ["vincent@restofront.com"],
-        subject: "Re: preview",
-        rfcMessageId: "<reply@chez-lea.test>",
-        receivedFor: ["vincent@restofront.com"],
-      },
-    });
-
-    expect(result).toMatchObject({ handled: true, created: true });
-    expect(messages.at(-1)).toMatchObject({ direction: "INBOUND" });
-    expect(forwards[0]).toMatchObject({
-      targetAddress: null,
-      lastFailureCode: "configuration_invalid",
-      createdInsideTransaction: true,
-    });
-  });
-
-  it("matches a headerless reply only by the private lead recipient", async () => {
+  it("drops a headerless customer email instead of inferring a thread", async () => {
     fetchReceived.mockResolvedValueOnce({
       id: "recv_headerless",
       from: "owner@chez-lea.test",
@@ -381,43 +371,148 @@ describe("inbound outreach mailbox", () => {
       },
     });
 
-    expect(result).toMatchObject({
-      handled: true,
-      created: true,
-      siteId: "site_1",
+    expect(result).toEqual({
+      handled: false,
+      created: false,
+      retry: false,
+      siteId: null,
+      messageId: null,
     });
-    expect(messages.at(-1)).toMatchObject({
-      fromAddress: "owner@chez-lea.test",
+    expect(
+      messages.filter((message) => message.direction === "INBOUND"),
+    ).toHaveLength(0);
+    expect(alerts).toHaveLength(0);
+    expect(operatorAuditEvents.at(-1)).toMatchObject({
+      type: "outreach.inbound.unmatched_dropped",
+    });
+  });
+
+  it("logs and drops an unmatched random sender without emailing", async () => {
+    fetchReceived.mockResolvedValueOnce({
+      id: "recv_random",
+      from: "stranger@example.test",
+      to: ["vincent@cornershop.dev"],
+      subject: "Unrelated mail",
+      text: "This is not an outreach reply.",
+      html: null,
+      messageId: "<random@example.test>",
+      receivedFor: ["vincent@cornershop.dev"],
+      headers: {},
+    });
+
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_random",
+      occurredAt: new Date("2026-08-19T09:06:00.000Z"),
+      metadata: {
+        emailId: "recv_random",
+        from: "stranger@example.test",
+        to: ["vincent@cornershop.dev"],
+        subject: "Unrelated mail",
+        rfcMessageId: "<random@example.test>",
+        receivedFor: ["vincent@cornershop.dev"],
+      },
+    });
+
+    expect(result).toEqual({
+      handled: false,
+      created: false,
+      retry: false,
+      siteId: null,
+      messageId: null,
+    });
+    expect(alerts).toHaveLength(0);
+    expect(forwards).toHaveLength(0);
+    expect(operatorAuditEvents.at(-1)).toMatchObject({
+      type: "outreach.inbound.unmatched_dropped",
+      metadata: {
+        emailId: "recv_random",
+        senderDomain: "example.test",
+        allowlisted: false,
+      },
+    });
+  });
+
+  it("accepts allowlisted genfeed mail at a root without requiring a site", async () => {
+    fetchReceived.mockResolvedValueOnce({
+      id: "recv_genfeed",
+      from: "Vincent <test@send.genfeed.ai>",
+      to: ["vincent@cornershop.dev"],
+      subject: "Named mail test",
+      text: "Allowlisted test mail.",
+      html: null,
+      messageId: "<named-test@send.genfeed.ai>",
+      receivedFor: ["vincent@cornershop.dev"],
+      headers: {},
+    });
+
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_genfeed",
+      occurredAt: new Date("2026-08-19T09:07:00.000Z"),
+      metadata: {
+        emailId: "recv_genfeed",
+        from: "Vincent <test@send.genfeed.ai>",
+        to: ["vincent@cornershop.dev"],
+        subject: "Named mail test",
+        rfcMessageId: "<named-test@send.genfeed.ai>",
+        receivedFor: ["vincent@cornershop.dev"],
+      },
+    });
+
+    expect(result).toEqual({
+      handled: false,
+      created: false,
+      retry: false,
+      siteId: null,
+      messageId: null,
+    });
+    expect(alerts).toHaveLength(0);
+    expect(forwards).toHaveLength(0);
+    expect(operatorAuditEvents.at(-1)).toMatchObject({
+      type: "outreach.inbound.allowlisted_unmatched",
+      metadata: {
+        emailId: "recv_genfeed",
+        senderDomain: "send.genfeed.ai",
+        allowlisted: true,
+      },
+    });
+  });
+
+  it("does not match an inbound message referenced by another inbound message", async () => {
+    messages.push({
+      id: "prior_inbound",
       siteId: "site_1",
+      direction: "INBOUND",
+      rfcMessageId: "prior-inbound@example.test",
+      providerMessageId: "recv_prior",
       threadKey: "lead:site_1",
     });
 
     fetchReceived.mockResolvedValueOnce({
-      id: "recv_public",
-      from: "bonjour@chez-lea.test",
+      id: "recv_inbound_reference",
+      from: "stranger@example.test",
       to: ["vincent@restofront.com"],
-      subject: "Unrelated public-address mail",
-      text: "This address must not identify the private lead thread.",
+      subject: "Re: unrelated inbound",
+      text: "An inbound reference is not proof of our outbound thread.",
       html: null,
-      messageId: "<public-address@chez-lea.test>",
+      messageId: "<second-inbound@example.test>",
       receivedFor: ["vincent@restofront.com"],
-      headers: {},
+      headers: { "in-reply-to": "<prior-inbound@example.test>" },
     });
 
-    const publicResult = await recordInboundOutreachMessage({
-      eventId: "svix_public",
-      occurredAt: new Date("2026-08-19T09:06:00.000Z"),
+    const result = await recordInboundOutreachMessage({
+      eventId: "svix_inbound_reference",
+      occurredAt: new Date("2026-08-19T09:08:00.000Z"),
       metadata: {
-        emailId: "recv_public",
-        from: "bonjour@chez-lea.test",
+        emailId: "recv_inbound_reference",
+        from: "stranger@example.test",
         to: ["vincent@restofront.com"],
-        subject: "Unrelated public-address mail",
-        rfcMessageId: "<public-address@chez-lea.test>",
+        subject: "Re: unrelated inbound",
+        rfcMessageId: "<second-inbound@example.test>",
         receivedFor: ["vincent@restofront.com"],
       },
     });
 
-    expect(publicResult).toEqual({
+    expect(result).toEqual({
       handled: false,
       created: false,
       retry: false,
@@ -456,11 +551,8 @@ describe("inbound outreach mailbox", () => {
       messageId: "inbound_existing",
     });
     expect(fetchReceived).not.toHaveBeenCalled();
-    expect(forwards).toHaveLength(1);
-    expect(forwards[0]).toMatchObject({
-      outreachMessageId: "inbound_existing",
-      targetAddress: "operator@example.test",
-    });
+    expect(forwards).toHaveLength(0);
+    expect(alerts).toHaveLength(0);
   });
 
   it("repairs a missing intent when the duplicate appears inside the transaction", async () => {
@@ -493,13 +585,8 @@ describe("inbound outreach mailbox", () => {
       created: false,
       messageId: "inbound_racing",
     });
-    expect(forwards).toEqual([
-      expect.objectContaining({
-        outreachMessageId: "inbound_racing",
-        targetAddress: "operator@example.test",
-        createdInsideTransaction: true,
-      }),
-    ]);
+    expect(forwards).toHaveLength(0);
+    expect(alerts).toHaveLength(0);
   });
 
   it("retries when Resend has not published the received body yet", async () => {
