@@ -17,6 +17,8 @@ import {
 import {
   normalizeGeneratedRestaurantThemeSelection,
   parseRestaurantThemeSelection,
+  previewRestaurantThemeAlternate,
+  restaurantThemeOptions,
   restoreAutomaticRestaurantTheme,
   scoreRestaurantThemes,
   selectOwnerRestaurantTheme,
@@ -541,5 +543,62 @@ describe("restaurant theme renderers", () => {
     expect(html).toContain('decoding="async"');
     expect(html).toContain("https://assets.example/approved-gallery.webp");
     expect(html).not.toContain("https://assets.example/authentic-original.jpg");
+  });
+});
+
+describe("preview theme alternates", () => {
+  const recorded = parseRestaurantThemeSelection(
+    restaurantThemeFixtures["after-dark"].attributes.themeSelection,
+  )!;
+
+  it("shortlists the recorded theme ahead of the alternatives it named", () => {
+    expect(restaurantThemeOptions(recorded)).toEqual([
+      recorded.themeId,
+      ...recorded.alternatives,
+    ]);
+  });
+
+  it("refuses any theme the recorded selection never shortlisted", () => {
+    const shortlisted = new Set(restaurantThemeOptions(recorded));
+    const offShortlist = restaurantThemeIdSchema.options.filter(
+      (id) => !shortlisted.has(id),
+    );
+    expect(offShortlist.length).toBeGreaterThan(0);
+
+    for (const themeId of offShortlist) {
+      expect(previewRestaurantThemeAlternate(recorded, themeId)).toBeNull();
+    }
+  });
+
+  it("returns the recorded selection unchanged for its own theme", () => {
+    expect(previewRestaurantThemeAlternate(recorded, recorded.themeId)).toBe(
+      recorded,
+    );
+  });
+
+  it("rotates onto an alternative without rewriting how it was chosen", () => {
+    const [alternate] = recorded.alternatives;
+    const rotated = previewRestaurantThemeAlternate(recorded, alternate)!;
+
+    expect(rotated.themeId).toBe(alternate);
+    expect(new Set(restaurantThemeOptions(rotated))).toEqual(
+      new Set(restaurantThemeOptions(recorded)),
+    );
+    // Rotating is a viewing aid, not a new selection run: the provenance keeps
+    // describing the run that produced the shortlist.
+    expect(rotated.source).toBe(recorded.source);
+    expect(rotated.confidence).toBe(recorded.confidence);
+    expect(rotated.reasons).toEqual(recorded.reasons);
+  });
+
+  it("takes rotated tokens from the registry rather than the previous theme", () => {
+    for (const alternate of recorded.alternatives) {
+      const rotated = previewRestaurantThemeAlternate(recorded, alternate)!;
+
+      expect(rotated.tokens).toEqual(
+        getRestaurantThemeManifest(alternate).safeDefaultTokens,
+      );
+      expect(parseRestaurantThemeSelection(rotated)).toEqual(rotated);
+    }
   });
 });

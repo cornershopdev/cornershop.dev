@@ -251,6 +251,48 @@ export function selectOwnerRestaurantTheme(
   );
 }
 
+/**
+ * The closed shortlist a preview surface may offer: the recorded theme first,
+ * then the two alternatives the same selection run named.
+ */
+export function restaurantThemeOptions(
+  selection: RestaurantThemeSelection,
+): RestaurantThemeId[] {
+  return [selection.themeId, ...selection.alternatives];
+}
+
+/**
+ * Rotates a recorded selection onto one of the alternatives it already names.
+ *
+ * The option set is closed on purpose: a crafted query string can only reach a
+ * theme this selection already shortlisted, and tokens always come back from
+ * the registry manifest, so the switcher cannot introduce a renderer or a style
+ * value the site was never offered. Only `themeId`, `alternatives` and `tokens`
+ * move; `source`, `confidence` and `reasons` keep describing the selection run
+ * that produced the shortlist.
+ */
+export function previewRestaurantThemeAlternate(
+  selection: RestaurantThemeSelection,
+  themeId: RestaurantThemeId,
+): RestaurantThemeSelection | null {
+  const options = restaurantThemeOptions(selection);
+  if (!options.includes(themeId)) return null;
+  if (themeId === selection.themeId) return selection;
+  const [firstAlternative, secondAlternative] = options.filter(
+    (candidate) => candidate !== themeId,
+  );
+  if (!firstAlternative || !secondAlternative) return null;
+
+  return restaurantThemeSelectionSchema.parse({
+    ...selection,
+    themeId,
+    alternatives: [firstAlternative, secondAlternative],
+    tokens: mergeRestaurantThemeTokens(
+      getRestaurantThemeManifest(themeId).safeDefaultTokens,
+    ),
+  });
+}
+
 export function restoreAutomaticRestaurantTheme(
   profileInput: RestaurantDesignProfile | undefined,
 ): RestaurantThemeSelection {
