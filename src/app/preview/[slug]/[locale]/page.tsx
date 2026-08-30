@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { PreviewThemeSwitcher } from "@/components/preview-theme-switcher";
 import { SiteRenderer } from "@/components/site-renderer";
+import { FactoryAnalytics } from "@/components/factory-analytics";
 import { FACTORY_BRAND } from "@/lib/brand";
 import {
   customerHostname,
@@ -92,6 +93,14 @@ export default async function LocalizedPreviewPage({
 
   return (
     <>
+      {!isLiveSurface ? (
+        <FactoryAnalytics
+          initialEvent={{
+            name: "preview_view",
+            properties: { slug, vertical: site.vertical },
+          }}
+        />
+      ) : null}
       <SiteRenderer
         draft={localizeSiteDraft(alternates?.draft ?? site.draft, locale)}
         vertical={site.vertical}

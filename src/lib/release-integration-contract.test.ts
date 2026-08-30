@@ -87,6 +87,7 @@ describe("release integration contract", () => {
       "configuration-loaded",
       "caddy-configured",
       "migrations-applied",
+      "factory-analytics-ready",
       "outreach-configured",
       "wildcard-dns-ready",
       "platform-tls-ready",

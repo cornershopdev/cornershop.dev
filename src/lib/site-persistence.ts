@@ -277,6 +277,8 @@ export async function persistSiteImport<
   actor?: string;
   contactEmail?: string;
   leadIngest?: PersistedLeadIngest;
+  /** Trusted reviewed imports may require their private, pre-approved slug. */
+  requiredSlug?: string;
 }): Promise<PersistedSiteImport<TDraft>> {
   const db = requireImportDatabase();
   const config = resolveVerticalConfig(input.vertical);
@@ -372,6 +374,10 @@ export async function persistSiteImport<
                 throw new Error("A unique preview URL could not be reserved");
               }
             }
+          }
+
+          if (input.requiredSlug && slug !== input.requiredSlug) {
+            throw new OperatorImportConflictError();
           }
 
           if (existing && !mutableImportStatuses.has(existing.status)) {

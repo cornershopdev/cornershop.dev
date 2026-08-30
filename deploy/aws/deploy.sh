@@ -118,7 +118,10 @@ required_parameters=(
   FIRST_CUSTOMER_EVIDENCE_PUBLIC_KEY
   HEALTHCHECK_TOKEN
   NEXT_PUBLIC_APP_URL
+  NEXT_PUBLIC_POSTHOG_HOST
+  NEXT_PUBLIC_POSTHOG_KEY
   OUTREACH_LEGAL_CONTROLLER
+  OPERATOR_LEAD_INGEST_TOKEN
   OPERATOR_ALERT_EMAILS
   PLATFORM_HOSTNAMES
   PUBLIC_APP_IP
@@ -382,6 +385,31 @@ fi
 docker exec "$candidate" bun run db:migrate:status
 docker exec "$candidate" bun run operator:article-rollout --action check >/dev/null
 echo "release-state article-candidate-verified sha=${deployed_sha}"
+# Analytics configuration is runtime-bound. Prove that the exact candidate
+# emits the pixel on factory pages and the explicit preview event on previews,
+# while a customer platform hostname remains free of third-party analytics.
+docker exec "$candidate" node --input-type=module -e '
+  const get = async (host, path) => {
+    const response = await fetch(`http://127.0.0.1:3000${path}`, {
+      headers: { host },
+    });
+    if (!response.ok) throw new Error(`${host}${path} returned ${response.status}`);
+    return response.text();
+  };
+  const factory = await get("cornershop.dev", "/");
+  if (!factory.includes("id=\"factory-analytics\"")) {
+    throw new Error("Factory analytics pixel is absent");
+  }
+  const preview = await get("cornershop.dev", "/preview/le-petit-meunier");
+  if (!preview.includes("id=\"factory-analytics\"") || !preview.includes("preview_view")) {
+    throw new Error("Factory preview analytics event is absent");
+  }
+  const customer = await get("le-petit-meunier.restofront.com", "/");
+  if (customer.includes("id=\"factory-analytics\"")) {
+    throw new Error("Factory analytics leaked onto a customer storefront");
+  }
+'
+echo "release-state factory-analytics-ready sha=${deployed_sha}"
 docker exec "$candidate" \
   bun run operator:preflight-outreach --environment production
 echo "release-state outreach-configured sha=${deployed_sha}"

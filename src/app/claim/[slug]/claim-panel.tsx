@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { ClaimPanelProps } from "@/lib/claim-launch-offer";
+import { captureFactoryAnalyticsEvent } from "@/lib/factory-analytics-browser";
 
 export function ClaimPanel({
   slug,
@@ -79,6 +80,14 @@ export function ClaimPanel({
           error?: string;
         };
         if (response.ok && result.ready && result.url) {
+          captureFactoryAnalyticsEvent({
+            name: "checkout_completed",
+            properties: {
+              slug,
+              vertical,
+              ...(offer ? { plan: offer.planId } : {}),
+            },
+          });
           window.location.assign(result.url);
           return;
         }
@@ -113,7 +122,7 @@ export function ClaimPanel({
       stopped = true;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [checkoutReturn]);
+  }, [checkoutReturn, offer, slug, vertical]);
 
   async function requestInvitation() {
     if (!email) return;
@@ -166,6 +175,10 @@ export function ClaimPanel({
       if (!response.ok || !result.url) {
         throw new Error(result.error ?? "Checkout could not start");
       }
+      captureFactoryAnalyticsEvent({
+        name: "checkout_started",
+        properties: { slug, vertical, plan: offer.planId },
+      });
       window.location.assign(result.url);
     } catch (caught) {
       setError(

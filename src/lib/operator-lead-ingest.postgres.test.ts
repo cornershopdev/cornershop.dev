@@ -28,6 +28,10 @@ const fenceTriggerName = `lead_ingest_fence_trigger_${safeSuffix}`;
 const fenceTriggerFunction = `lead_ingest_fence_function_${safeSuffix}`;
 const fenceLockClassId = 1381259068;
 const fenceLockObjectId = 172;
+const reviewedSource = `https://reviewed-${suffix}.example.test`;
+const reviewedSlug = `reviewed-${suffix}`;
+const reviewedCollisionSource = `https://reviewed-collision-${suffix}.example.test`;
+const reviewedCollisionSlug = `reviewed-collision-${suffix}`;
 
 let db: ReturnType<typeof import("@/lib/db").getDb>;
 let createImportJob: typeof import("@/lib/site-persistence").createImportJob;
@@ -42,6 +46,7 @@ let ingestOperatorProspectLead: typeof import("@/lib/operator-lead-ingest").inge
 let createOrReopenOperatorLead: typeof import("@/lib/operator-leads").createOrReopenOperatorLead;
 let recordOperatorLeadAction: typeof import("@/lib/operator-leads").recordOperatorLeadAction;
 let normalizeImportSource: typeof import("@/lib/import-identity").normalizeImportSource;
+let importReviewedOperatorDraft: typeof import("@/lib/operator-reviewed-draft-import").importReviewedOperatorDraft;
 
 describe.skipIf(!enabled)("operator discovery import PostgreSQL atomicity", () => {
   beforeAll(async () => {
@@ -63,6 +68,9 @@ describe.skipIf(!enabled)("operator discovery import PostgreSQL atomicity", () =
       "@/lib/operator-leads"
     ));
     ({ normalizeImportSource } = await import("@/lib/import-identity"));
+    ({ importReviewedOperatorDraft } = await import(
+      "@/lib/operator-reviewed-draft-import"
+    ));
 
     await db.$executeRawUnsafe(`
       CREATE FUNCTION "${triggerFunction}"() RETURNS trigger AS $failure$
@@ -121,15 +129,25 @@ describe.skipIf(!enabled)("operator discovery import PostgreSQL atomicity", () =
             reopenSlug,
             redirectUpdateSlug,
             fenceSlug,
+            reviewedSlug,
+            reviewedCollisionSlug,
           ],
         },
       },
     });
     await db.importJob.deleteMany({
       where: {
-        source: {
-          in: [originalSource, failedOriginalSource],
-        },
+        OR: [
+          { source: { in: [originalSource, failedOriginalSource] } },
+          {
+            sourceKey: {
+              in: [
+                normalizeImportSource(reviewedSource),
+                normalizeImportSource(reviewedCollisionSource),
+              ],
+            },
+          },
+        ],
       },
     });
   });
@@ -481,6 +499,92 @@ describe.skipIf(!enabled)("operator discovery import PostgreSQL atomicity", () =
         where: { type: "site.lead.eligibility.updated", site: { slug: fenceSlug } },
       }),
     ).toBe(1);
+  });
+
+  test("reviewed draft reruns update one exact preview without changing its slug", async () => {
+    const draft = {
+      ...sampleSiteDraft,
+      slug: reviewedSlug,
+      name: "Reviewed private lead",
+      sourceUrl: reviewedSource,
+    };
+    const created = await importReviewedOperatorDraft({
+      vertical: "RESTAURANT",
+      draft,
+    });
+    expect(created).toMatchObject({
+      slug: reviewedSlug,
+      created: true,
+      verified: true,
+    });
+
+    const updated = await importReviewedOperatorDraft({
+      vertical: "RESTAURANT",
+      draft: { ...draft, description: "Reviewed copy updated idempotently." },
+    });
+    expect(updated).toMatchObject({
+      slug: reviewedSlug,
+      created: false,
+      verified: true,
+    });
+    expect(
+      await db.site.count({
+        where: {
+          OR: [
+            { slug: reviewedSlug },
+            { sourceKey: normalizeImportSource(reviewedSource) },
+          ],
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await db.site.findUniqueOrThrow({
+        where: { slug: reviewedSlug },
+        select: { description: true, status: true },
+      }),
+    ).toMatchObject({
+      description: "Reviewed copy updated idempotently.",
+      status: "PREVIEW_READY",
+    });
+  });
+
+  test("reviewed draft import fails closed when its exact slug belongs to another source", async () => {
+    await db.site.create({
+      data: {
+        slug: reviewedCollisionSlug,
+        name: "Unrelated existing site",
+        sourceUrl: `https://unrelated-${suffix}.example.test`,
+        sourceKey: `url:unrelated-${suffix}.example.test`,
+        vertical: "RESTAURANT",
+        status: "PREVIEW_READY",
+        attributes: {},
+      },
+    });
+
+    await expect(
+      importReviewedOperatorDraft({
+        vertical: "RESTAURANT",
+        draft: {
+          ...sampleSiteDraft,
+          slug: reviewedCollisionSlug,
+          sourceUrl: reviewedCollisionSource,
+        },
+      }),
+    ).rejects.toThrow("conflicts with an existing site");
+    expect(
+      await db.site.count({
+        where: { sourceKey: normalizeImportSource(reviewedCollisionSource) },
+      }),
+    ).toBe(0);
+    expect(
+      await db.importJob.findFirstOrThrow({
+        where: {
+          sourceKey: normalizeImportSource(reviewedCollisionSource),
+        },
+        orderBy: { createdAt: "desc" },
+        select: { status: true, siteId: true },
+      }),
+    ).toEqual({ status: "FAILED", siteId: null });
   });
 });
 
