@@ -35,4 +35,9 @@ assert_embedded_checksum \
   expected_host_launcher_sha256 \
   "${deploy_directory}/host-launcher.sh"
 
+if ! grep -Fq 'headers: { "x-forwarded-host": host },' "$deploy_script"; then
+  echo "Candidate host probe does not match the trusted forwarded-host path" >&2
+  exit 1
+fi
+
 echo "release bundle checksum tests passed"

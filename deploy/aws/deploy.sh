@@ -279,37 +279,44 @@ wait_for_article_quiescence() {
 
 article_rollout_active=0
 rollback_article_rollout() {
-  local failure_status="${1:-1}"
-  trap - ERR
-  set +e
-  local edge_gate_verified=0
-  local database_gate_verified=0
-  if [[ "$article_rollout_active" == 1 ]]; then
-    echo "Article rollout failed; retaining both mutation gates" >&2
-    if set_article_edge_gate closed && verify_article_edge_gate closed; then
-      edge_gate_verified=1
+  # Rollback deliberately tolerates cleanup failures, but `set +e` must never
+  # escape into the deployment shell. A leaked option would let the script
+  # continue after the ERR trap, print success sentinels, and leave the
+  # predecessor running under a supposedly deployed release. The subshell
+  # confines both the disabled ERR trap and relaxed error handling.
+  (
+    local failure_status="${1:-1}"
+    trap - ERR
+    set +e
+    local edge_gate_verified=0
+    local database_gate_verified=0
+    if [[ "$article_rollout_active" == 1 ]]; then
+      echo "Article rollout failed; retaining both mutation gates" >&2
+      if set_article_edge_gate closed && verify_article_edge_gate closed; then
+        edge_gate_verified=1
+      fi
+      if run_article_rollout close >/dev/null; then
+        database_gate_verified=1
+      fi
     fi
-    if run_article_rollout close >/dev/null; then
-      database_gate_verified=1
+    docker rm -f "$candidate" >/dev/null 2>&1
+    if
+      [[ "$article_rollout_active" == 1 ]] &&
+      [[ "$edge_gate_verified" != 1 || "$database_gate_verified" != 1 ]]
+    then
+      echo "Article gates could not be verified; leaving application containers stopped" >&2
+      docker stop "$container" >/dev/null 2>&1
+      docker stop "$previous" >/dev/null 2>&1
+      return "$failure_status"
     fi
-  fi
-  docker rm -f "$candidate" >/dev/null 2>&1
-  if
-    [[ "$article_rollout_active" == 1 ]] &&
-    [[ "$edge_gate_verified" != 1 || "$database_gate_verified" != 1 ]]
-  then
-    echo "Article gates could not be verified; leaving application containers stopped" >&2
-    docker stop "$container" >/dev/null 2>&1
-    docker stop "$previous" >/dev/null 2>&1
+    if docker inspect "$previous" >/dev/null 2>&1; then
+      docker rm -f "$container" >/dev/null 2>&1
+      docker rename "$previous" "$container"
+      docker start "$container" >/dev/null
+      reload_caddy
+    fi
     return "$failure_status"
-  fi
-  if docker inspect "$previous" >/dev/null 2>&1; then
-    docker rm -f "$container" >/dev/null 2>&1
-    docker rename "$previous" "$container"
-    docker start "$container" >/dev/null
-    reload_caddy
-  fi
-  return "$failure_status"
+  )
 }
 
 # Close both public article mutation routes before any schema change. The
@@ -389,11 +396,15 @@ echo "release-state article-candidate-verified sha=${deployed_sha}"
 # emits the pixel on factory pages and the explicit preview event on previews,
 # while a customer platform hostname remains free of third-party analytics.
 docker exec "$candidate" node --input-type=module -e '
-  const get = async (host, path) => {
+  const get = async (host, path, requireOk = true) => {
     const response = await fetch(`http://127.0.0.1:3000${path}`, {
-      headers: { host },
+      // The application deliberately trusts the Caddy-forwarded hostname first.
+      // Node fetch does not reliably forward a caller-supplied Host header.
+      headers: { "x-forwarded-host": host },
     });
-    if (!response.ok) throw new Error(`${host}${path} returned ${response.status}`);
+    if (requireOk && !response.ok) {
+      throw new Error(`${host}${path} returned ${response.status}`);
+    }
     return response.text();
   };
   const factory = await get("cornershop.dev", "/");
@@ -404,7 +415,10 @@ docker exec "$candidate" node --input-type=module -e '
   if (!preview.includes("id=\"factory-analytics\"") || !preview.includes("preview_view")) {
     throw new Error("Factory preview analytics event is absent");
   }
-  const customer = await get("le-petit-meunier.restofront.com", "/");
+  // The seeded customer hostname may remain unpublished (404). Its rendered
+  // response must still be free of the factory pixel; factory surfaces above
+  // remain strict 200 checks.
+  const customer = await get("le-petit-meunier.restofront.com", "/", false);
   if (customer.includes("id=\"factory-analytics\"")) {
     throw new Error("Factory analytics leaked onto a customer storefront");
   }
