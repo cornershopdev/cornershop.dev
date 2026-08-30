@@ -30,10 +30,10 @@ export const restaurantMarketing = {
     },
   },
   // send.restofront.com is the verified sending subdomain; replies land on the
-  // receiving-only reply subdomain for this vertical.
+  // niche root domain, which is the Resend receiving domain for this vertical.
   email: {
     from: "Vincent from Restofrontapp <vincent@send.restofront.com>",
-    replyTo: "vincent@reply.restofront.com",
+    replyTo: "vincent@restofront.com",
   },
   audience: "restaurants",
   tagline: "Menus, bookings and hours that stay current on their own.",

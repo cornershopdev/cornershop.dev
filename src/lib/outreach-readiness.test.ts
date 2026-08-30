@@ -139,7 +139,7 @@ describe("outreach environment readiness", () => {
     for (const target of [
       "Operator <operator@example.test>",
       "one@example.test,two@example.test",
-      "vincent+loop@reply.restofront.com",
+      "vincent+loop@restofront.com",
     ]) {
       const readiness = evaluateOutreachEnvironment({
         ...configuredEnvironment,
@@ -405,7 +405,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.restofront.com",
+            name: "restofront.com",
             status: "verified",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },
@@ -432,7 +432,7 @@ describe("Resend niche identity readiness", () => {
             capabilities: { sending: "enabled", receiving: "disabled" },
           },
           {
-            name: "reply.restofront.com",
+            name: "restofront.com",
             status: "pending",
             capabilities: { sending: "disabled", receiving: "enabled" },
           },

@@ -149,7 +149,7 @@ Restofront uses two Resend domains on the same niche:
 | Resend domain          | DNS                                               | Role                                                           |
 | ---------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
 | `send.restofront.com`  | `send.send.restofront.com` MX/TXT + DKIM          | Outbound `from`                                                |
-| `reply.restofront.com` | receiving MX + DKIM                               | Inbound `replyTo` (`vincent@reply.restofront.com`)             |
+| `restofront.com`       | root MX + `resend._domainkey` TXT; receiving only | Inbound `replyTo` (`vincent@restofront.com`)                   |
 | `send.cornershop.dev`  | `send.send.cornershop.dev` MX/TXT + DKIM          | Factory SMB outbound `from`                                    |
 | `reply.cornershop.dev` | receiving MX + DKIM                               | Factory SMB inbound `replyTo` (`vincent@reply.cornershop.dev`) |
 

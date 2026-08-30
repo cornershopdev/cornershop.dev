@@ -618,7 +618,7 @@ mock.module("@/lib/resend", () => ({
       ? "Vincent from Restofrontapp <vincent@send.restofront.com>"
       : "Cornershopdev <onboarding@resend.dev>",
   emailReplyTo: (vertical?: string | null) =>
-    vertical === "RESTAURANT" ? "vincent@reply.restofront.com" : undefined,
+    vertical === "RESTAURANT" ? "vincent@restofront.com" : undefined,
 }));
 
 const { POST: createOrReopenLead } =
@@ -862,7 +862,7 @@ describe("mocked Restofront operator delivery flow", () => {
     expect(providerSend).toHaveBeenCalledTimes(1);
     expect(providerSend.mock.calls[0]![0]).toMatchObject({
       from: "Vincent from Restofrontapp <vincent@send.restofront.com>",
-      replyTo: "vincent+chez-lea@reply.restofront.com",
+      replyTo: "vincent+chez-lea@restofront.com",
       to: "owner@chez-lea.test",
     });
     expect(providerSend.mock.calls[0]![0].html).toContain(

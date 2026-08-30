@@ -74,7 +74,7 @@ export async function verifyOutreachInboundForwardPredecessorUpgrade() {
            ) VALUES (
              'forward-upgrade-source', 'forward-upgrade-source-key',
              'forward-upgrade-site', 'INBOUND', 'received-upgrade-provider',
-             'owner@example.test', 'vincent@reply.restofront.com', 'Re: Preview',
+             'owner@example.test', 'vincent@restofront.com', 'Re: Preview',
              'Predecessor mailbox content.', 'RECEIVED', NOW(), NOW()
            )`,
     );

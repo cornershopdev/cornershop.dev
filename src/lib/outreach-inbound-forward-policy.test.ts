@@ -33,7 +33,7 @@ describe("inbound read-copy forwarding policy", () => {
       "Operator <operator@example.test>",
       "one@example.test,two@example.test",
       "operator@example.test\r\nBcc: victim@example.test",
-      "vincent+loop@reply.restofront.com",
+      "vincent+loop@restofront.com",
       "elsewhere@reply.cornershop.dev",
     ]) {
       expect(() =>
