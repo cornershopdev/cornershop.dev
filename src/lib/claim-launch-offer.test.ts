@@ -31,15 +31,15 @@ describe("claim launch offer mapping", () => {
   it("prints the founding Stripe contract as the shared display price", () => {
     expect(CLAIM_CHECKOUT_PLAN_ID).toBe(FOUNDING_PLAN_ID);
     expect(FOUNDING_PRICE).toMatchObject({
-      currency: "usd",
+      currency: "eur",
       unitAmount: 4_900,
       interval: "month",
       intervalCount: 1,
     });
     expect(foundingOfferDisplay()).toEqual({
-      price: "$49",
+      price: "€49",
       cadence: "/month",
-      currency: "usd",
+      currency: "eur",
     });
   });
 

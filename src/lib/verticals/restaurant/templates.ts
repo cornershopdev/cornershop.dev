@@ -1,3 +1,4 @@
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { RestaurantAttributes } from "@/lib/verticals/restaurant/schema";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
@@ -23,7 +24,7 @@ export type RestaurantTemplate = {
   titleClassName: string;
   sectionClassName: string;
   showMenuImagesByDefault: boolean;
-  copy: Record<"en" | "fr", VerticalTemplateCopy>;
+  copy: Record<SiteUiLocale, VerticalTemplateCopy>;
 };
 
 export const restaurantTemplates: Record<
@@ -52,6 +53,12 @@ export const restaurantTemplates: Record<
         featuredHeading: "Quelques assiettes",
         featuredSubheading: "Des plats fidèles à la saison.",
       },
+      mt: {
+        catalogEyebrow: "Il-menu",
+        catalogHeading: "Tisjir iggwidat mill-istaġun.",
+        featuredHeading: "Ftit platti",
+        featuredSubheading: "Platti fidili lejn l-istaġun.",
+      },
     },
   },
   fresh: {
@@ -76,6 +83,12 @@ export const restaurantTemplates: Record<
         catalogHeading: "Une cuisine fraîche, servie simplement.",
         featuredHeading: "À table aujourd’hui",
         featuredSubheading: "Des produits frais, sans artifice.",
+      },
+      mt: {
+        catalogEyebrow: "Frisk illum",
+        catalogHeading: "Ikel ħafif, servut b’mod ċar.",
+        featuredHeading: "X’qed inservu",
+        featuredSubheading: "Ikel frisk, muri onestament.",
       },
     },
   },
@@ -102,6 +115,12 @@ export const restaurantTemplates: Record<
         featuredHeading: "En cuisine",
         featuredSubheading: "Les plats parlent d’eux-mêmes.",
       },
+      mt: {
+        catalogEyebrow: "Is-selezzjoni",
+        catalogHeading: "Togħma qawwija. Bla tidwir.",
+        featuredHeading: "Ara x’hemm fil-kċina",
+        featuredSubheading: "L-ikel jitkellem waħdu.",
+      },
     },
   },
   nocturne: {
@@ -125,6 +144,12 @@ export const restaurantTemplates: Record<
         catalogHeading: "Précision, texture et équilibre.",
         featuredHeading: "Depuis la cuisine",
         featuredSubheading: "Un même langage, assiette après assiette.",
+      },
+      mt: {
+        catalogEyebrow: "Menu",
+        catalogHeading: "Preċiżjoni, tessitura u bilanċ.",
+        featuredHeading: "Mill-kċina",
+        featuredSubheading: "Lingwaġġ viżiv wieħed, platt wara platt.",
       },
     },
   },
@@ -150,6 +175,12 @@ export const restaurantTemplates: Record<
         featuredHeading: "De la mer à la table",
         featuredSubheading: "Des saveurs nettes et franches.",
       },
+      mt: {
+        catalogEyebrow: "Mill-kosta",
+        catalogHeading: "Il-qabda, imħejjija b’sempliċità.",
+        featuredHeading: "Mill-baħar għall-mejda",
+        featuredSubheading: "Togħmiet nodfa, fid-dieher.",
+      },
     },
   },
   warm: {
@@ -173,6 +204,12 @@ export const restaurantTemplates: Record<
         catalogHeading: "Fait maison. Servi au bon moment.",
         featuredHeading: "À table",
         featuredSubheading: "Les plats, tels qu’ils arrivent.",
+      },
+      mt: {
+        catalogEyebrow: "Il-menu",
+        catalogHeading: "Magħmul hawn. Servut meta jkun lest.",
+        featuredHeading: "Ħarsa lejn il-mejda",
+        featuredSubheading: "Il-platti, kif jaslu.",
       },
     },
   },

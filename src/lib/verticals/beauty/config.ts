@@ -27,6 +27,7 @@ import {
   type BeautyTemplate,
 } from "@/lib/verticals/beauty/templates";
 import { beautyOwnerOperations } from "@/lib/owner-operations";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalConfig } from "@/lib/verticals/types";
 
 export const beautyDictionaryExtensions = {
@@ -52,7 +53,18 @@ export const beautyDictionaryExtensions = {
     bookingRequestIntro:
       "Dites-nous ce que vous souhaitez et quand, nous confirmerons par e-mail ou par téléphone.",
   },
-} satisfies Record<string, Record<string, string>>;
+  mt: {
+    language: "Lingwa",
+    reservationsVia: "Ibbukkja permezz ta’",
+    bookingPartner: "is-sieħeb tagħna tal-ibbukkjar",
+    seasonalNotice: "Is-servizzi u d-disponibbiltà jistgħu jinbidlu.",
+    heroImageAlt: "L-intern ta’",
+    bookingHeading: "Appuntamenti",
+    bookingRequestHeading: "Itlob appuntament",
+    bookingRequestIntro:
+      "Għidilna x’tixtieq u meta, u aħna nikkonfermaw bl-email jew bit-telefon.",
+  },
+} satisfies Record<SiteUiLocale, Record<string, string>>;
 
 const serviceStyleLabels: Record<ServiceStyle, string> = {
   barbershop: "Barbershop",
