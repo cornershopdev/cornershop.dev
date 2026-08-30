@@ -57,8 +57,8 @@ node_version="$(docker exec "$container" node --version)"
 bun_version="$(docker exec "$container" bun --version)"
 node_executable="$(docker exec "$container" sh -c 'readlink /proc/1/exe')"
 expected_node_executable="$(docker exec "$container" sh -c 'command -v node')"
-if [[ "$node_version" != "v24.19.0" ]]; then
-  printf 'Expected Node v24.19.0, got %q\n' "$node_version" >&2
+if [[ "$node_version" != "v24.20.0" ]]; then
+  printf 'Expected Node v24.20.0, got %q\n' "$node_version" >&2
   exit 1
 fi
 if [[ "$bun_version" != "1.4.0" ]]; then

@@ -21,6 +21,9 @@ describe("production container runtime", () => {
     expect(dockerfile).toContain(
       "FROM node:24.20.0-alpine3.24 AS node-toolchain",
     );
+    expect(runtimeContract).toContain(
+      'if [[ "$node_version" != "v24.20.0" ]]',
+    );
     expect(dockerfile).toContain("FROM node-toolchain AS dependencies");
     expect(dockerfile).toContain("FROM node-toolchain AS runner");
     const patchCopy = dockerfile.indexOf("COPY patches ./patches");
