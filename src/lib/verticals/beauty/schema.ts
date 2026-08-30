@@ -9,6 +9,10 @@ import {
   translatedCatalogItemSchema,
   translatedCatalogSectionSchema,
 } from "@/lib/verticals/schema";
+import {
+  safeOptionalBeautyDesignProfileSchema,
+  safeOptionalBeautyThemeSelectionSchema,
+} from "@/lib/site-themes/beauty/contracts";
 
 export const beautyIntegrationSchema = integrationSchema.extend({
   type: z.enum(["booking", "social"]),
@@ -31,6 +35,15 @@ export const serviceStyleSchema = z.enum([
 export const beautyAttributesSchema = z.object({
   serviceStyle: serviceStyleSchema.default("modern-studio"),
   showServiceImages: z.boolean().default(false),
+  /**
+   * `serviceStyle` still picks the template. The design profile and theme
+   * selection are the newer, richer layer: the profile records what kind of
+   * salon this is, and the selection records which registered renderer that
+   * profile scored onto. Both stay safe-optional so a draft written before the
+   * theme layer existed keeps parsing.
+   */
+  designProfile: safeOptionalBeautyDesignProfileSchema,
+  themeSelection: safeOptionalBeautyThemeSelectionSchema,
 });
 
 export const beautyItemAttributesSchema = z.object({

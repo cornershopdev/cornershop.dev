@@ -67,6 +67,12 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Drop in while the light is good.",
     familyMenuEyebrow: "The full menu",
     familyMenuHeading: "Something for everyone.",
+    vesperArrivalEyebrow: "The room",
+    vesperMenuEyebrow: "Tonight, briefly",
+    vesperMenuHeading: "A short menu, read slowly.",
+    vesperMenuIntro:
+      "Four or five things at a time, written out plainly so the room stays the loudest part of the evening.",
+    vesperClosing: "Stay as long as the light does.",
   },
   fr: {
     language: "Langue",
@@ -102,6 +108,12 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Passez pendant qu’il fait jour.",
     familyMenuEyebrow: "Toute la carte",
     familyMenuHeading: "De quoi contenter tout le monde.",
+    vesperArrivalEyebrow: "La salle",
+    vesperMenuEyebrow: "Ce soir, brièvement",
+    vesperMenuHeading: "Une carte courte, lue lentement.",
+    vesperMenuIntro:
+      "Quatre ou cinq plats à la fois, écrits simplement pour que la salle reste le plus fort de la soirée.",
+    vesperClosing: "Restez aussi longtemps que la lumière.",
   },
   mt: {
     language: "Lingwa",
@@ -136,6 +148,12 @@ export const restaurantDictionaryExtensions = {
     daylightVisitHeading: "Għaddi minn hawn sakemm id-dawl ikun tajjeb.",
     familyMenuEyebrow: "Il-menu sħiħ",
     familyMenuHeading: "Xi ħaġa għal kulħadd.",
+    vesperArrivalEyebrow: "Is-sala",
+    vesperMenuEyebrow: "Illejla, fil-qosor",
+    vesperMenuHeading: "Menu qasir, moqri bil-mod.",
+    vesperMenuIntro:
+      "Erba’ jew ħames platti kull darba, miktuba sempliċi biex is-sala tibqa’ l-iktar parti qawwija tal-lejl.",
+    vesperClosing: "Ibqa’ sakemm jibqa’ d-dawl.",
   },
 } satisfies Record<SiteUiLocale, Record<string, string>>;
 

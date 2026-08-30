@@ -183,7 +183,7 @@ const manifests = {
         background: "#fff7df",
         foreground: "#172118",
         surface: "#ffffff",
-        accent: "#d94028",
+        accent: "#d13a22",
         accentForeground: "#ffffff",
       },
       style: {
@@ -382,7 +382,7 @@ const manifests = {
         foreground: "#3a3228",
         surface: "#ffffff",
         accent: "#c4783a",
-        accentForeground: "#ffffff",
+        accentForeground: "#111111",
       },
       style: {
         fontPair: "grotesk",
@@ -459,6 +459,72 @@ const manifests = {
     }),
     aiBrief:
       "Choose for family restaurants and multi-location groups that need a scannable full menu and simple booking or order handoff.",
+  },
+  "vesper-room": {
+    id: "vesper-room",
+    rendererVersion: RESTAURANT_THEME_RENDERER_VERSION,
+    name: "Vesper Room",
+    description:
+      "A slow, atmospheric room for visit-led dining where the photography and the light carry the menu.",
+    featuredRank: null,
+    marketReferences: [
+      "ThemeForest Osteria — long-scroll editorial menu with a single quiet action",
+      "ThemeForest Piquant — low-light hospitality palette and unhurried section rhythm",
+    ],
+    previewFixtureId: "hollow-lantern",
+    experience: {
+      primaryIntent: "visit",
+      menuExperience: "editorial",
+    },
+    fitSignals: {
+      serviceModels: ["fine-dining", "bar-nightlife"],
+      primaryIntents: ["visit"],
+      menuExperiences: ["editorial"],
+      brandTraits: ["atmospheric", "minimal"],
+      pricePositions: ["premium"],
+      photographyQualities: ["strong"],
+      multipleLocations: false,
+    },
+    avoidanceSignals: {
+      serviceModels: ["takeaway", "fast-casual", "cafe-bakery"],
+      primaryIntents: ["order"],
+      menuExperiences: ["commerce"],
+      photographyQualities: ["none", "limited"],
+    },
+    bestFor: [
+      "Rooms people come to for the atmosphere first",
+      "Short, written menus that read like prose",
+      "Venues with genuinely strong low-light photography",
+    ],
+    avoidWhen: [
+      "Reservations or orders are the only thing that matters",
+      "The menu is long enough to need categories or search",
+      "There is no usable photography of the room",
+    ],
+    capabilities: {
+      categoryNavigation: false,
+      menuSearch: false,
+      stickyOrderAction: false,
+      reservationEmphasis: false,
+      eventsEmphasis: true,
+    },
+    safeDefaultTokens: restaurantThemeTokensSchema.parse({
+      colors: {
+        background: "#14101a",
+        foreground: "#f2ece2",
+        surface: "#221b2b",
+        accent: "#c9a86a",
+        accentForeground: "#171019",
+      },
+      style: {
+        fontPair: "editorial",
+        density: "airy",
+        radius: "none",
+        imageTreatment: "cinematic",
+      },
+    }),
+    aiBrief:
+      "Choose for atmosphere-led rooms and late dining where a visitor should feel the space before reading the menu, and where photography is strong enough to carry a slow scroll.",
   },
 } satisfies Record<RestaurantThemeId, RestaurantThemeManifest>;
 

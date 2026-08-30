@@ -17,12 +17,18 @@ import {
 import {
   normalizeGeneratedRestaurantThemeSelection,
   parseRestaurantThemeSelection,
+  previewRestaurantThemeAlternate,
+  restaurantThemeOptions,
   restoreAutomaticRestaurantTheme,
   scoreRestaurantThemes,
   selectOwnerRestaurantTheme,
   selectRestaurantTheme,
 } from "@/lib/site-themes/restaurant/selection";
-import { colorContrast } from "@/lib/site-themes/restaurant/tokens";
+import {
+  colorContrast,
+  mergeRestaurantThemeTokens,
+  MIN_TEXT_CONTRAST,
+} from "@/lib/site-themes/restaurant/tokens";
 import {
   fromRestaurantDraft,
   localizeRestaurantDraft,
@@ -32,7 +38,7 @@ import {
 } from "@/lib/restaurant";
 
 describe("restaurant theme registry", () => {
-  it("publishes six complete themes with three featured ranks for the homepage", () => {
+  it("publishes seven complete themes with three featured ranks for the homepage", () => {
     const manifests = listRestaurantThemeManifests();
     expect(manifests.map(({ id }) => id)).toEqual([
       "terroir-editorial",
@@ -41,6 +47,7 @@ describe("restaurant theme registry", () => {
       "neighborhood-table",
       "daylight-cafe",
       "family-feast",
+      "vesper-room",
     ]);
     expect(new Set(manifests.map(({ id }) => id)).size).toBe(manifests.length);
 
@@ -274,6 +281,45 @@ describe("bounded restaurant theme selection", () => {
   });
 });
 
+describe("restaurant theme colour accessibility", () => {
+  const pairs = [
+    { label: "body text", left: "background", right: "foreground" },
+    { label: "surface text", left: "surface", right: "foreground" },
+    { label: "action labels", left: "accent", right: "accentForeground" },
+  ] as const;
+
+  for (const manifest of listRestaurantThemeManifests()) {
+    for (const pair of pairs) {
+      it(`${manifest.id} clears AA on ${pair.label} as published`, () => {
+        const { colors } = manifest.safeDefaultTokens;
+        expect(
+          colorContrast(colors[pair.left], colors[pair.right]),
+        ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+      });
+
+      it(`${manifest.id} still clears AA on ${pair.label} after merging`, () => {
+        const { colors } = mergeRestaurantThemeTokens(
+          manifest.safeDefaultTokens,
+        );
+        expect(
+          colorContrast(colors[pair.left], colors[pair.right]),
+        ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+      });
+    }
+  }
+
+  it("repairs a mid-tone accent that neither black nor white can label", () => {
+    const merged = mergeRestaurantThemeTokens(
+      getRestaurantThemeManifest("counter-service").safeDefaultTokens,
+      { colors: { accent: "#8a7fd4", accentForeground: "#ffffff" } },
+    );
+
+    expect(
+      colorContrast(merged.colors.accent, merged.colors.accentForeground),
+    ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+});
+
 describe("restaurant theme compatibility", () => {
   it("keeps missing and malformed structured selections on the legacy path", () => {
     expect(parseRestaurantThemeSelection(undefined)).toBeNull();
@@ -386,6 +432,7 @@ describe("restaurant theme renderers", () => {
       "neighborhood-table": "Ce qu’il y a sur la table.",
       "daylight-cafe": "Cuit aujourd’hui. Prêt maintenant.",
       "family-feast": "De quoi contenter tout le monde.",
+      "vesper-room": "Une carte courte, lue lentement.",
     } as const;
 
     for (const manifest of listRestaurantThemeManifests()) {
@@ -496,5 +543,62 @@ describe("restaurant theme renderers", () => {
     expect(html).toContain('decoding="async"');
     expect(html).toContain("https://assets.example/approved-gallery.webp");
     expect(html).not.toContain("https://assets.example/authentic-original.jpg");
+  });
+});
+
+describe("preview theme alternates", () => {
+  const recorded = parseRestaurantThemeSelection(
+    restaurantThemeFixtures["after-dark"].attributes.themeSelection,
+  )!;
+
+  it("shortlists the recorded theme ahead of the alternatives it named", () => {
+    expect(restaurantThemeOptions(recorded)).toEqual([
+      recorded.themeId,
+      ...recorded.alternatives,
+    ]);
+  });
+
+  it("refuses any theme the recorded selection never shortlisted", () => {
+    const shortlisted = new Set(restaurantThemeOptions(recorded));
+    const offShortlist = restaurantThemeIdSchema.options.filter(
+      (id) => !shortlisted.has(id),
+    );
+    expect(offShortlist.length).toBeGreaterThan(0);
+
+    for (const themeId of offShortlist) {
+      expect(previewRestaurantThemeAlternate(recorded, themeId)).toBeNull();
+    }
+  });
+
+  it("returns the recorded selection unchanged for its own theme", () => {
+    expect(previewRestaurantThemeAlternate(recorded, recorded.themeId)).toBe(
+      recorded,
+    );
+  });
+
+  it("rotates onto an alternative without rewriting how it was chosen", () => {
+    const [alternate] = recorded.alternatives;
+    const rotated = previewRestaurantThemeAlternate(recorded, alternate)!;
+
+    expect(rotated.themeId).toBe(alternate);
+    expect(new Set(restaurantThemeOptions(rotated))).toEqual(
+      new Set(restaurantThemeOptions(recorded)),
+    );
+    // Rotating is a viewing aid, not a new selection run: the provenance keeps
+    // describing the run that produced the shortlist.
+    expect(rotated.source).toBe(recorded.source);
+    expect(rotated.confidence).toBe(recorded.confidence);
+    expect(rotated.reasons).toEqual(recorded.reasons);
+  });
+
+  it("takes rotated tokens from the registry rather than the previous theme", () => {
+    for (const alternate of recorded.alternatives) {
+      const rotated = previewRestaurantThemeAlternate(recorded, alternate)!;
+
+      expect(rotated.tokens).toEqual(
+        getRestaurantThemeManifest(alternate).safeDefaultTokens,
+      );
+      expect(parseRestaurantThemeSelection(rotated)).toEqual(rotated);
+    }
   });
 });

@@ -13,6 +13,12 @@ import {
   beautyProviders,
   beautyRelevantPathPattern,
 } from "@/lib/verticals/beauty/providers";
+import { getBeautyThemeManifest } from "@/lib/site-themes/beauty/registry";
+import {
+  DEFAULT_BEAUTY_DESIGN_PROFILE,
+  normalizeGeneratedBeautyThemeSelection,
+  selectDeterministicBeautyTheme,
+} from "@/lib/site-themes/beauty/selection";
 import { beautyMarketing } from "@/lib/verticals/beauty/marketing";
 import { beautyPrompt } from "@/lib/verticals/beauty/prompt";
 import {
@@ -101,6 +107,14 @@ export const beautyConfig = {
     serviceStyle: "modern-studio",
     showServiceImages: false,
   },
+  deterministicAttributes: {
+    serviceStyle: "modern-studio",
+    showServiceImages: false,
+    designProfile: DEFAULT_BEAUTY_DESIGN_PROFILE,
+    themeSelection: selectDeterministicBeautyTheme(
+      DEFAULT_BEAUTY_DESIGN_PROFILE,
+    ),
+  },
   itemAttributesSchema: beautyItemAttributesSchema,
   itemAttributeDefaults: {
     durationMinutes: null,
@@ -149,10 +163,26 @@ export const beautyConfig = {
     definitions: beautyTemplates,
     resolve: resolveBeautyTemplateFromAttributes,
   },
-  normalizeGeneratedAttributes: (attributes, template) => ({
-    ...attributes,
-    showServiceImages: template.showServiceImagesByDefault,
-  }),
+  /**
+   * The theme ids are the template keys, so a model that classified the salon
+   * into a theme has implicitly chosen its template too. `serviceStyle` is
+   * realigned onto the scored theme rather than left to disagree with it.
+   */
+  normalizeGeneratedAttributes: (attributes, template) => {
+    const theme = normalizeGeneratedBeautyThemeSelection(
+      attributes.designProfile,
+      attributes.themeSelection,
+    );
+    return {
+      ...attributes,
+      ...theme,
+      serviceStyle: theme.themeSelection.themeId,
+      showServiceImages:
+        template.showServiceImagesByDefault ||
+        getBeautyThemeManifest(theme.themeSelection.themeId).capabilities
+          .galleryEmphasis,
+    };
+  },
   providers: beautyProviders,
   crawl: {
     relevantPathPattern: beautyRelevantPathPattern,

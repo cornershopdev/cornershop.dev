@@ -1,0 +1,201 @@
+/*
+ * Motion primitives shared by every vertical theme renderer.
+ *
+ * These are plain global utilities rather than a CSS module on purpose. Theme
+ * renderers apply motion to elements they do not own (headings produced by the
+ * shared section helpers, owner-supplied images), so the class names have to be
+ * stable strings that any renderer can compose, and they have to survive
+ * `renderToStaticMarkup` in tests. Bun resolves `*.module.css` imports to a file
+ * path rather than a class map, so a module would render `undefined` under test.
+ *
+ * Everything here is zero-JavaScript. Scroll reveal uses the native
+ * `animation-timeline: view()` scroll-driven timeline, guarded by `@supports`,
+ * so a browser without it simply shows the content: customer sites never depend
+ * on hydration to become readable.
+ *
+ * Every primitive is tuned by custom properties instead of new class variants:
+ *   --motion-duration   animation length
+ *   --motion-delay      start offset (staggering)
+ *   --motion-distance   travel for rise/reveal
+ *   --motion-scale-from starting scale for scale-in
+ *   --motion-ease       timing function
+ *
+ * The `prefers-reduced-motion: reduce` block at the bottom is a hard contract:
+ * `motion.test.tsx` fails if any registered preset is missing from it.
+ */
+
+@layer utilities {
+  .motion-fade-in {
+    animation: motion-fade-in var(--motion-duration, 520ms)
+      var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1))
+      var(--motion-delay, 0ms) both;
+  }
+
+  .motion-rise-in {
+    animation: motion-rise-in var(--motion-duration, 620ms)
+      var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1))
+      var(--motion-delay, 0ms) both;
+  }
+
+  .motion-scale-in {
+    animation: motion-scale-in var(--motion-duration, 560ms)
+      var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1))
+      var(--motion-delay, 0ms) both;
+  }
+
+  /*
+   * Scroll reveal. Outside `@supports` the element is untouched and fully
+   * visible, which is the correct degraded state for a marketing page.
+   */
+  .motion-reveal {
+    opacity: 1;
+  }
+
+  @supports (animation-timeline: view()) {
+    .motion-reveal {
+      animation: motion-rise-in var(--motion-duration, 700ms)
+        var(--motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 32%;
+    }
+  }
+
+  /* Slow drift on hero imagery. Wrap in an `overflow: hidden` parent. */
+  .motion-ken-burns {
+    animation: motion-ken-burns var(--motion-duration, 24s) ease-in-out
+      var(--motion-delay, 0ms) infinite alternate both;
+    transform-origin: var(--motion-origin, 50% 50%);
+    will-change: transform;
+  }
+
+  /* Editorial hairline sweep, used for loading and "generating" surfaces. */
+  .motion-sheen {
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--motion-sheen-color, rgb(255 255 255 / 0.32)) 46%,
+      transparent 72%
+    );
+    background-repeat: no-repeat;
+    background-size: 220% 100%;
+    animation: motion-sheen var(--motion-duration, 2.4s) linear
+      var(--motion-delay, 0ms) infinite both;
+  }
+
+  /*
+   * Stagger container. Children inherit an index-derived delay so a section can
+   * cascade without every renderer hand-writing inline delays. Twelve steps
+   * covers the largest grid any current theme renders; later children simply
+   * share the final delay instead of falling out of the cascade.
+   */
+  .motion-stagger > * {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 11);
+  }
+
+  .motion-stagger > *:nth-child(1) {
+    --motion-delay: 0ms;
+  }
+  .motion-stagger > *:nth-child(2) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 1);
+  }
+  .motion-stagger > *:nth-child(3) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 2);
+  }
+  .motion-stagger > *:nth-child(4) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 3);
+  }
+  .motion-stagger > *:nth-child(5) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 4);
+  }
+  .motion-stagger > *:nth-child(6) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 5);
+  }
+  .motion-stagger > *:nth-child(7) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 6);
+  }
+  .motion-stagger > *:nth-child(8) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 7);
+  }
+  .motion-stagger > *:nth-child(9) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 8);
+  }
+  .motion-stagger > *:nth-child(10) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 9);
+  }
+  .motion-stagger > *:nth-child(11) {
+    --motion-delay: calc(var(--motion-stagger-step, 90ms) * 10);
+  }
+
+  @keyframes motion-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes motion-rise-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance, 18px), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes motion-scale-in {
+    from {
+      opacity: 0;
+      transform: scale(var(--motion-scale-from, 0.96));
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes motion-ken-burns {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(var(--motion-scale-to, 1.08));
+    }
+  }
+
+  @keyframes motion-sheen {
+    from {
+      background-position: 180% 0;
+    }
+    to {
+      background-position: -80% 0;
+    }
+  }
+
+  /*
+   * Reduced-motion contract. Every registered preset resolves to its finished
+   * visual state with no animation. This block must stay last so it wins on
+   * source order against the `@supports` reveal rule above.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .motion-fade-in,
+    .motion-rise-in,
+    .motion-scale-in,
+    .motion-reveal,
+    .motion-ken-burns,
+    .motion-sheen {
+      animation: none;
+      opacity: 1;
+      transform: none;
+      background-image: none;
+      will-change: auto;
+    }
+
+    .motion-stagger > * {
+      --motion-delay: 0ms;
+    }
+  }
+}

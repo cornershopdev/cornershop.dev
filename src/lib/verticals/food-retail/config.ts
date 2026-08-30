@@ -13,6 +13,12 @@ import {
   foodRetailProviders,
   foodRetailRelevantPathPattern,
 } from "@/lib/verticals/food-retail/providers";
+import { getFoodRetailThemeManifest } from "@/lib/site-themes/food-retail/registry";
+import {
+  DEFAULT_FOOD_RETAIL_DESIGN_PROFILE,
+  normalizeGeneratedFoodRetailThemeSelection,
+  selectDeterministicFoodRetailTheme,
+} from "@/lib/site-themes/food-retail/selection";
 import { foodRetailMarketing } from "@/lib/verticals/food-retail/marketing";
 import { foodRetailPrompt } from "@/lib/verticals/food-retail/prompt";
 import {
@@ -133,9 +139,18 @@ export function bindGeneratedFoodRetailDraftToEvidence({
     heroImageProvenance: deterministic.heroImageProvenance,
     sourceData: deterministic.sourceData,
     defaultLocale: deterministic.defaultLocale,
+    /**
+     * Presentation, not evidence. `showProductImages` and the theme layer are
+     * the only generated attributes re-admitted here: they decide how the
+     * reconstructed facts are rendered, never what those facts are. Dropping
+     * the theme selection would silently discard every scored theme and render
+     * each food shop on the deterministic default.
+     */
     attributes: {
       ...deterministic.attributes,
       showProductImages: generated.attributes.showProductImages,
+      designProfile: generated.attributes.designProfile,
+      themeSelection: generated.attributes.themeSelection,
     },
     businessHours: deterministic.businessHours,
     catalogSections: deterministic.catalogSections,
@@ -190,6 +205,10 @@ export const foodRetailConfig = {
     shopType: "local-food-shop",
     showProductImages: false,
     pickupDetails: "",
+    designProfile: DEFAULT_FOOD_RETAIL_DESIGN_PROFILE,
+    themeSelection: selectDeterministicFoodRetailTheme(
+      DEFAULT_FOOD_RETAIL_DESIGN_PROFILE,
+    ),
   },
   deterministicCopy: {
     en: {
@@ -279,10 +298,26 @@ export const foodRetailConfig = {
     definitions: foodRetailTemplates,
     resolve: resolveFoodRetailTemplateFromAttributes,
   },
-  normalizeGeneratedAttributes: (attributes, template) => ({
-    ...attributes,
-    showProductImages: template.showProductImagesByDefault,
-  }),
+  /**
+   * `shopType` is evidence and is left alone — a butcher stays a butcher even if
+   * the scorer picks a market-shelves rhythm for it. Only presentation is
+   * realigned: a theme whose whole point is product photography turns images on
+   * even when the legacy shop-type template would have left them off.
+   */
+  normalizeGeneratedAttributes: (attributes, template) => {
+    const theme = normalizeGeneratedFoodRetailThemeSelection(
+      attributes.designProfile,
+      attributes.themeSelection,
+    );
+    return {
+      ...attributes,
+      ...theme,
+      showProductImages:
+        template.showProductImagesByDefault ||
+        getFoodRetailThemeManifest(theme.themeSelection.themeId).capabilities
+          .imageEmphasis,
+    };
+  },
   normalizeGeneratedItem: (item) => ({
     ...item,
     available: null,

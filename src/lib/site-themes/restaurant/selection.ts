@@ -16,6 +16,13 @@ import {
   type RestaurantThemeManifest,
 } from "@/lib/site-themes/restaurant/registry";
 import { mergeRestaurantThemeTokens } from "@/lib/site-themes/restaurant/tokens";
+import {
+  includesValue,
+  rankThemes,
+  resolveDeterministicRanking,
+  type ScoredTheme as ScoredThemeEntry,
+  type ThemeScoreRule,
+} from "@/lib/site-themes/shared/scoring";
 
 export const DEFAULT_RESTAURANT_DESIGN_PROFILE =
   restaurantDesignProfileSchema.parse({
@@ -28,77 +35,117 @@ export const DEFAULT_RESTAURANT_DESIGN_PROFILE =
     photographyQuality: "limited",
   });
 
-type ScoredTheme = {
-  manifest: RestaurantThemeManifest;
-  score: number;
-  reasons: string[];
-};
+type ScoredTheme = ScoredThemeEntry<RestaurantThemeManifest>;
 
-function includes<T>(values: readonly T[], value: T): boolean {
-  return values.includes(value);
-}
-
-function scoreTheme(
+function matchingBrandTraits(
   manifest: RestaurantThemeManifest,
   profile: RestaurantDesignProfile,
-): ScoredTheme {
-  let score = 0;
-  const reasons: string[] = [];
-  const fit = manifest.fitSignals;
-  const avoid = manifest.avoidanceSignals;
-
-  if (includes(fit.serviceModels, profile.serviceModel)) {
-    score += 6;
-    reasons.push(`Fits the ${profile.serviceModel.replaceAll("-", " ")} model`);
-  }
-  if (includes(fit.primaryIntents, profile.primaryIntent)) {
-    score += 5;
-    reasons.push(`Keeps ${profile.primaryIntent} as the primary action`);
-  }
-  if (includes(fit.menuExperiences, profile.menuExperience)) {
-    score += 5;
-    reasons.push(`Supports a ${profile.menuExperience} menu experience`);
-  }
-  const matchingTraits = profile.brandTraits.filter((trait) =>
-    includes(fit.brandTraits, trait),
+): RestaurantDesignProfile["brandTraits"] {
+  return profile.brandTraits.filter((trait) =>
+    includesValue(manifest.fitSignals.brandTraits, trait),
   );
-  score += matchingTraits.length * 2;
-  if (matchingTraits[0]) {
-    reasons.push(`Matches the ${matchingTraits.join(" and ")} brand character`);
-  }
-  if (includes(fit.pricePositions, profile.pricePosition)) score += 2;
-  if (includes(fit.photographyQualities, profile.photographyQuality)) {
-    score += 2;
-  }
-  if (profile.locationCount > 1 && fit.multipleLocations) score += 1;
-
-  if (includes(avoid.serviceModels, profile.serviceModel)) score -= 7;
-  if (includes(avoid.primaryIntents, profile.primaryIntent)) score -= 6;
-  if (includes(avoid.menuExperiences, profile.menuExperience)) score -= 6;
-  if (
-    includes(avoid.photographyQualities, profile.photographyQuality)
-  ) {
-    score -= 3;
-  }
-
-  return {
-    manifest,
-    score,
-    reasons: reasons.slice(0, 4),
-  };
 }
+
+/**
+ * The restaurant weight table. Rule order is load-bearing: reasons are
+ * collected in rule order and capped, so the strongest signals are the ones a
+ * customer sees on the preview.
+ */
+const RESTAURANT_THEME_SCORE_RULES: readonly ThemeScoreRule<
+  RestaurantThemeManifest,
+  RestaurantDesignProfile
+>[] = [
+  {
+    weight: 6,
+    count: (manifest, profile) =>
+      includesValue(manifest.fitSignals.serviceModels, profile.serviceModel),
+    reason: (_manifest, profile) =>
+      `Fits the ${profile.serviceModel.replaceAll("-", " ")} model`,
+  },
+  {
+    weight: 5,
+    count: (manifest, profile) =>
+      includesValue(manifest.fitSignals.primaryIntents, profile.primaryIntent),
+    reason: (_manifest, profile) =>
+      `Keeps ${profile.primaryIntent} as the primary action`,
+  },
+  {
+    weight: 5,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.fitSignals.menuExperiences,
+        profile.menuExperience,
+      ),
+    reason: (_manifest, profile) =>
+      `Supports a ${profile.menuExperience} menu experience`,
+  },
+  {
+    weight: 2,
+    count: (manifest, profile) => matchingBrandTraits(manifest, profile).length,
+    reason: (manifest, profile) =>
+      `Matches the ${matchingBrandTraits(manifest, profile).join(" and ")} brand character`,
+  },
+  {
+    weight: 2,
+    count: (manifest, profile) =>
+      includesValue(manifest.fitSignals.pricePositions, profile.pricePosition),
+  },
+  {
+    weight: 2,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.fitSignals.photographyQualities,
+        profile.photographyQuality,
+      ),
+  },
+  {
+    weight: 1,
+    count: (manifest, profile) =>
+      profile.locationCount > 1 && manifest.fitSignals.multipleLocations,
+  },
+  {
+    weight: -7,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.avoidanceSignals.serviceModels,
+        profile.serviceModel,
+      ),
+  },
+  {
+    weight: -6,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.avoidanceSignals.primaryIntents,
+        profile.primaryIntent,
+      ),
+  },
+  {
+    weight: -6,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.avoidanceSignals.menuExperiences,
+        profile.menuExperience,
+      ),
+  },
+  {
+    weight: -3,
+    count: (manifest, profile) =>
+      includesValue(
+        manifest.avoidanceSignals.photographyQualities,
+        profile.photographyQuality,
+      ),
+  },
+];
 
 export function scoreRestaurantThemes(
   input: RestaurantDesignProfile,
 ): ScoredTheme[] {
   const profile = restaurantDesignProfileSchema.parse(input);
-  return listRestaurantThemeManifests()
-    .map((manifest) => scoreTheme(manifest, profile))
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        left.manifest.id.localeCompare(right.manifest.id),
-    );
+  return rankThemes(
+    listRestaurantThemeManifests(),
+    profile,
+    RESTAURANT_THEME_SCORE_RULES,
+  );
 }
 
 function resolvedSelection(
@@ -124,19 +171,18 @@ function resolvedSelection(
 export function selectDeterministicRestaurantTheme(
   input: RestaurantDesignProfile,
 ): RestaurantThemeSelection {
-  const scored = scoreRestaurantThemes(input);
-  const [winner, firstAlternative, secondAlternative] = scored;
-  if (!winner || !firstAlternative || !secondAlternative) {
-    throw new Error(
+  const profile = restaurantDesignProfileSchema.parse(input);
+  const { winner, alternatives: alternativeManifests, confidence } =
+    resolveDeterministicRanking(
+      listRestaurantThemeManifests(),
+      profile,
+      RESTAURANT_THEME_SCORE_RULES,
       "Restaurant theme selection requires at least three registered themes",
     );
-  }
   const alternatives: [RestaurantThemeId, RestaurantThemeId] = [
-    firstAlternative.manifest.id,
-    secondAlternative.manifest.id,
+    alternativeManifests[0].id,
+    alternativeManifests[1].id,
   ];
-  const gap = winner.score - firstAlternative.score;
-  const confidence = Math.min(0.95, Math.max(0.55, 0.62 + gap * 0.035));
   return resolvedSelection(
     {
       themeId: winner.manifest.id,
@@ -203,6 +249,48 @@ export function selectOwnerRestaurantTheme(
     },
     "owner",
   );
+}
+
+/**
+ * The closed shortlist a preview surface may offer: the recorded theme first,
+ * then the two alternatives the same selection run named.
+ */
+export function restaurantThemeOptions(
+  selection: RestaurantThemeSelection,
+): RestaurantThemeId[] {
+  return [selection.themeId, ...selection.alternatives];
+}
+
+/**
+ * Rotates a recorded selection onto one of the alternatives it already names.
+ *
+ * The option set is closed on purpose: a crafted query string can only reach a
+ * theme this selection already shortlisted, and tokens always come back from
+ * the registry manifest, so the switcher cannot introduce a renderer or a style
+ * value the site was never offered. Only `themeId`, `alternatives` and `tokens`
+ * move; `source`, `confidence` and `reasons` keep describing the selection run
+ * that produced the shortlist.
+ */
+export function previewRestaurantThemeAlternate(
+  selection: RestaurantThemeSelection,
+  themeId: RestaurantThemeId,
+): RestaurantThemeSelection | null {
+  const options = restaurantThemeOptions(selection);
+  if (!options.includes(themeId)) return null;
+  if (themeId === selection.themeId) return selection;
+  const [firstAlternative, secondAlternative] = options.filter(
+    (candidate) => candidate !== themeId,
+  );
+  if (!firstAlternative || !secondAlternative) return null;
+
+  return restaurantThemeSelectionSchema.parse({
+    ...selection,
+    themeId,
+    alternatives: [firstAlternative, secondAlternative],
+    tokens: mergeRestaurantThemeTokens(
+      getRestaurantThemeManifest(themeId).safeDefaultTokens,
+    ),
+  });
 }
 
 export function restoreAutomaticRestaurantTheme(

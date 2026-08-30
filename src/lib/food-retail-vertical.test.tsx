@@ -30,6 +30,15 @@ describe("FOOD_RETAIL vertical", () => {
     );
 
     expect(draft.attributes).toEqual(foodRetailConfig.deterministicAttributes);
+    /**
+     * `toEqual` above is structural: it would still pass if the seeded
+     * selection were nonsense, because both sides read the same config.
+     * These two say what the seed has to mean — a shop with no evidence
+     * still gets a profile, and its theme came from the scorer rather
+     * than from a model or an owner.
+     */
+    expect(draft.attributes.designProfile).toBeDefined();
+    expect(draft.attributes.themeSelection?.source).toBe("deterministic");
     expect(draft.catalogSections).toEqual([
       {
         name: "Gammes de produits",
