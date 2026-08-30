@@ -13,7 +13,7 @@ is mapped to the locked parent that introduced it and the remediation below.
 | Advisory | Affected resolution | Locked parent chain | Resolution |
 | --- | --- | --- | --- |
 | [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) | `deepmerge-ts@7.1.5` | `prisma@7.9.1 -> @prisma/config@7.9.1` | Exact `deepmerge-ts@8.0.0` override |
-| [GHSA-jmr9-qjv8-65gv](https://github.com/advisories/GHSA-jmr9-qjv8-65gv) | `extract-zip@2.0.1` | `puppeteer-core@24.43.1 -> @puppeteer/browsers@2.13.2`; also `@lhci/cli@0.15.1 -> lighthouse@12.6.1` | Remove LHCI; upgrade to `lighthouse@13.4.1` and `puppeteer-core@25.8.0` |
+| [GHSA-jmr9-qjv8-65gv](https://github.com/advisories/GHSA-jmr9-qjv8-65gv) | `extract-zip@2.0.1` | `puppeteer-core@24.43.1 -> @puppeteer/browsers@2.13.2`; also `@lhci/cli@0.15.1 -> lighthouse@12.6.1` | Remove LHCI; upgrade to `lighthouse@13.4.1` and `puppeteer-core@25.9.0` |
 | [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) | `nanoid@5.1.6` | `workflow@4.8.4 -> @workflow/core@4.8.4` | Patch the exact parent manifest to `nanoid@5.1.16` |
 | [GHSA-52f5-9888-hmc6](https://github.com/advisories/GHSA-52f5-9888-hmc6) | `tmp@0.1.0` | Direct dependency of `@lhci/cli@0.15.1` | Remove LHCI |
 | [GHSA-ph9p-34f9-6g65](https://github.com/advisories/GHSA-ph9p-34f9-6g65) | `tmp@0.0.33` | `@lhci/cli@0.15.1 -> inquirer@6.5.2 -> external-editor@3.1.0` | Remove LHCI |
@@ -33,7 +33,7 @@ replaced. Neither `@lhci/cli` nor `extract-zip` remains in `bun.lock`.
 Supported upstream upgrades are used wherever they can express the intended
 graph:
 
-- `lighthouse@13.4.1` and `puppeteer-core@25.8.0` use
+- `lighthouse@13.4.1` and `puppeteer-core@25.9.0` use
   `@puppeteer/browsers@3.2.1`, whose archive implementation no longer depends
   on `extract-zip`.
 - Prisma's only `deepmerge-ts` consumer loads the plain `deepmerge` API through
