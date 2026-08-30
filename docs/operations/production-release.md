@@ -144,13 +144,13 @@ aws ssm put-parameter \
   --region us-east-1 \
   --name /shipshit/production/cornershopdev/EMAIL_REPLY_TO \
   --type String \
-  --value 'vincent@reply.cornershop.dev' \
+  --value 'vincent@cornershop.dev' \
   --overwrite
 ```
 
 Restofront keeps its niche-specific `send.restofront.com` / `restofront.com`
 identity. Factory-claimed Food Retail and Local Service sites use the
-generic Cornershopdev sender and receiving-only reply subdomain above.
+generic Cornershopdev sender and receiving-only root domain above.
 
 In Resend, enable both exact HTTPS endpoints:
 
