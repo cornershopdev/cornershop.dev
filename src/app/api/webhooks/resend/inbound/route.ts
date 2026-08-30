@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { captureOperatorAlert } from "@/lib/operator-alerts";
 import { recordInboundOutreachMessage } from "@/lib/outreach-inbound";
 import { verifyResendWebhook } from "@/lib/resend-webhook";
 
@@ -24,13 +23,8 @@ export async function POST(request: Request) {
   const verified = verifyResendWebhook(request, rawBody, secret);
   if (!verified.ok) {
     if (verified.error === "Resend webhook is not configured") {
-      await captureOperatorAlert({
-        kind: "OUTREACH_SEND_FAILURE",
-        dedupKey: "inbound-webhook-configuration",
-        title: "Resend inbound webhook configuration is missing",
-        message:
-          "An inbound Resend webhook reached the application without its configured signing secret. Restore RESEND_INBOUND_WEBHOOK_SECRET and redeploy.",
-        context: { category: "configuration" },
+      console.error("[resend-inbound-webhook] configuration missing", {
+        failure: "signing_secret_missing",
       });
     }
     return Response.json({ error: verified.error }, { status: verified.status });
@@ -46,13 +40,8 @@ export async function POST(request: Request) {
   }
 
   if (!process.env.DATABASE_URL) {
-    await captureOperatorAlert({
-      kind: "OUTREACH_SEND_FAILURE",
-      dedupKey: "inbound-webhook-persistence",
-      title: "Resend inbound webhook persistence is unavailable",
-      message:
-        "A signed inbound webhook could not reach PostgreSQL. Resend will retry; restore database availability before replaying events.",
-      context: { category: "database" },
+    console.error("[resend-inbound-webhook] persistence unavailable", {
+      failure: "database_unavailable",
     });
     return Response.json(
       { error: "Webhook persistence is unavailable" },
@@ -89,14 +78,6 @@ export async function POST(request: Request) {
     console.error("[resend-inbound-webhook] processing failed", {
       emailId: event.data.email_id,
       failure: "processing_failed",
-    });
-    await captureOperatorAlert({
-      kind: "OUTREACH_SEND_FAILURE",
-      dedupKey: `inbound:${event.data.email_id}`,
-      title: "Resend inbound webhook processing failed",
-      message:
-        "A signed inbound email returned a server failure. Inspect the outreach mailbox and application logs.",
-      context: { emailId: event.data.email_id },
     });
     return Response.json(
       { error: "Webhook processing failed" },

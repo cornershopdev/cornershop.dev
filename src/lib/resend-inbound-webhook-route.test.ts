@@ -81,7 +81,17 @@ describe("Resend inbound webhook", () => {
       error: "Resend webhook is not configured",
     });
     expect(recordInbound).not.toHaveBeenCalled();
-    expect(captureOperatorAlert).toHaveBeenCalledTimes(1);
+    expect(captureOperatorAlert).not.toHaveBeenCalled();
+  });
+
+  it("does not send an alert when persistence is unavailable", async () => {
+    delete process.env.DATABASE_URL;
+
+    const response = await POST(signedInbound());
+
+    expect(response.status).toBe(503);
+    expect(recordInbound).not.toHaveBeenCalled();
+    expect(captureOperatorAlert).not.toHaveBeenCalled();
   });
 
   it("stores a signed inbound reply on the matched lead thread", async () => {
@@ -96,6 +106,33 @@ describe("Resend inbound webhook", () => {
       siteId: "site_1",
     });
     expect(recordInbound).toHaveBeenCalledTimes(1);
+    expect(captureOperatorAlert).not.toHaveBeenCalled();
+  });
+
+  it("accepts unmatched genfeed mail at a root without sending an alert", async () => {
+    recordInbound.mockResolvedValueOnce({
+      handled: false,
+      created: false,
+      retry: false,
+      siteId: null,
+      messageId: null,
+    });
+
+    const response = await POST(
+      signedInbound(undefined, inboundWebhookSecret, {
+        from: "test@genfeed.ai",
+        to: ["vincent@cornershop.dev"],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+      handled: false,
+      created: false,
+      siteId: null,
+    });
+    expect(captureOperatorAlert).not.toHaveBeenCalled();
   });
 
   it("asks Resend to retry when the received body is not visible yet", async () => {
@@ -138,6 +175,7 @@ describe("Resend inbound webhook", () => {
       const serialized = JSON.stringify(consoleError.mock.calls);
       expect(serialized).not.toContain("private mailbox body");
       expect(serialized).not.toContain("operator@example.test");
+      expect(captureOperatorAlert).not.toHaveBeenCalled();
     } finally {
       console.error = previousConsoleError;
     }
@@ -147,6 +185,13 @@ describe("Resend inbound webhook", () => {
 function signedInbound(
   signatureOverride?: string,
   signingSecret = inboundWebhookSecret,
+  addresses: {
+    from: string;
+    to: string[];
+  } = {
+    from: "owner@chez-lea.test",
+    to: ["vincent@restofront.com"],
+  },
 ): Request {
   const timestamp = new Date();
   const messageId = "inbound_webhook_1";
@@ -155,8 +200,8 @@ function signedInbound(
     created_at: timestamp.toISOString(),
     data: {
       email_id: "recv_1",
-      from: "owner@chez-lea.test",
-      to: ["vincent@restofront.com"],
+      from: addresses.from,
+      to: addresses.to,
       subject: "Re: your preview",
       message_id: "<reply@chez-lea.test>",
     },
