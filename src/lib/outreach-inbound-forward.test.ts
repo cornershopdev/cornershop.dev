@@ -237,7 +237,7 @@ const enqueueDb = fakeDb as unknown as Parameters<
 
 const configuredEnvironment = {
   EMAIL_FROM: "Cornershopdev <vincent@send.cornershop.dev>",
-  EMAIL_REPLY_TO: "vincent@reply.cornershop.dev",
+  EMAIL_REPLY_TO: "vincent@cornershop.dev",
   OUTREACH_INBOUND_FORWARD_TO: " Operator@Example.test ",
 };
 
@@ -279,7 +279,7 @@ describe("inbound read-copy outbox", () => {
       await enqueueOutreachInboundForward(
         enqueueDb,
         inboundInput(),
-        { EMAIL_REPLY_TO: "vincent@reply.cornershop.dev" },
+        { EMAIL_REPLY_TO: "vincent@cornershop.dev" },
       ),
     ).toBe(false);
     expect(forwards).toHaveLength(0);
