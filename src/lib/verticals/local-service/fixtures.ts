@@ -1,4 +1,15 @@
+import { localServiceDesignProfileSchema } from "@/lib/site-themes/local-service/contracts";
+import { selectDeterministicLocalServiceTheme } from "@/lib/site-themes/local-service/selection";
 import { localServiceSiteDraftSchema } from "@/lib/verticals/local-service/schema";
+
+const sampleDesignProfile = localServiceDesignProfileSchema.parse({
+  engagementModel: "callout",
+  primaryIntent: "contact",
+  catalogExperience: "service-list",
+  brandTraits: ["technical", "trusted"],
+  locationCount: 1,
+  photographyQuality: "none",
+});
 
 export const sampleLocalServiceSiteDraft = localServiceSiteDraftSchema.parse({
   slug: "harbour-electrical",
@@ -46,6 +57,8 @@ export const sampleLocalServiceSiteDraft = localServiceSiteDraftSchema.parse({
       { title: "Workshop lighting", description: "Efficient task lighting and new circuits for a small joinery workshop.", imageUrl: null, location: "Marsa" },
     ],
     showProjectGallery: true,
+    designProfile: sampleDesignProfile,
+    themeSelection: selectDeterministicLocalServiceTheme(sampleDesignProfile),
   },
   translations: [],
   catalogSections: [

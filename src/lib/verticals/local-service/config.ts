@@ -1,4 +1,13 @@
 import { Vertical } from "@/generated/prisma/enums";
+import {
+  localServiceDesignProfileSchema,
+  type LocalServiceDesignProfile,
+} from "@/lib/site-themes/local-service/contracts";
+import { getLocalServiceThemeManifest } from "@/lib/site-themes/local-service/registry";
+import {
+  normalizeGeneratedLocalServiceThemeSelection,
+  selectDeterministicLocalServiceTheme,
+} from "@/lib/site-themes/local-service/selection";
 import { localServiceMarketing } from "@/lib/verticals/local-service/marketing";
 import { localServicePrompt } from "@/lib/verticals/local-service/prompt";
 import {
@@ -99,9 +108,9 @@ const localServiceLabels = {
 /**
  * LOCAL_SERVICE treats model output as an untrusted presentation proposal.
  * Every operational or reputational fact is replaced with the deterministic
- * reconstruction before persistence. The only retained model choice is whether
- * to show an already source-backed project gallery; it cannot create a project
- * or make a claim on its own.
+ * reconstruction before persistence. The retained model choices are limited to
+ * the bounded theme presentation and whether to show an already source-backed
+ * project gallery; neither can create a project or make a claim on its own.
  */
 export function bindGeneratedLocalServiceDraftToEvidence({
   generated,
@@ -117,6 +126,10 @@ export function bindGeneratedLocalServiceDraftToEvidence({
       showProjectGallery:
         deterministic.attributes.projects.length > 0 &&
         generated.attributes.showProjectGallery,
+      designProfile:
+        generated.attributes.designProfile ?? deterministic.attributes.designProfile,
+      themeSelection:
+        generated.attributes.themeSelection ?? deterministic.attributes.themeSelection,
     },
     // There is no owner-review status on local-service translations yet. Until
     // that contract exists, generated overlays are discarded rather than
@@ -185,6 +198,33 @@ const attributeDefaults: LocalServiceAttributes = {
   showProjectGallery: true,
 };
 
+function designProfileForTradeType(
+  tradeType: LocalServiceTradeType,
+): LocalServiceDesignProfile {
+  const projectLed = tradeType === "builder" || tradeType === "artisan";
+  const technical = ["plumber", "electrician", "repair"].includes(tradeType);
+  return localServiceDesignProfileSchema.parse({
+    engagementModel: projectLed
+      ? "project"
+      : technical
+        ? "callout"
+        : "scheduled",
+    primaryIntent: projectLed ? "browse" : "quote",
+    catalogExperience: projectLed
+      ? "portfolio"
+      : technical
+        ? "service-list"
+        : "proof-led",
+    brandTraits: projectLed
+      ? ["craft", "established"]
+      : technical
+        ? ["technical", "trusted"]
+        : ["trusted", "established"],
+    locationCount: 1,
+    photographyQuality: projectLed ? "limited" : "none",
+  });
+}
+
 function tradeTypeFromSource(
   businessTypes: string[] = [],
 ): LocalServiceTradeType {
@@ -217,11 +257,17 @@ export const localServiceConfig = {
   attributesSchema: localServiceAttributesSchema,
   attributeDefaults,
   deterministicAttributes: attributeDefaults,
-  deterministicAttributesFromSource: (source) => ({
-    ...attributeDefaults,
-    tradeType: tradeTypeFromSource(source.businessTypes),
-    showProjectGallery: false,
-  }),
+  deterministicAttributesFromSource: (source) => {
+    const tradeType = tradeTypeFromSource(source.businessTypes);
+    const designProfile = designProfileForTradeType(tradeType);
+    return {
+      ...attributeDefaults,
+      tradeType,
+      showProjectGallery: false,
+      designProfile,
+      themeSelection: selectDeterministicLocalServiceTheme(designProfile),
+    };
+  },
   deterministicCopy: {
     en: {
       eyebrow: "Private local-service preview",
@@ -330,12 +376,22 @@ export const localServiceConfig = {
     definitions: localServiceTemplates,
     resolve: resolveLocalServiceTemplateFromAttributes,
   },
-  normalizeGeneratedAttributes: (attributes, template) => ({
-    ...attributes,
-    showProjectGallery:
-      attributes.projects.length > 0 &&
-      (attributes.showProjectGallery || template.showProjectImagesByDefault),
-  }),
+  normalizeGeneratedAttributes: (attributes, template) => {
+    const theme = normalizeGeneratedLocalServiceThemeSelection(
+      attributes.designProfile,
+      attributes.themeSelection,
+    );
+    return {
+      ...attributes,
+      ...theme,
+      showProjectGallery:
+        attributes.projects.length > 0 &&
+        (attributes.showProjectGallery ||
+          template.showProjectImagesByDefault ||
+          getLocalServiceThemeManifest(theme.themeSelection.themeId).capabilities
+            .projectEmphasis),
+    };
+  },
   bindGeneratedDraftToEvidence: bindGeneratedLocalServiceDraftToEvidence,
   deterministicItemAttributes: (item) => ({
     pricingModel:

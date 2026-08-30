@@ -22,6 +22,16 @@ import {
   previewFoodRetailThemeAlternate,
 } from "@/lib/site-themes/food-retail/selection";
 import {
+  localServiceRendererVersionId,
+  localServiceSiteTheme,
+} from "@/lib/site-themes/local-service/configuration";
+import { getLocalServiceThemeManifest } from "@/lib/site-themes/local-service/registry";
+import {
+  localServiceThemeOptions,
+  parseLocalServiceThemeSelection,
+  previewLocalServiceThemeAlternate,
+} from "@/lib/site-themes/local-service/selection";
+import {
   restaurantRendererVersionId,
   restaurantSiteTheme,
 } from "@/lib/site-themes/restaurant/configuration";
@@ -181,6 +191,14 @@ const THEME_ADAPTERS: Partial<Record<VerticalId, VerticalThemeAdapter>> = {
     previewAlternate: previewFoodRetailThemeAlternate,
     describeTheme: getFoodRetailThemeManifest,
     siteTheme: foodRetailSiteTheme,
+  }),
+  [Vertical.LOCAL_SERVICE]: createThemeAdapter({
+    rendererVersionId: localServiceRendererVersionId,
+    parseSelection: parseLocalServiceThemeSelection,
+    themeOptions: localServiceThemeOptions,
+    previewAlternate: previewLocalServiceThemeAlternate,
+    describeTheme: getLocalServiceThemeManifest,
+    siteTheme: localServiceSiteTheme,
   }),
 };
 

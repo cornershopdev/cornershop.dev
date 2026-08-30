@@ -205,6 +205,13 @@ details, hours, same-origin navigation, structured services, prices, and
 evidence. Missing emergency coverage, credentials, insurance, trust claims,
 projects, prices, or availability remain unstated rather than being inferred.
 
+Local-service previews use the same closed, versioned theme contract as the
+other themed verticals. A deterministic scorer chooses between Direct
+Response, Trusted Local, and Project Led from bounded trade and photography
+signals; owners can preview or select only those registered alternatives. Theme
+tokens remain validated presentation data and never change the underlying
+trade, services, claims, or contact evidence.
+
 The vertical is registered for private imports, previews, and revision-safe
 owner editing. Factory claim, publication, custom domains, source monitoring,
 and the photo library are enabled. Public niche access and standalone launch

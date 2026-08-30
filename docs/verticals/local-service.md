@@ -27,6 +27,7 @@ bags:
 | Projects      | Up to 24 title/description/location/HTTPS-or-local-image records                                         |
 | Conversion    | Shared phone plus `contact`, `quote`, `booking`, and `social` HTTPS integrations                         |
 | Hours         | Shared bounded business-hours rows                                                                       |
+| Theme         | `direct-response`, `trusted-local`, or `project-led` through a versioned, closed selection contract     |
 
 Integration allowlists are vertical-owned even though storage uses one enum:
 Restaurant retains booking/ordering/delivery/social, Beauty accepts only
@@ -63,6 +64,15 @@ Schema.org `Service`, `Offer`, and `OfferCatalog` evidence. Unstructured service
 cards, price tiles, prose-only project galleries, and visual harmonization are
 not claimed by this vertical yet; those inputs remain bounded page text or
 source assets rather than being promoted into factual catalog/project fields.
+
+Presentation is selected independently of the trade subtype. A deterministic
+scorer maps bounded engagement, intent, catalog, brand, location, and
+photography signals to Direct Response, Trusted Local, or Project Led, then
+stores two distinct registered alternatives. Owners can preview and select only
+those themes. The versioned token schema accepts closed typography, density,
+radius, and image-treatment enums plus contrast-repaired colours; it rejects
+CSS, HTML, arbitrary font names, URLs, and unregistered theme IDs. Theme changes
+cannot relabel the business or alter source-backed facts.
 
 ## Rendering and SEO
 
@@ -126,6 +136,9 @@ separate release gate.
 Focused tests cover:
 
 - fixture and schema round-tripping;
+- complete theme registration, deterministic scoring, owner selection,
+  alternate previews, renderer-version compatibility, and closed token inputs;
+- WCAG AA contrast for every registered local-service palette;
 - field bounds and project-image URL safety;
 - conservative deterministic defaults;
 - malicious model output stripped back to source-backed or conservative values,

@@ -11,6 +11,10 @@ import {
   translatedCatalogItemSchema,
   translatedCatalogSectionSchema,
 } from "@/lib/verticals/schema";
+import {
+  safeOptionalLocalServiceDesignProfileSchema,
+  safeOptionalLocalServiceThemeSelectionSchema,
+} from "@/lib/site-themes/local-service/contracts";
 
 export const localServiceTradeTypeSchema = z.enum([
   "plumber",
@@ -79,6 +83,8 @@ export const localServiceAttributesSchema = z.object({
   trustSignals: z.array(localServiceTrustSignalSchema).max(16).default([]),
   projects: z.array(localServiceProjectSchema).max(24).default([]),
   showProjectGallery: z.boolean().default(true),
+  designProfile: safeOptionalLocalServiceDesignProfileSchema,
+  themeSelection: safeOptionalLocalServiceThemeSelectionSchema,
 });
 
 export const localServiceItemAttributesSchema = z.object({
