@@ -107,7 +107,7 @@ Owner photo library is enabled. Owner analytics, lead inbox, and articles stay
 Tradefront has no standalone niche storefront. Its marketing config therefore
 keeps hostname, domain, and niche sender empty, while `claimMode: "factory"`
 allows an approved private preview to use Cornershopdev's verified sender,
-shared $49 checkout, and `<slug>.cornershop.dev` public URL.
+shared €49 checkout, and `<slug>.cornershop.dev` public URL.
 `publicationEnabled` and `publicationMutationEnabled` are both true for that
 factory path. A future standalone niche still must satisfy
 `verticalLaunchReadiness`:

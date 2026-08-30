@@ -2,6 +2,7 @@ import type {
   FoodRetailAttributes,
   FoodShopType,
 } from "@/lib/verticals/food-retail/schema";
+import type { SiteUiLocale } from "@/lib/site-locales";
 import type { VerticalTemplateCopy } from "@/lib/verticals/types";
 
 export type FoodRetailTemplateId =
@@ -17,7 +18,7 @@ export type FoodRetailTemplate = {
   titleClassName: string;
   sectionClassName: string;
   showProductImagesByDefault: boolean;
-  copy: Record<"en" | "fr", VerticalTemplateCopy>;
+  copy: Record<SiteUiLocale, VerticalTemplateCopy>;
 };
 
 export const foodRetailTemplates: Record<
@@ -46,6 +47,12 @@ export const foodRetailTemplates: Record<
         featuredHeading: "Produits sélectionnés",
         featuredSubheading: "Parcourez les produits présentés par la boutique.",
       },
+      mt: {
+        catalogEyebrow: "Il-firxa tal-prodotti",
+        catalogHeading: "Esplora l-firxa ppubblikata.",
+        featuredHeading: "Prodotti magħżula",
+        featuredSubheading: "Ara l-prodotti elenkati mill-ħanut.",
+      },
     },
   },
   "craft-counter": {
@@ -70,6 +77,12 @@ export const foodRetailTemplates: Record<
         featuredHeading: "Produits sélectionnés",
         featuredSubheading: "Informations fournies par la boutique.",
       },
+      mt: {
+        catalogEyebrow: "Il-firxa",
+        catalogHeading: "Prodotti mill-firxa ppubblikata.",
+        featuredHeading: "Prodotti magħżula",
+        featuredSubheading: "Dettalji pprovduti mill-ħanut.",
+      },
     },
   },
   "market-shelves": {
@@ -93,6 +106,12 @@ export const foodRetailTemplates: Record<
         catalogHeading: "Ce que publie la boutique.",
         featuredHeading: "Produits sélectionnés",
         featuredSubheading: "Un aperçu de la gamme publiée.",
+      },
+      mt: {
+        catalogEyebrow: "Firxiet ta’ prodotti",
+        catalogHeading: "Dak li jippubblika l-ħanut.",
+        featuredHeading: "Prodotti magħżula",
+        featuredSubheading: "Ħarsa aktar mill-qrib lejn il-firxa ppubblikata.",
       },
     },
   },

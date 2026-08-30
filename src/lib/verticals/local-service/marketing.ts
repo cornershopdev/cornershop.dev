@@ -109,7 +109,7 @@ export const localServiceMarketing = {
     plans: [
       {
         name: "Founding",
-        price: "$49",
+        price: "€49",
         cadence: "/month",
         copy: "The complete local-service website for one independent business.",
         features: [
