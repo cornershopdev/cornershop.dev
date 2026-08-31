@@ -1,6 +1,10 @@
 import { BlockList, isIP } from "node:net";
 import { resolve4, resolve6 } from "node:dns/promises";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, Headers, fetch as undiciFetch } from "undici";
+import type {
+  RequestInit as UndiciRequestInit,
+  Response as UndiciResponse,
+} from "undici";
 import { z } from "zod";
 import {
   reconstructSource,
@@ -192,10 +196,28 @@ export async function assertPublicUrl(url: URL): Promise<void> {
  * still set to the original name. That closes the classic DNS-rebinding window
  * between resolve and TCP connect (the OS resolver is not consulted again).
  */
-async function fetchPublicResponse(
+type PublicRequestInit = Pick<
+  UndiciRequestInit,
+  "headers" | "method" | "redirect" | "signal"
+>;
+
+async function closePublicAgent(agent: Agent): Promise<void> {
+  try {
+    await agent.close();
+  } catch {
+    try {
+      await agent.destroy();
+    } catch {
+      // Cleanup must not replace the request or response-consumer result.
+    }
+  }
+}
+
+async function fetchPublicResponse<T>(
   url: URL,
-  init: RequestInit,
-): Promise<Response> {
+  init: PublicRequestInit,
+  consume: (response: UndiciResponse) => Promise<T>,
+): Promise<T> {
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error("Only http and https URLs are supported");
   }
@@ -209,13 +231,18 @@ async function fetchPublicResponse(
 
   const agent = new Agent({
     connect: {
-      lookup(_host, _options, callback) {
-        callback(null, pinnedIp, family);
+      lookup(_host, options, callback) {
+        if (options.all) {
+          callback(null, [{ address: pinnedIp, family }]);
+        } else {
+          callback(null, pinnedIp, family);
+        }
       },
       servername: hostname,
     },
   });
 
+  let response: UndiciResponse | null = null;
   try {
     const headers = new Headers(init.headers);
     if (!headers.has("host")) {
@@ -226,55 +253,91 @@ async function fetchPublicResponse(
           : hostname,
       );
     }
-    // undici's RequestInit/Response types diverge slightly from DOM fetch;
-    // cast at the boundary — runtime behaviour matches for status/body reads.
-    const response = (await undiciFetch(url, {
+    response = await undiciFetch(url, {
       method: init.method,
       headers,
-      body: init.body as never,
       redirect: init.redirect ?? "manual",
-      signal: init.signal as never,
+      signal: init.signal,
       dispatcher: agent,
-    })) as unknown as Response;
-    // close() waits for in-flight body reads. destroy() would abort them.
-    const closer = agent as { close?: () => void };
-    try {
-      closer.close?.();
-    } catch {
-      // Best-effort; short-lived agents are GC'd with the request.
+    });
+    return await consume(response);
+  } finally {
+    // Callers either consume the body or leave it unlocked. Cancel any unread
+    // redirect/error body before shutting down this request-scoped dispatcher.
+    if (response?.body && !response.body.locked) {
+      try {
+        await response.body.cancel();
+      } catch {
+        // The body may already have failed; dispatcher cleanup still follows.
+      }
     }
-    return response;
-  } catch (error) {
-    const closer = agent as { destroy?: () => void; close?: () => void };
-    try {
-      closer.destroy?.();
-      closer.close?.();
-    } catch {
-      // Best-effort; the connect failed so there is no body to preserve.
-    }
-    throw error;
+    await closePublicAgent(agent);
   }
 }
 
-async function readLimitedBody(response: Response): Promise<string> {
+async function readLimitedBody(response: UndiciResponse): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let bytes = 0;
   let html = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > MAX_HTML_BYTES) {
-      await reader.cancel();
-      throw new Error("The business website is too large to import safely");
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_HTML_BYTES) {
+        await reader.cancel();
+        throw new Error("The business website is too large to import safely");
+      }
+      html += decoder.decode(value, { stream: true });
     }
-    html += decoder.decode(value, { stream: true });
+
+    return html + decoder.decode();
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // The stream may already have released its reader after a body failure.
+    }
+  }
+}
+
+async function readLimitedImageBody(
+  response: UndiciResponse,
+): Promise<Uint8Array> {
+  if (!response.body) throw new Error("The source image was empty");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_IMAGE_BYTES) {
+        await reader.cancel();
+        throw new Error("The source image is too large to import safely");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // The stream may already have released its reader after a body failure.
+    }
   }
 
-  return html + decoder.decode();
+  const data = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return data;
 }
 
 export async function fetchPublicHtml(
@@ -288,38 +351,59 @@ export async function fetchPublicHtml(
   let url = typeof rawUrl === "string" ? new URL(rawUrl) : rawUrl;
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-    const response = await fetchPublicResponse(url, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent":
-          options.userAgent ??
-          "Cornershopdev Importer/1.0 (+https://cornershop.dev; local business preview builder)",
+    const result = await fetchPublicResponse<
+      | { kind: "redirect"; location: string }
+      | {
+          kind: "content";
+          html: string;
+          lastModifiedAt: string | null;
+        }
+    >(
+      url,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent":
+            options.userAgent ??
+            "Cornershopdev Importer/1.0 (+https://cornershop.dev; local business preview builder)",
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
       },
-      redirect: "manual",
-      signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
-    });
+      async (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get("location");
+          if (!location) {
+            throw new Error("The website returned an invalid redirect");
+          }
+          return { kind: "redirect", location };
+        }
 
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location)
-        throw new Error("The website returned an invalid redirect");
-      url = new URL(location, url);
+        if (!response.ok) {
+          throw new Error(`The website returned HTTP ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!contentType.includes("text/html")) {
+          throw new Error("The supplied URL is not an HTML website");
+        }
+
+        return {
+          kind: "content",
+          html: await readLimitedBody(response),
+          lastModifiedAt: response.headers.get("last-modified"),
+        };
+      },
+    );
+
+    if (result.kind === "redirect") {
+      url = new URL(result.location, url);
       continue;
     }
-
-    if (!response.ok) {
-      throw new Error(`The website returned HTTP ${response.status}`);
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/html")) {
-      throw new Error("The supplied URL is not an HTML website");
-    }
-
     return {
-      html: await readLimitedBody(response),
+      html: result.html,
       finalUrl: url,
-      lastModifiedAt: response.headers.get("last-modified"),
+      lastModifiedAt: result.lastModifiedAt,
     };
   }
 
@@ -333,61 +417,57 @@ export async function fetchPublicImage(rawUrl: string): Promise<{
   let url = new URL(rawUrl);
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-    const response = await fetchPublicResponse(url, {
-      headers: {
-        Accept: "image/avif,image/webp,image/png,image/jpeg",
-        "User-Agent":
-          "Cornershopdev Image Importer/1.0 (+https://cornershop.dev; provenance-preserving business photo enhancement)",
+    const result = await fetchPublicResponse<
+      | { kind: "redirect"; location: string }
+      | { kind: "image"; data: Uint8Array; mediaType: string }
+    >(
+      url,
+      {
+        headers: {
+          Accept: "image/avif,image/webp,image/png,image/jpeg",
+          "User-Agent":
+            "Cornershopdev Image Importer/1.0 (+https://cornershop.dev; provenance-preserving business photo enhancement)",
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
       },
-      redirect: "manual",
-      signal: AbortSignal.timeout(15_000),
-    });
+      async (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get("location");
+          if (!location) {
+            throw new Error("The image returned an invalid redirect");
+          }
+          return { kind: "redirect", location };
+        }
 
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location) throw new Error("The image returned an invalid redirect");
-      url = new URL(location, url);
+        if (!response.ok) {
+          throw new Error(`The source image returned HTTP ${response.status}`);
+        }
+
+        const mediaType = (response.headers.get("content-type") ?? "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        if (
+          !["image/avif", "image/jpeg", "image/png", "image/webp"].includes(
+            mediaType,
+          )
+        ) {
+          throw new Error("The source must be a JPEG, PNG, WebP, or AVIF image");
+        }
+        return {
+          kind: "image",
+          data: await readLimitedImageBody(response),
+          mediaType,
+        };
+      },
+    );
+
+    if (result.kind === "redirect") {
+      url = new URL(result.location, url);
       continue;
     }
-
-    if (!response.ok) {
-      throw new Error(`The source image returned HTTP ${response.status}`);
-    }
-
-    const mediaType = (response.headers.get("content-type") ?? "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    if (
-      !["image/avif", "image/jpeg", "image/png", "image/webp"].includes(
-        mediaType,
-      )
-    ) {
-      throw new Error("The source must be a JPEG, PNG, WebP, or AVIF image");
-    }
-    if (!response.body) throw new Error("The source image was empty");
-
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let byteLength = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      byteLength += value.byteLength;
-      if (byteLength > MAX_IMAGE_BYTES) {
-        await reader.cancel();
-        throw new Error("The source image is too large to import safely");
-      }
-      chunks.push(value);
-    }
-
-    const data = new Uint8Array(byteLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      data.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return { data, mediaType };
+    return { data: result.data, mediaType: result.mediaType };
   }
 
   throw new Error("The source image redirected too many times");
@@ -406,22 +486,36 @@ export async function inspectPublicLink(rawUrl: string): Promise<{
   const originalUrl = new URL(rawUrl).toString();
   let url = new URL(originalUrl);
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-    const response = await fetchPublicResponse(url, {
-      method: "HEAD",
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        "User-Agent":
-          "Cornershopdev Monitor/1.0 (+https://cornershop.dev; source link check)",
+    const result = await fetchPublicResponse<
+      | { kind: "redirect"; location: string }
+      | { kind: "status"; status: number }
+    >(
+      url,
+      {
+        method: "HEAD",
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+        headers: {
+          "User-Agent":
+            "Cornershopdev Monitor/1.0 (+https://cornershop.dev; source link check)",
+        },
       },
-    });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location) throw new Error("The link returned an invalid redirect");
-      url = new URL(location, url);
+      async (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get("location");
+          if (!location) {
+            throw new Error("The link returned an invalid redirect");
+          }
+          return { kind: "redirect", location };
+        }
+        return { kind: "status", status: response.status };
+      },
+    );
+    if (result.kind === "redirect") {
+      url = new URL(result.location, url);
       continue;
     }
-    return { originalUrl, finalUrl: url.toString(), status: response.status };
+    return { originalUrl, finalUrl: url.toString(), status: result.status };
   }
   throw new Error("The link redirected too many times");
 }
