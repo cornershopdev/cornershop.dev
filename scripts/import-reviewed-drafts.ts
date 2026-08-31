@@ -1,5 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import {
+  reviewedRestaurantPreviewExpectation,
+  verifyReviewedRestaurantPreview,
+} from "@/lib/reviewed-restaurant-preview";
 
 type ReviewedDraft = {
   slug?: unknown;
@@ -23,6 +27,11 @@ async function main() {
   const batch = parseBatch(
     JSON.parse(await readFile(cli.input, "utf8")) as ReviewedDraftBatch,
   );
+  const expectations = batch.drafts.map((draft) =>
+    batch.vertical === "RESTAURANT"
+      ? reviewedRestaurantPreviewExpectation(draft)
+      : null,
+  );
   if (!cli.execute) {
     console.log(
       JSON.stringify({
@@ -30,7 +39,9 @@ async function main() {
         batch: batch.name,
         vertical: batch.vertical,
         count: batch.drafts.length,
-        slugs: batch.drafts.map((draft) => draft.slug),
+        ...(batch.vertical === "RESTAURANT"
+          ? { previews: expectations }
+          : { slugs: batch.drafts.map((draft) => draft.slug) }),
       }),
     );
     return;
@@ -64,6 +75,7 @@ async function main() {
       slug?: string;
       created?: boolean;
       verified?: boolean;
+      photoCount?: number;
       urls?: { preview?: string };
     }>;
     error?: string;
@@ -83,9 +95,11 @@ async function main() {
   const results = [];
   for (const [index, draft] of batch.drafts.entries()) {
     const result = imported.results[index];
+    const expectation = expectations[index];
     if (
       result?.slug !== draft.slug ||
       result.verified !== true ||
+      (expectation && result.photoCount !== expectation.sourcePhotoCount) ||
       !result.urls?.preview
     ) {
       throw new Error(`${draft.slug} returned an invalid verification result`);
@@ -98,8 +112,21 @@ async function main() {
         `${draft.slug} preview returned ${preview.status} after import`,
       );
     }
+    if (expectation && expectation.slug !== draft.slug) {
+      throw new Error(`${draft.slug} has no locked preview expectation`);
+    }
+    if (expectation) {
+      verifyReviewedRestaurantPreview(await preview.text(), expectation);
+    }
     results.push({
       slug: draft.slug,
+      ...(expectation
+        ? {
+            themeId: expectation.themeId,
+            rendererVersion: expectation.rendererVersion,
+            sourcePhotoCount: expectation.sourcePhotoCount,
+          }
+        : {}),
       created: result.created === true,
       verified: true,
       previewStatus: preview.status,

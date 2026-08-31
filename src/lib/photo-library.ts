@@ -64,7 +64,7 @@ export async function ingestDiscoveredSitePhotos(input: {
     async (photo) => {
       try {
         const fetched = await fetchPublicImage(photo.sourceUrl);
-        return await ingestPhotoBytes({
+        const ingested = await ingestPhotoBytes({
           siteId: input.siteId,
           siteSlug: input.siteSlug,
           vertical: input.vertical,
@@ -78,6 +78,7 @@ export async function ingestDiscoveredSitePhotos(input: {
           claimedMediaType: fetched.mediaType,
           actor: input.actor ?? "system:photo-ingest",
         });
+        return ingested.outcome;
       } catch {
         return "failed" as const;
       }
@@ -134,7 +135,7 @@ export async function ingestOwnerPhoto(input: {
     sourceUrl = input.sourceUrl!;
     sourceKind = "OWNER_REFERENCE";
   }
-  const result = await ingestPhotoBytes({
+  const ingested = await ingestPhotoBytes({
     siteId: input.siteId,
     siteSlug: input.siteSlug,
     vertical: input.vertical,
@@ -149,7 +150,113 @@ export async function ingestOwnerPhoto(input: {
     claimedMediaType,
     actor: actorLabel(input.actor),
   });
-  return { result, library: await getPhotoLibrary(input.siteId) };
+  return {
+    result: ingested.outcome,
+    library: await getPhotoLibrary(input.siteId),
+  };
+}
+
+export type ReviewedSitePhoto = {
+  sourceUrl: string;
+  sourcePageUrl: string;
+  usage: "HERO" | "GALLERY";
+};
+
+/**
+ * Copies an operator-reviewed first-party photo into immutable storage, marks
+ * the authentic original approved, and selects it for the supplied storefront
+ * slot. Unlike discovery, this path never leaves reviewed preview imagery in a
+ * pending state; unlike owner upload, it preserves official provenance.
+ */
+export async function ingestReviewedSitePhotos(input: {
+  siteId: string;
+  siteSlug: string;
+  vertical: Vertical;
+  photos: ReviewedSitePhoto[];
+  actor: string;
+}): Promise<{ selected: number; ingested: number; deduplicated: number }> {
+  const config = getPhotoSystemConfig();
+  const photos = input.photos.slice(0, config.discoveryMaxImages);
+  const ingested = await mapWithConcurrency(
+    photos,
+    config.ingestConcurrency,
+    async (photo) => {
+      const fetched = await fetchPublicImage(photo.sourceUrl);
+      const result = await ingestPhotoBytes({
+        siteId: input.siteId,
+        siteSlug: input.siteSlug,
+        vertical: input.vertical,
+        sourceUrl: photo.sourceUrl,
+        sourcePageUrl: photo.sourcePageUrl,
+        provenance: "OFFICIAL",
+        sourceKind: "FIRST_PARTY",
+        reviewStatus: "APPROVED",
+        candidateUsages: [photo.usage],
+        data: fetched.data,
+        claimedMediaType: fetched.mediaType,
+        actor: input.actor,
+        promoteDuplicateToApproved: true,
+      });
+      return { photo, ...result };
+    },
+  );
+
+  const selectedPhotoIds = new Set(ingested.map((result) => result.photoId));
+  if (selectedPhotoIds.size !== ingested.length) {
+    throw new PhotoLibraryError(
+      "One reviewed image cannot fill more than one storefront slot",
+      409,
+      "DUPLICATE_REVIEWED_PHOTO_SLOT",
+    );
+  }
+  const desiredPhotoIds = [...selectedPhotoIds];
+  const staleSelections = await getDb().photoAsset.findMany({
+    where: {
+      siteId: input.siteId,
+      selectedUsage: { in: ["HERO", "GALLERY"] },
+      ...(desiredPhotoIds.length > 0
+        ? { id: { notIn: desiredPhotoIds } }
+        : {}),
+    },
+    select: { id: true },
+  });
+  for (const photo of staleSelections) {
+    await reviewPhoto({
+      siteId: input.siteId,
+      photoId: photo.id,
+      actor: { id: input.actor, role: "operator" },
+      review: { action: "unselect" },
+    });
+  }
+
+  for (const result of ingested) {
+    await reviewPhoto({
+      siteId: input.siteId,
+      photoId: result.photoId,
+      actor: { id: input.actor, role: "operator" },
+      review: {
+        action:
+          result.photo.usage === "HERO" ? "select_hero" : "select_gallery",
+      },
+    });
+  }
+
+  const summary = {
+    selected: ingested.length,
+    ingested: ingested.filter((result) => result.outcome === "ingested").length,
+    deduplicated: ingested.filter(
+      (result) => result.outcome === "deduplicated",
+    ).length,
+  };
+  await getDb().auditEvent.create({
+    data: {
+      siteId: input.siteId,
+      type: "photo.reviewed-import.completed",
+      actor: input.actor,
+      metadata: { requested: photos.length, ...summary },
+    },
+  });
+  return summary;
 }
 
 async function ingestPhotoBytes(input: {
@@ -165,7 +272,11 @@ async function ingestPhotoBytes(input: {
   data: Uint8Array;
   claimedMediaType: string;
   actor: string;
-}): Promise<"ingested" | "deduplicated"> {
+  promoteDuplicateToApproved?: boolean;
+}): Promise<{
+  outcome: "ingested" | "deduplicated";
+  photoId: string;
+}> {
   let validatedImage: Awaited<ReturnType<typeof validatePhotoImageBytes>>;
   try {
     validatedImage = await validatePhotoImageBytes({
@@ -192,11 +303,18 @@ async function ingestPhotoBytes(input: {
         contentSha256: stored.sha256,
       },
     },
-    select: { id: true },
+    select: { id: true, candidateUsages: true },
   });
-  if (existing) return "deduplicated";
+  if (existing) {
+    await promoteOperatorReviewedDuplicate({
+      photoId: existing.id,
+      candidateUsages: existing.candidateUsages,
+      input,
+    });
+    return { outcome: "deduplicated", photoId: existing.id };
+  }
   try {
-    await db.$transaction(async (transaction) => {
+    const photoId = await db.$transaction(async (transaction) => {
       const photo = await transaction.photoAsset.create({
         data: {
           siteId: input.siteId,
@@ -233,14 +351,56 @@ async function ingestPhotoBytes(input: {
           },
         },
       });
+      return photo.id;
     });
-    return "ingested";
+    return { outcome: "ingested", photoId };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return "deduplicated";
+      const duplicate = await db.photoAsset.findUniqueOrThrow({
+        where: {
+          siteId_contentSha256: {
+            siteId: input.siteId,
+            contentSha256: stored.sha256,
+          },
+        },
+        select: { id: true, candidateUsages: true },
+      });
+      await promoteOperatorReviewedDuplicate({
+        photoId: duplicate.id,
+        candidateUsages: duplicate.candidateUsages,
+        input,
+      });
+      return { outcome: "deduplicated", photoId: duplicate.id };
     }
     throw error;
   }
+}
+
+async function promoteOperatorReviewedDuplicate(input: {
+  photoId: string;
+  candidateUsages: PhotoUsage[];
+  input: {
+    reviewStatus: "PENDING" | "APPROVED";
+    candidateUsages: PhotoUsage[];
+    actor: string;
+    promoteDuplicateToApproved?: boolean;
+  };
+}) {
+  if (!input.input.promoteDuplicateToApproved) return;
+  await getDb().photoAsset.update({
+    where: { id: input.photoId },
+    data: {
+      reviewStatus: "APPROVED",
+      reviewedAt: new Date(),
+      reviewedBy: input.input.actor,
+      candidateUsages: [
+        ...new Set([
+          ...input.candidateUsages,
+          ...input.input.candidateUsages,
+        ]),
+      ],
+    },
+  });
 }
 
 export async function getPhotoLibrary(siteId: string) {

@@ -10,6 +10,11 @@ import {
 } from "@/lib/site-persistence";
 import { resolveVerticalConfig } from "@/lib/verticals/registry";
 import type { VerticalId } from "@/lib/verticals/types";
+import {
+  ingestReviewedSitePhotos,
+  type ReviewedSitePhoto,
+} from "@/lib/photo-library";
+import { registeredSiteTheme } from "@/lib/site-themes/adapters";
 
 const reviewedDraftEnvelopeSchema = z.object({
   vertical: z.enum(Vertical),
@@ -32,6 +37,38 @@ export type ReviewedDraftBatchImport = {
   batch: string;
   imports: ReviewedDraftImport[];
 };
+
+export function reviewedDraftPhotoPlan(
+  draft: PersistableSiteDraft,
+): ReviewedSitePhoto[] {
+  if (!draft.sourceUrl) return [];
+  const hero = draft.heroOriginalImageUrl ?? draft.heroImageUrl;
+  return [
+    ...(hero
+      ? [
+          {
+            sourceUrl: hero,
+            sourcePageUrl: draft.sourceUrl,
+            usage: "HERO" as const,
+          },
+        ]
+      : []),
+    ...(draft.galleryImages ?? [])
+      .map((image) => ({
+        sourceUrl: image.originalUrl,
+        sourcePageUrl: draft.sourceUrl!,
+        usage: "GALLERY" as const,
+      }))
+      .filter((photo) => photo.sourceUrl !== hero),
+  ].filter(
+    (photo, index, photos) =>
+      photos.findIndex(
+        (candidate) =>
+          candidate.sourceUrl === photo.sourceUrl &&
+          candidate.usage === photo.usage,
+      ) === index,
+  );
+}
 
 export function parseReviewedDraftImport(input: unknown): ReviewedDraftImport {
   const envelope = reviewedDraftEnvelopeSchema.parse(input);
@@ -66,6 +103,13 @@ export function parseReviewedDraftBatchImport(
  */
 export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
   const source = input.draft.sourceUrl!;
+  const expectedTheme = registeredSiteTheme(
+    input.vertical,
+    input.draft.attributes,
+  );
+  if (!expectedTheme) {
+    throw new Error("A reviewed draft requires a scored vertical theme");
+  }
   const identity = buildOperatorImportIdentity(
     input.draft,
     source,
@@ -83,6 +127,17 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
       actor: "operator:reviewed-draft-import",
       requiredSlug: identity.slug,
     });
+    const photoPlan = reviewedDraftPhotoPlan(input.draft);
+    const photoImport = await ingestReviewedSitePhotos({
+      siteId: imported.siteId,
+      siteSlug: imported.draft.slug,
+      vertical: input.vertical,
+      photos: photoPlan,
+      actor: "reviewed-draft-import",
+    });
+    if (photoImport.selected !== photoPlan.length) {
+      throw new Error("The reviewed draft failed its photo verification");
+    }
     const db = getDb();
     const expectedItemCount = input.draft.catalogSections.reduce(
       (sum, section) => sum + section.items.length,
@@ -94,9 +149,21 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
         slug: true,
         sourceKey: true,
         status: true,
+        logoUrl: true,
+        heroImageUrl: true,
+        draftThemeVersion: true,
+        draftTheme: true,
+        defaultLocale: true,
         _count: { select: { catalogSections: true, integrations: true } },
         catalogSections: {
           select: { _count: { select: { items: true } } },
+        },
+        photos: {
+          where: {
+            reviewStatus: "APPROVED",
+            selectedUsage: { in: ["HERO", "GALLERY"] },
+          },
+          select: { selectedUsage: true },
         },
       },
     });
@@ -105,14 +172,31 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
         (sum, section) => sum + section._count.items,
         0,
       ) ?? -1;
+    const verifiedTheme = verified?.draftTheme as {
+      id?: unknown;
+      themeId?: unknown;
+      rendererVersion?: unknown;
+    } | null;
+    const verifiedPhotoUsages = verified?.photos.map(
+      (photo) => photo.selectedUsage,
+    );
     if (
       !verified ||
       verified.slug !== identity.slug ||
       verified.sourceKey !== identity.sourceKey ||
       verified.status !== "PREVIEW_READY" ||
+      verified.logoUrl !== input.draft.logoUrl ||
+      !verified.heroImageUrl ||
+      verified.draftThemeVersion !== expectedTheme.version ||
+      (verifiedTheme?.themeId ?? verifiedTheme?.id) !== expectedTheme.id ||
+      verified.defaultLocale !== input.draft.defaultLocale ||
       verified._count.catalogSections !== input.draft.catalogSections.length ||
       verifiedItemCount !== expectedItemCount ||
-      verified._count.integrations !== input.draft.integrations.length
+      verified._count.integrations !== input.draft.integrations.length ||
+      verifiedPhotoUsages?.filter((usage) => usage === "HERO").length !==
+        photoPlan.filter((photo) => photo.usage === "HERO").length ||
+      verifiedPhotoUsages?.filter((usage) => usage === "GALLERY").length !==
+        photoPlan.filter((photo) => photo.usage === "GALLERY").length
     ) {
       throw new Error("The reviewed draft failed its database verification");
     }
@@ -122,6 +206,7 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
       created: imported.created,
       urls: imported.urls,
       verified: true as const,
+      photoCount: photoImport.selected,
     };
   } catch (error) {
     await recordImportFailure(importJob.id, error);

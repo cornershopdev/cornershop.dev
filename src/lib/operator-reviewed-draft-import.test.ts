@@ -1,10 +1,14 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { Vertical } from "@/generated/prisma/enums";
 import { leadSiteDrafts } from "@/lib/lead-drafts";
-import {
+
+mock.module("server-only", () => ({}));
+
+const {
   parseReviewedDraftBatchImport,
   parseReviewedDraftImport,
-} from "@/lib/operator-reviewed-draft-import";
+  reviewedDraftPhotoPlan,
+} = await import("@/lib/operator-reviewed-draft-import");
 
 const approvedDraft = leadSiteDrafts["le-petit-meunier"];
 
@@ -18,6 +22,32 @@ describe("reviewed operator draft import", () => {
     expect(input.vertical).toBe(Vertical.RESTAURANT);
     expect(input.draft).toEqual(approvedDraft);
     expect(input.draft.slug).toBe("le-petit-meunier");
+  });
+
+  it("turns reviewed hero and gallery originals into official photo slots", () => {
+    const hero = "https://restaurant.example/hero.jpg";
+    const gallery = "https://restaurant.example/gallery.jpg";
+    expect(
+      reviewedDraftPhotoPlan({
+        ...approvedDraft,
+        heroImageUrl: hero,
+        heroOriginalImageUrl: hero,
+        galleryImages: [
+          { url: gallery, originalUrl: gallery, provenance: "official" },
+        ],
+      }),
+    ).toEqual([
+      {
+        sourceUrl: hero,
+        sourcePageUrl: approvedDraft.sourceUrl!,
+        usage: "HERO",
+      },
+      {
+        sourceUrl: gallery,
+        sourcePageUrl: approvedDraft.sourceUrl!,
+        usage: "GALLERY",
+      },
+    ]);
   });
 
   it("requires the public source that binds import identity", () => {
