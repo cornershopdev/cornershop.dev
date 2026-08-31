@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "feature": "restaurant-themes",
+  "route": "/themes/restaurant",
+  "actions": [
+    "Open the restaurant theme gallery.",
+    "Confirm all seven registered theme cards.",
+    "Open the first Theme details control.",
+    "Open the full Terroir Editorial website preview.",
+    "Follow Build a preview to the restaurant intake."
+  ],
+  "expected": [
+    "The browser reaches /themes/restaurant/terroir-editorial.",
+    "The Terroir Editorial heading is visible.",
+    "The full preview renders data-site-theme=terroir-editorial.",
+    "The browser reaches /create?vertical=restaurant."
+  ],
+  "skipped": [
+    "The duplicate gallery Full preview control is skipped after the same preview route is proved from theme detail."
+  ],
+  "observations": {
+    "galleryHeading": "The restaurant decides the theme.",
+    "themeCount": 7,
+    "selectedTheme": "Terroir Editorial",
+    "detailUrl": "http://127.0.0.1:3100/themes/restaurant/terroir-editorial",
+    "previewUrl": "http://127.0.0.1:3100/themes/restaurant/terroir-editorial/preview",
+    "previewTheme": "terroir-editorial",
+    "createUrl": "http://127.0.0.1:3100/create?vertical=restaurant",
+    "createField": "Restaurant website or name"
+  },
+  "screenshots": [
+    ".cursor/skills/verify-restofront/artifacts/2026-08-31T21-34-25-024Z/restaurant-themes.action.png",
+    ".cursor/skills/verify-restofront/artifacts/2026-08-31T21-34-25-024Z/restaurant-themes.result.png",
+    ".cursor/skills/verify-restofront/artifacts/2026-08-31T21-34-25-024Z/restaurant-themes.preview.png",
+    ".cursor/skills/verify-restofront/artifacts/2026-08-31T21-34-25-024Z/restaurant-themes.create.png"
+  ],
+  "buildId": "hdLO93zRSFBmGi6cM_9KV",
+  "gitHead": "e4bee9a1859a656e0639bf4c2926efc96304ab43",
+  "runId": "2026-08-31T21-34-25-024Z",
+  "generatedAt": "2026-08-31T21:34:28.528Z"
+}
