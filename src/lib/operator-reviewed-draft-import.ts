@@ -88,6 +88,14 @@ export function parseReviewedDraftBatchImport(
   const imports = batch.drafts.map((draft) =>
     parseReviewedDraftImport({ vertical: batch.vertical, draft }),
   );
+  if (
+    imports.some(
+      (entry) =>
+        !registeredSiteTheme(entry.vertical, entry.draft.attributes),
+    )
+  ) {
+    throw new Error("A reviewed draft batch requires scored vertical themes");
+  }
   const slugs = imports.map((entry) => entry.draft.slug);
   if (new Set(slugs).size !== slugs.length) {
     throw new Error("Reviewed draft slugs must be unique");
@@ -107,9 +115,6 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
     input.vertical,
     input.draft.attributes,
   );
-  if (!expectedTheme) {
-    throw new Error("A reviewed draft requires a scored vertical theme");
-  }
   const identity = buildOperatorImportIdentity(
     input.draft,
     source,
@@ -127,15 +132,20 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
       actor: "operator:reviewed-draft-import",
       requiredSlug: identity.slug,
     });
-    const photoPlan = reviewedDraftPhotoPlan(input.draft);
-    const photoImport = await ingestReviewedSitePhotos({
-      siteId: imported.siteId,
-      siteSlug: imported.draft.slug,
-      vertical: input.vertical,
-      photos: photoPlan,
-      actor: "reviewed-draft-import",
-    });
-    if (photoImport.selected !== photoPlan.length) {
+    // The authenticated batch boundary requires scored themes. Keep this
+    // lower-level primitive compatible with legacy atomicity callers while
+    // limiting immutable photo adoption to the new renderer contract.
+    const photoPlan = expectedTheme ? reviewedDraftPhotoPlan(input.draft) : [];
+    const photoImport = expectedTheme
+      ? await ingestReviewedSitePhotos({
+          siteId: imported.siteId,
+          siteSlug: imported.draft.slug,
+          vertical: input.vertical,
+          photos: photoPlan,
+          actor: "reviewed-draft-import",
+        })
+      : { selected: 0, ingested: 0, deduplicated: 0 };
+    if (expectedTheme && photoImport.selected !== photoPlan.length) {
       throw new Error("The reviewed draft failed its photo verification");
     }
     const db = getDb();
@@ -186,17 +196,19 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
       verified.sourceKey !== identity.sourceKey ||
       verified.status !== "PREVIEW_READY" ||
       verified.logoUrl !== input.draft.logoUrl ||
-      !verified.heroImageUrl ||
-      verified.draftThemeVersion !== expectedTheme.version ||
-      (verifiedTheme?.themeId ?? verifiedTheme?.id) !== expectedTheme.id ||
+      (Boolean(input.draft.heroImageUrl) && !verified.heroImageUrl) ||
+      (expectedTheme &&
+        (verified.draftThemeVersion !== expectedTheme.version ||
+          (verifiedTheme?.themeId ?? verifiedTheme?.id) !== expectedTheme.id)) ||
       verified.defaultLocale !== input.draft.defaultLocale ||
       verified._count.catalogSections !== input.draft.catalogSections.length ||
       verifiedItemCount !== expectedItemCount ||
       verified._count.integrations !== input.draft.integrations.length ||
-      verifiedPhotoUsages?.filter((usage) => usage === "HERO").length !==
-        photoPlan.filter((photo) => photo.usage === "HERO").length ||
-      verifiedPhotoUsages?.filter((usage) => usage === "GALLERY").length !==
-        photoPlan.filter((photo) => photo.usage === "GALLERY").length
+      (expectedTheme &&
+        (verifiedPhotoUsages?.filter((usage) => usage === "HERO").length !==
+          photoPlan.filter((photo) => photo.usage === "HERO").length ||
+          verifiedPhotoUsages?.filter((usage) => usage === "GALLERY").length !==
+            photoPlan.filter((photo) => photo.usage === "GALLERY").length))
     ) {
       throw new Error("The reviewed draft failed its database verification");
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Vertical } from "@/generated/prisma/enums";
 import { leadSiteDrafts } from "@/lib/lead-drafts";
+import { restoreAutomaticRestaurantTheme } from "@/lib/site-themes/restaurant/selection";
 
 mock.module("server-only", () => ({}));
 
@@ -11,6 +12,15 @@ const {
 } = await import("@/lib/operator-reviewed-draft-import");
 
 const approvedDraft = leadSiteDrafts["le-petit-meunier"];
+const scoredApprovedDraft = {
+  ...approvedDraft,
+  attributes: {
+    ...approvedDraft.attributes,
+    themeSelection: restoreAutomaticRestaurantTheme(
+      approvedDraft.attributes.designProfile,
+    ),
+  },
+};
 
 describe("reviewed operator draft import", () => {
   it("accepts an exact vertical draft without changing private content", () => {
@@ -74,8 +84,12 @@ describe("reviewed operator draft import", () => {
       locked: true,
       vertical: Vertical.RESTAURANT,
       drafts: [
-        approvedDraft,
-        { ...approvedDraft, slug: "second", sourceUrl: "https://second.example" },
+        scoredApprovedDraft,
+        {
+          ...scoredApprovedDraft,
+          slug: "second",
+          sourceUrl: "https://second.example",
+        },
       ],
     });
 
@@ -97,10 +111,18 @@ describe("reviewed operator draft import", () => {
     ).toThrow();
     expect(() =>
       parseReviewedDraftBatchImport({
+        batch: "unscored",
+        locked: true,
+        vertical: Vertical.RESTAURANT,
+        drafts: [approvedDraft],
+      }),
+    ).toThrow("requires scored vertical themes");
+    expect(() =>
+      parseReviewedDraftBatchImport({
         batch: "duplicate",
         locked: true,
         vertical: Vertical.RESTAURANT,
-        drafts: [approvedDraft, approvedDraft],
+        drafts: [scoredApprovedDraft, scoredApprovedDraft],
       }),
     ).toThrow("must be unique");
   });
