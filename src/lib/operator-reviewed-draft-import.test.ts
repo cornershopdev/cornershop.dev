@@ -1,12 +1,26 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { Vertical } from "@/generated/prisma/enums";
 import { leadSiteDrafts } from "@/lib/lead-drafts";
-import {
+import { restoreAutomaticRestaurantTheme } from "@/lib/site-themes/restaurant/selection";
+
+mock.module("server-only", () => ({}));
+
+const {
   parseReviewedDraftBatchImport,
   parseReviewedDraftImport,
-} from "@/lib/operator-reviewed-draft-import";
+  reviewedDraftPhotoPlan,
+} = await import("@/lib/operator-reviewed-draft-import");
 
 const approvedDraft = leadSiteDrafts["le-petit-meunier"];
+const scoredApprovedDraft = {
+  ...approvedDraft,
+  attributes: {
+    ...approvedDraft.attributes,
+    themeSelection: restoreAutomaticRestaurantTheme(
+      approvedDraft.attributes.designProfile,
+    ),
+  },
+};
 
 describe("reviewed operator draft import", () => {
   it("accepts an exact vertical draft without changing private content", () => {
@@ -18,6 +32,32 @@ describe("reviewed operator draft import", () => {
     expect(input.vertical).toBe(Vertical.RESTAURANT);
     expect(input.draft).toEqual(approvedDraft);
     expect(input.draft.slug).toBe("le-petit-meunier");
+  });
+
+  it("turns reviewed hero and gallery originals into official photo slots", () => {
+    const hero = "https://restaurant.example/hero.jpg";
+    const gallery = "https://restaurant.example/gallery.jpg";
+    expect(
+      reviewedDraftPhotoPlan({
+        ...approvedDraft,
+        heroImageUrl: hero,
+        heroOriginalImageUrl: hero,
+        galleryImages: [
+          { url: gallery, originalUrl: gallery, provenance: "official" },
+        ],
+      }),
+    ).toEqual([
+      {
+        sourceUrl: hero,
+        sourcePageUrl: approvedDraft.sourceUrl!,
+        usage: "HERO",
+      },
+      {
+        sourceUrl: gallery,
+        sourcePageUrl: approvedDraft.sourceUrl!,
+        usage: "GALLERY",
+      },
+    ]);
   });
 
   it("requires the public source that binds import identity", () => {
@@ -44,8 +84,12 @@ describe("reviewed operator draft import", () => {
       locked: true,
       vertical: Vertical.RESTAURANT,
       drafts: [
-        approvedDraft,
-        { ...approvedDraft, slug: "second", sourceUrl: "https://second.example" },
+        scoredApprovedDraft,
+        {
+          ...scoredApprovedDraft,
+          slug: "second",
+          sourceUrl: "https://second.example",
+        },
       ],
     });
 
@@ -67,10 +111,18 @@ describe("reviewed operator draft import", () => {
     ).toThrow();
     expect(() =>
       parseReviewedDraftBatchImport({
+        batch: "unscored",
+        locked: true,
+        vertical: Vertical.RESTAURANT,
+        drafts: [approvedDraft],
+      }),
+    ).toThrow("requires scored vertical themes");
+    expect(() =>
+      parseReviewedDraftBatchImport({
         batch: "duplicate",
         locked: true,
         vertical: Vertical.RESTAURANT,
-        drafts: [approvedDraft, approvedDraft],
+        drafts: [scoredApprovedDraft, scoredApprovedDraft],
       }),
     ).toThrow("must be unique");
   });
