@@ -127,9 +127,16 @@ bun run operator:import:reviewed-drafts -- \
 ```
 
 The first command validates and prints only slugs. Execute requires
-`OPERATOR_LEAD_INGEST_TOKEN`, imports each exact draft over HTTPS, then requires
-its returned slug/database verification and a live `200` preview before moving
-to the next row. The command never sends outreach.
+`OPERATOR_LEAD_INGEST_TOKEN`. Before the API request, the operator machine
+downloads selected Google Sites `/sitesv/` hero and gallery images. The command
+sends those bytes in the authenticated request. The same URLs return `200` from
+Studio but Google returns `403` to the production AWS address with importer,
+default, or browser headers, with and without the source Referer. The API caps
+the request at 28 MB, verifies that each transferred URL belongs to a selected
+draft slot, validates the image bytes, and stores the original URL as
+provenance. Other image hosts still use the server's DNS-pinned fetch path. The
+command then requires the returned slug/database verification and a live `200`
+preview for every row. It never sends outreach.
 
 Store the exact legal controller at
 `/shipshit/production/cornershopdev/OUTREACH_LEGAL_CONTROLLER`. Deployment

@@ -21,6 +21,8 @@ const scoredApprovedDraft = {
     ),
   },
 };
+const googleHero =
+  "https://lh3.googleusercontent.com/sitesv/refreshed-hero-token=w1280";
 
 describe("reviewed operator draft import", () => {
   it("accepts an exact vertical draft without changing private content", () => {
@@ -97,6 +99,45 @@ describe("reviewed operator draft import", () => {
     expect(batch.imports.map((entry) => entry.draft.slug)).toEqual([
       "le-petit-meunier",
       "second",
+    ]);
+  });
+
+  it("requires and decodes transferred Google Sites photo bytes", () => {
+    const draft = {
+      ...scoredApprovedDraft,
+      heroImageUrl: googleHero,
+      heroOriginalImageUrl: googleHero,
+      galleryImages: [],
+    };
+    expect(() =>
+      parseReviewedDraftBatchImport({
+        batch: "missing-google-transfer",
+        locked: true,
+        vertical: Vertical.RESTAURANT,
+        drafts: [draft],
+      }),
+    ).toThrow("must be transferred by the operator client");
+
+    const batch = parseReviewedDraftBatchImport({
+      batch: "transferred-google-photo",
+      locked: true,
+      vertical: Vertical.RESTAURANT,
+      drafts: [draft],
+      photoTransfers: [
+        {
+          sourceUrl: googleHero,
+          mediaType: "image/png",
+          dataBase64: "iVBORw==",
+        },
+      ],
+    });
+
+    expect(batch.imports[0]?.transferredPhotos).toEqual([
+      {
+        sourceUrl: googleHero,
+        mediaType: "image/png",
+        data: Uint8Array.from([0x89, 0x50, 0x4e, 0x47]),
+      },
     ]);
   });
 
