@@ -5,7 +5,12 @@ import {
   parseReviewedDraftBatchImport,
 } from "@/lib/operator-reviewed-draft-import";
 import { isOperatorLeadIngestAuthorized } from "@/lib/operator-lead-ingest-auth";
+import {
+  PhotoUploadBodyError,
+  readBoundedRequestBody,
+} from "@/lib/photo-upload-body";
 import { limitOperatorLeadIngest } from "@/lib/rate-limit";
+import { MAX_REVIEWED_DRAFT_IMPORT_BODY_BYTES } from "@/lib/reviewed-photo-transfer";
 import {
   ImportConflictError,
   OperatorImportConflictError,
@@ -41,16 +46,34 @@ export async function POST(request: Request) {
   }
 
   try {
-    const input = parseReviewedDraftBatchImport(await request.json());
+    const body = await readBoundedRequestBody(
+      request,
+      MAX_REVIEWED_DRAFT_IMPORT_BODY_BYTES,
+      "The reviewed draft import is larger than 28 MB",
+    );
+    const input = parseReviewedDraftBatchImport(
+      JSON.parse(new TextDecoder().decode(body)),
+    );
     const imported = await importReviewedOperatorDraftBatch(input);
     return NextResponse.json(
       { ok: true, ...imported },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof PhotoUploadBodyError) {
       return NextResponse.json(
-        { error: error.issues[0]?.message ?? "Check the reviewed draft." },
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof z.ZodError
+              ? (error.issues[0]?.message ?? "Check the reviewed draft.")
+              : "Check the reviewed draft.",
+        },
         { status: 400 },
       );
     }

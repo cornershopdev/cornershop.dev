@@ -1,9 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fetchPublicImage } from "@/lib/importer";
 import {
   reviewedRestaurantPreviewExpectation,
   verifyReviewedRestaurantPreview,
 } from "@/lib/reviewed-restaurant-preview";
+import {
+  buildReviewedGoogleSitesPhotoTransfers,
+} from "@/lib/reviewed-photo-transfer";
 
 type ReviewedDraft = {
   slug?: unknown;
@@ -51,6 +55,10 @@ async function main() {
   if (!token) {
     throw new Error("OPERATOR_LEAD_INGEST_TOKEN is required with --execute");
   }
+  const photoTransfers = await buildReviewedGoogleSitesPhotoTransfers({
+    drafts: batch.drafts,
+    fetchImage: fetchPublicImage,
+  });
   const response = await fetch(
     `${cli.apiUrl}/api/admin/leads/reviewed-draft`,
     {
@@ -64,6 +72,7 @@ async function main() {
         locked: true,
         vertical: batch.vertical,
         drafts: batch.drafts,
+        photoTransfers,
       }),
     },
   );

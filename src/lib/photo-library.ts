@@ -160,7 +160,18 @@ export type ReviewedSitePhoto = {
   sourceUrl: string;
   sourcePageUrl: string;
   usage: "HERO" | "GALLERY";
+  transferred?: {
+    data: Uint8Array;
+    mediaType: string;
+  };
 };
+
+export async function resolveReviewedSitePhoto(
+  photo: ReviewedSitePhoto,
+  fetchImage: typeof fetchPublicImage = fetchPublicImage,
+): Promise<{ data: Uint8Array; mediaType: string }> {
+  return photo.transferred ?? fetchImage(photo.sourceUrl);
+}
 
 /**
  * Copies an operator-reviewed first-party photo into immutable storage, marks
@@ -181,7 +192,7 @@ export async function ingestReviewedSitePhotos(input: {
     photos,
     config.ingestConcurrency,
     async (photo) => {
-      const fetched = await fetchPublicImage(photo.sourceUrl);
+      const fetched = await resolveReviewedSitePhoto(photo);
       const result = await ingestPhotoBytes({
         siteId: input.siteId,
         siteSlug: input.siteSlug,

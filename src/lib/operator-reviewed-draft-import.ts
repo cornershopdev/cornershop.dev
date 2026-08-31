@@ -14,6 +14,11 @@ import {
   ingestReviewedSitePhotos,
   type ReviewedSitePhoto,
 } from "@/lib/photo-library";
+import {
+  isGoogleSitesPhotoUrl,
+  MAX_REVIEWED_PHOTO_TRANSFER_BYTES,
+  MAX_REVIEWED_PHOTO_TRANSFER_TOTAL_BYTES,
+} from "@/lib/reviewed-photo-transfer";
 import { registeredSiteTheme } from "@/lib/site-themes/adapters";
 
 const reviewedDraftEnvelopeSchema = z.object({
@@ -26,11 +31,40 @@ const reviewedDraftBatchSchema = z.object({
   locked: z.literal(true),
   vertical: z.enum(Vertical),
   drafts: z.array(z.unknown()).min(1).max(20),
+  photoTransfers: z
+    .array(
+      z.object({
+        sourceUrl: z
+          .url()
+          .refine(
+            isGoogleSitesPhotoUrl,
+            "Only reviewed Google Sites photos may be transferred",
+          ),
+        mediaType: z.enum([
+          "image/avif",
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+        ]),
+        dataBase64: z
+          .base64()
+          .max(Math.ceil((MAX_REVIEWED_PHOTO_TRANSFER_BYTES * 4) / 3) + 4),
+      }),
+    )
+    .max(160)
+    .default([]),
 });
+
+type TransferredReviewedPhoto = {
+  sourceUrl: string;
+  mediaType: "image/avif" | "image/jpeg" | "image/png" | "image/webp";
+  data: Uint8Array;
+};
 
 export type ReviewedDraftImport = {
   vertical: VerticalId;
   draft: PersistableSiteDraft;
+  transferredPhotos?: TransferredReviewedPhoto[];
 };
 
 export type ReviewedDraftBatchImport = {
@@ -100,7 +134,51 @@ export function parseReviewedDraftBatchImport(
   if (new Set(slugs).size !== slugs.length) {
     throw new Error("Reviewed draft slugs must be unique");
   }
-  return { batch: batch.batch, imports };
+  const photoUrls = new Set(
+    imports.flatMap((entry) =>
+      reviewedDraftPhotoPlan(entry.draft).map((photo) => photo.sourceUrl),
+    ),
+  );
+  const transferredPhotos = batch.photoTransfers.map((transfer) => ({
+    sourceUrl: transfer.sourceUrl,
+    mediaType: transfer.mediaType,
+    data: new Uint8Array(Buffer.from(transfer.dataBase64, "base64")),
+  }));
+  const transferredUrls = transferredPhotos.map((photo) => photo.sourceUrl);
+  if (new Set(transferredUrls).size !== transferredUrls.length) {
+    throw new Error("Transferred reviewed photo URLs must be unique");
+  }
+  if (transferredPhotos.some((photo) => !photoUrls.has(photo.sourceUrl))) {
+    throw new Error("A transferred photo is not selected by the reviewed draft");
+  }
+  if (
+    transferredPhotos.some(
+      (photo) => photo.data.byteLength > MAX_REVIEWED_PHOTO_TRANSFER_BYTES,
+    ) ||
+    transferredPhotos.reduce((total, photo) => total + photo.data.byteLength, 0) >
+      MAX_REVIEWED_PHOTO_TRANSFER_TOTAL_BYTES
+  ) {
+    throw new Error("Transferred reviewed photos exceed the import size limit");
+  }
+  const missingGoogleSitesPhoto = [...photoUrls].find(
+    (url) => isGoogleSitesPhotoUrl(url) && !transferredUrls.includes(url),
+  );
+  if (missingGoogleSitesPhoto) {
+    throw new Error(
+      "Reviewed Google Sites photos must be transferred by the operator client",
+    );
+  }
+  return {
+    batch: batch.batch,
+    imports: imports.map((entry) => ({
+      ...entry,
+      transferredPhotos: transferredPhotos.filter((photo) =>
+        reviewedDraftPhotoPlan(entry.draft).some(
+          (planned) => planned.sourceUrl === photo.sourceUrl,
+        ),
+      ),
+    })),
+  };
 }
 
 /**
@@ -135,7 +213,15 @@ export async function importReviewedOperatorDraft(input: ReviewedDraftImport) {
     // The authenticated batch boundary requires scored themes. Keep this
     // lower-level primitive compatible with legacy atomicity callers while
     // limiting immutable photo adoption to the new renderer contract.
-    const photoPlan = expectedTheme ? reviewedDraftPhotoPlan(input.draft) : [];
+    const transferredPhotos = new Map(
+      (input.transferredPhotos ?? []).map((photo) => [photo.sourceUrl, photo]),
+    );
+    const photoPlan = expectedTheme
+      ? reviewedDraftPhotoPlan(input.draft).map((photo) => ({
+          ...photo,
+          transferred: transferredPhotos.get(photo.sourceUrl),
+        }))
+      : [];
     const photoImport = expectedTheme
       ? await ingestReviewedSitePhotos({
           siteId: imported.siteId,
