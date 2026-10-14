@@ -283,6 +283,18 @@ qualification, and 30-day decision record for the first paid restaurant are in
 [`docs/operations/first-customer-validation.md`](docs/operations/first-customer-validation.md).
 The read-only production evidence command and its fail-closed manifest are in
 [`docs/operations/first-customer-production-exercise.md`](docs/operations/first-customer-production-exercise.md).
+The private operator MCP and daily brief are in
+[`docs/operations/autonomous-operator.md`](docs/operations/autonomous-operator.md).
+Both commands stay on the operator machine:
+
+```bash
+bun run operator:daily-brief
+bun run operator:mcp
+bun run operator:prepare-lead -- --source https://example.com --vertical restaurant --city Valletta
+```
+
+`operator:prepare-lead` writes a private preview only with `--execute` against
+a loopback database. It cannot send a claim email.
 The bearer-authenticated `/api/health/ready` route verifies PostgreSQL, Redis,
 Amazon S3, billing, and the operator-alert outbox without returning secret
 values. Each application
