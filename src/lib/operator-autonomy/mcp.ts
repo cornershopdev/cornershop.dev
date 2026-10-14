@@ -7,6 +7,10 @@ import {
 import { redactOperatorValue } from "@/lib/operator-autonomy/redact";
 import { loadOperatorAutonomySnapshot } from "@/lib/operator-autonomy/snapshot";
 import { buildDailyBrief } from "@/lib/operator-autonomy/brief";
+import {
+  assessSiteLeadDelivery,
+  summarizeLeadDelivery,
+} from "@/lib/operator-autonomy/lead-delivery";
 import type { OperatorAutonomySnapshot } from "@/lib/operator-autonomy/types";
 import { getDb } from "@/lib/db";
 
@@ -89,6 +93,25 @@ export function createOperatorMcpServer(options?: {
           throw new OperatorWindowMiss();
         }
         return site;
+      }),
+  );
+
+  server.registerTool(
+    "read_lead_delivery",
+    {
+      title: "Read lead delivery",
+      description:
+        "Read whether a private website preview can be prepared, and why a claim email stays blocked. Read-only. Does not generate a site, send mail, publish, charge, or change DNS.",
+      inputSchema: slugSchema,
+      annotations: READ_ONLY,
+    },
+    async ({ slug }) =>
+      guarded(async () => {
+        const snapshot = await loadSnapshot();
+        if (!slug) return summarizeLeadDelivery(snapshot.sites);
+        const site = snapshot.sites.find((candidate) => candidate.slug === slug);
+        if (!site) throw new OperatorWindowMiss();
+        return assessSiteLeadDelivery(site);
       }),
   );
 

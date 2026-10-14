@@ -9,13 +9,14 @@ healthcheck, ingest, auth, Stripe, and Resend secrets. The token is an
 operator-machine gate. It is not part of the public app and it is not a
 required production container variable.
 
-The server exposes three tools:
+The server exposes four tools:
 
 | Tool | Result |
 | --- | --- |
 | `read_operating_contract` | Launch stays blocked. Lists what the agent may do and the actions that do not exist. |
-| `read_daily_brief` | Portfolio counts, analytics windows, alert and outreach posture, vertical launch state, and human attention. |
+| `read_daily_brief` | Portfolio counts, analytics windows, alert and outreach posture, vertical launch state, lead delivery, and human attention. |
 | `read_site_operations` | One slug, or the bounded site list. |
+| `read_lead_delivery` | Whether a private preview can be prepared, and why claim email stays blocked. |
 
 Every tool is read-only. The server does not register a tool that sends
 outreach, issues a claim invitation, publishes or rolls back a site, creates a
@@ -30,8 +31,23 @@ redaction pass as the rest of the payload. A read failure returns
 
 ## What the agent may do
 
-Read the contract and the brief. Open a pull request for a defect in this
-repository. Report the brief and the human gates.
+Read the contract, the brief, and lead delivery. Open a pull request for a
+defect in this repository. Report the brief and the human gates.
+
+## Private preview
+
+`bun run operator:prepare-lead` plans a private website for one public source.
+It does not send mail. Add `--execute` only when `DATABASE_URL` and
+`NEXT_PUBLIC_APP_URL` (if set) point at a loopback host. A production target
+is refused. `--send` is refused. The command leaves eligibility unknown, does
+not issue a claim invitation, and does not store unreviewed source photos.
+
+```bash
+bun run operator:prepare-lead -- \
+  --source https://example.com \
+  --vertical restaurant \
+  --city Valletta
+```
 
 ## What stays human
 

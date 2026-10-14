@@ -35,6 +35,7 @@
     "operator:article-rollout": "bun scripts/article-rollout.ts",
     "operator:daily-brief": "bun scripts/operator-daily-brief.ts",
     "operator:mcp": "bun scripts/operator-mcp.ts",
+    "operator:prepare-lead": "bun scripts/operator-prepare-lead.ts",
     "workflow:migrate": "bun node_modules/@workflow/world-postgres/bin/setup.js",
     "postinstall": "bunx --bun prisma generate",
     "operator:import:servizo": "bun scripts/import-servizo.ts",

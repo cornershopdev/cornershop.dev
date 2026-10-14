@@ -137,8 +137,11 @@ describe("daily brief", () => {
     expect(encoded).toContain("[redacted-email]");
     expect(encoded).toContain("[redacted-secret]");
     expect(encoded).toContain("[redacted-url]");
+    expect(brief.leadDelivery.email.status).toBe("blocked");
+    expect(brief.leadDelivery.preview.command).toBe("operator:prepare-lead");
     expect(brief.attention.map((item) => item.code)).toEqual([
       "launch-blocked",
+      "lead-email-blocked",
       "alerts-exhausted",
       "outreach-not-paused",
       "import-failed",

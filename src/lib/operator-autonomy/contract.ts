@@ -2,6 +2,7 @@ export const OPERATOR_MCP_TOOLS = [
   "read_operating_contract",
   "read_daily_brief",
   "read_site_operations",
+  "read_lead_delivery",
 ] as const;
 
 export type OperatorMcpTool = (typeof OPERATOR_MCP_TOOLS)[number];
@@ -19,6 +20,7 @@ export const FORBIDDEN_OPERATOR_ACTIONS = [
 
 export const OPERATOR_AGENT_MAY = [
   "Read the operating contract, the daily brief, and redacted site operations.",
+  "Read whether a private preview can be prepared and why claim email stays blocked.",
   "Open a pull request for a defect in this repository.",
   "Report the brief and the human gates to the operator.",
 ] as const;

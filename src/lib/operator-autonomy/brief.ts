@@ -13,6 +13,10 @@ import {
   OPERATOR_HUMAN_GATES,
 } from "@/lib/operator-autonomy/contract";
 import {
+  summarizeLeadDelivery,
+  type LeadDeliveryAssessment,
+} from "@/lib/operator-autonomy/lead-delivery";
+import {
   BRIEF_SITE_LIMIT,
   type AttentionItem,
   type OperatorAutonomySnapshot,
@@ -44,6 +48,10 @@ export type DailyBrief = {
   alerts: OperatorAutonomySnapshot["alerts"];
   outreach: OperatorAutonomySnapshot["outreach"];
   content: OperatorAutonomySnapshot["content"];
+  leadDelivery: LeadDeliveryAssessment & {
+    sitesInWindow: number;
+    previewsGenerated: number;
+  };
   attention: AttentionItem[];
   sites: OperatorSiteView[];
   omittedSiteCount: number;
@@ -80,6 +88,7 @@ export function buildDailyBrief(
     alerts: snapshot.alerts,
     outreach: snapshot.outreach,
     content: snapshot.content,
+    leadDelivery: summarizeLeadDelivery(snapshot.sites),
     attention: buildAttention(snapshot),
     sites,
     omittedSiteCount: Math.max(0, snapshot.sites.length - sites.length),
@@ -93,6 +102,13 @@ function buildAttention(snapshot: OperatorAutonomySnapshot): AttentionItem[] {
       code: "launch-blocked",
       summary:
         "Autonomous launch stays blocked until the operator records the one-city concierge test.",
+      slugs: [],
+    },
+    {
+      severity: "info",
+      code: "lead-email-blocked",
+      summary:
+        "Claim email stays blocked. operator:prepare-lead can generate a private preview on a loopback database and does not send mail.",
       slugs: [],
     },
   ];

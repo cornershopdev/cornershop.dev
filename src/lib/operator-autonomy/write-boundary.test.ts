@@ -6,6 +6,7 @@ const files = [
   "access.ts",
   "brief.ts",
   "contract.ts",
+  "lead-delivery.ts",
   "mcp.ts",
   "redact.ts",
   "snapshot.ts",

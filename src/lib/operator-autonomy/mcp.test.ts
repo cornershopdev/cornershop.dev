@@ -129,8 +129,29 @@ describe("operator MCP server", () => {
     expect(contractBody.launch.status).toBe("blocked");
     expect(contractBody.tools).toEqual([...OPERATOR_MCP_TOOLS]);
     expect(briefBody.launch.status).toBe("blocked");
+    expect(briefBody.leadDelivery.email.status).toBe("blocked");
     expect(briefBody.sites).toHaveLength(BRIEF_SITE_LIMIT);
     expect(JSON.stringify(briefBody)).not.toContain("ada@example.com");
+
+    const delivery = await client.callTool({ name: "read_lead_delivery" });
+    const deliveryBody = JSON.parse(textOf(delivery));
+    expect(deliveryBody.email.status).toBe("blocked");
+    expect(deliveryBody.preview.status).toBe("ready");
+    const siteDelivery = await client.callTool({
+      name: "read_lead_delivery",
+      arguments: { slug: "site-0" },
+    });
+    expect(JSON.parse(textOf(siteDelivery))).toMatchObject({
+      slug: "site-0",
+      previewGenerated: true,
+      email: "blocked",
+    });
+    const missingDelivery = await client.callTool({
+      name: "read_lead_delivery",
+      arguments: { slug: "missing-site" },
+    });
+    expect(missingDelivery.isError).toBe(true);
+    expect(textOf(missingDelivery)).toBe("site_not_in_operator_window");
     expect(buildDailyBrief(snapshot()).launch.status).toBe("blocked");
 
     const hidden = await client.callTool({
