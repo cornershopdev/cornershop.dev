@@ -5,6 +5,7 @@ import type { AnalyticsEventType } from "@/generated/prisma/enums";
 import {
   ANALYTICS_WINDOWS,
   buildAnalyticsWindowDto,
+  LIVE_BOOKING_REQUEST_SOURCE,
   type AnalyticsEventInput,
   type AnalyticsSummaryDto,
   type SiteAnalyticsRowDto,
@@ -19,7 +20,7 @@ import { getDb } from "@/lib/db";
 import { hasPublicPublishedSnapshot } from "@/lib/domain-routing";
 import { isFactoryHostname, parsePlatformSubdomain } from "@/lib/hostnames";
 
-export const LIVE_BOOKING_REQUEST_SOURCE = "live-site-form";
+export { LIVE_BOOKING_REQUEST_SOURCE };
 
 export type { AnalyticsSummaryDto, SiteAnalyticsRowDto };
 

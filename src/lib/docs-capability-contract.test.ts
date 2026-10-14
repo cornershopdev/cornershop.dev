@@ -35,6 +35,7 @@ const DOC_FILES = [
   "README.md",
   "docs/verticals/food-retail.md",
   "docs/verticals/local-service.md",
+  "docs/operations/autonomous-operator.md",
 ] as const;
 
 const GUIDE_VERTICAL: Record<
@@ -56,11 +57,12 @@ type MarkdownTable = {
   rows: string[][];
 };
 
-const [readme, foodRetailGuide, localServiceGuide, packageJson] =
+const [readme, foodRetailGuide, localServiceGuide, autonomousOperator, packageJson] =
   await Promise.all([
     readRepoFile("README.md"),
     readRepoFile("docs/verticals/food-retail.md"),
     readRepoFile("docs/verticals/local-service.md"),
+    readRepoFile("docs/operations/autonomous-operator.md"),
     readRepoJson("package.json"),
   ]);
 
@@ -68,6 +70,7 @@ const docsByPath = {
   "README.md": readme,
   "docs/verticals/food-retail.md": foodRetailGuide,
   "docs/verticals/local-service.md": localServiceGuide,
+  "docs/operations/autonomous-operator.md": autonomousOperator,
 } as const;
 
 describe("documented vertical capabilities", () => {
