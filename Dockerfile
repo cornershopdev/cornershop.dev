@@ -17,7 +17,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG DATABASE_URL=postgresql://build:build@127.0.0.1:5432/cornershopdev_build
 ENV DATABASE_URL=$DATABASE_URL
 COPY package.json bun.lock ./
-COPY patches ./patches
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN bun install --frozen-lockfile
@@ -104,7 +103,7 @@ ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_EXTRA_CA_CERTS=/app/certs/aws-rds-global-bundle.pem
 
-ADD --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
+ADD --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b \
   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   /app/certs/aws-rds-global-bundle.pem
 RUN chmod 0444 /app/certs/aws-rds-global-bundle.pem

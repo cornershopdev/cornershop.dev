@@ -283,6 +283,18 @@ qualification, and 30-day decision record for the first paid restaurant are in
 [`docs/operations/first-customer-validation.md`](docs/operations/first-customer-validation.md).
 The read-only production evidence command and its fail-closed manifest are in
 [`docs/operations/first-customer-production-exercise.md`](docs/operations/first-customer-production-exercise.md).
+The private operator MCP and daily brief are in
+[`docs/operations/autonomous-operator.md`](docs/operations/autonomous-operator.md).
+Both commands stay on the operator machine:
+
+```bash
+bun run operator:daily-brief
+bun run operator:mcp
+bun run operator:prepare-lead -- --source https://example.com --vertical restaurant --city Valletta
+```
+
+`operator:prepare-lead` writes a private preview only with `--execute` against
+a loopback database. It cannot send a claim email.
 The bearer-authenticated `/api/health/ready` route verifies PostgreSQL, Redis,
 Amazon S3, billing, and the operator-alert outbox without returning secret
 values. Each application
@@ -544,8 +556,9 @@ the production Next.js build and server.
 transport retries and writes `bun-audit.json` plus `bun-audit-verdict.json`.
 A registry outage is a failed, unavailable audit, never a clean result.
 
-The September 6 security refresh pins compatible transitive resolutions:
-`fast-uri` 3.1.7, `mysql2` 3.24.3, and `qs` 6.16.0. Prisma pins an older MySQL
-driver, so the override remains until upstream removes that vulnerable edge.
-The existing Workflow Nano ID and Undici manifest patches remain required;
-dependency updates must pass their runtime contract before merging.
+Overrides pin compatible transitive resolutions where upstream still lags:
+`fast-uri` 3.1.9, `mysql2` 3.24.3 (Prisma pins an older MySQL driver),
+`deepmerge-ts` 8.0.0, `devalue` 5.9.4, and range-scoped `minimatch@^10` and
+`zod@<4.6.6` lifts. Workflow 5 removed the Nano ID and Undici manifest patches.
+Dependency updates must pass the runtime contract in
+`src/lib/dependency-security-contract.test.ts` before merging.

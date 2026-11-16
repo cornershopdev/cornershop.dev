@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const ANALYTICS_WINDOWS = [7, 30, 90] as const;
 
+/** Booking requests counted as live-site leads. Shared with the operator brief. */
+export const LIVE_BOOKING_REQUEST_SOURCE = "live-site-form";
+
 export type AnalyticsWindowDays = (typeof ANALYTICS_WINDOWS)[number];
 
 /**

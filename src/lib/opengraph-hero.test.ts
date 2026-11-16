@@ -12,8 +12,8 @@ describe("Open Graph remote hero boundary", () => {
       new URL("../../node_modules/sharp/package.json", import.meta.url),
     ).json();
 
-    expect(sharpPackage.version).toBe("0.35.4");
-    expect(sharp.versions.vips).toBe("8.18.6");
+    expect(sharpPackage.version).toBe("0.35.5");
+    expect(sharp.versions.vips).toBe("8.18.7");
   });
 
   it("routes the metadata image through the bounded public-image fetcher", async () => {

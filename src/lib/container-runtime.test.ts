@@ -26,14 +26,14 @@ describe("production container runtime", () => {
     );
     expect(dockerfile).toContain("FROM node-toolchain AS dependencies");
     expect(dockerfile).toContain("FROM node-toolchain AS runner");
-    const patchCopy = dockerfile.indexOf("COPY patches ./patches");
+    const manifestCopy = dockerfile.indexOf("COPY package.json bun.lock ./");
     const frozenInstall = dockerfile.indexOf(
       "RUN bun install --frozen-lockfile",
     );
-    expect(patchCopy).toBeGreaterThan(
-      dockerfile.indexOf("COPY package.json bun.lock ./"),
-    );
-    expect(patchCopy).toBeLessThan(frozenInstall);
+    expect(manifestCopy).toBeGreaterThan(-1);
+    expect(manifestCopy).toBeLessThan(frozenInstall);
+    // Workflow 5 removed the transitive manifest patches.
+    expect(dockerfile).not.toContain("COPY patches");
     expect(dockerfile).toContain(
       "COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun",
     );

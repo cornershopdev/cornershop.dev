@@ -18,7 +18,8 @@ export async function register() {
     process.env.WORKFLOW_TARGET_WORLD === "@workflow/world-postgres"
   ) {
     const { getWorld } = await import("workflow/runtime");
-    await getWorld().start?.();
+    const world = await getWorld();
+    await world.start?.();
   }
 
   if (
