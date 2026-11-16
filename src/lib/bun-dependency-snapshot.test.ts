@@ -152,6 +152,30 @@ describe("bun.lock snapshot builder", () => {
       }),
     ).toThrow("bun.lock is missing typescript");
   });
+
+  it("resolves bundled dependencies through their ancestor lock paths", () => {
+    // Mirrors `@tailwindcss/oxide-wasm32-wasi/@emnapi/core` depending on
+    // `@emnapi/wasi-threads`, which exists only under the ancestor path.
+    const lockfileSource = fixtureLockfile.replace(
+      '"left-pad": ["left-pad@1.3.0", "", { "dependencies": { "nanoid": "3.3.18" } }, "sha512-test"],',
+      `"left-pad": ["left-pad@1.3.0", "", { "dependencies": { "nanoid": "3.3.18", "@emnapi/core": "1.0.0" } }, "sha512-test"],
+    "left-pad/@emnapi/core": ["@emnapi/core@1.0.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.3" } }, "sha512-test"],
+    "left-pad/@emnapi/wasi-threads": ["@emnapi/wasi-threads@1.2.3", "", {}, "sha512-test"],`,
+    );
+    const snapshot = buildBunDependencySnapshot({
+      packageJsonSource: fixturePackageJson,
+      lockfileSource,
+      sha,
+      ref,
+      scanned,
+      job: { id: "run-1", correlator: BUN_DEPENDENCY_SNAPSHOT_CORRELATOR },
+    });
+    const resolved = Object.values(snapshot.manifests)[0]!.resolved;
+    expect(resolved[npmPackageUrl("@emnapi/core", "1.0.0")]?.dependencies).toEqual([
+      npmPackageUrl("@emnapi/wasi-threads", "1.2.3"),
+    ]);
+    expect(resolved[npmPackageUrl("@emnapi/wasi-threads", "1.2.3")]).toBeDefined();
+  });
 });
 
 describe("committed bun.lock graph", () => {

@@ -80,6 +80,8 @@ type PackageManifest = {
 };
 
 type LockPackage = {
+  /** bun.lock key: the install path, e.g. `parent/@scope/child`. */
+  key: string;
   name: string;
   version: string;
   purl: string;
@@ -276,8 +278,10 @@ type ParsedLockfile = {
 function parseBunLockfile(source: string): ParsedLockfile {
   const parsed = parseJsonDocument(source);
   if (!isRecord(parsed)) throw new Error("bun.lock must be an object.");
-  if (parsed.lockfileVersion !== 1) {
-    throw new Error("bun.lock lockfileVersion must be 1.");
+  // Bun 1.4 writes text lockfile version 3 with the same workspaces/packages
+  // shape as version 1, so both parse identically.
+  if (parsed.lockfileVersion !== 1 && parsed.lockfileVersion !== 3) {
+    throw new Error("bun.lock lockfileVersion must be 1 or 3.");
   }
   if (!isRecord(parsed.workspaces) || !isRecord(parsed.workspaces[""])) {
     throw new Error("bun.lock is missing the root workspace.");
@@ -287,7 +291,7 @@ function parseBunLockfile(source: string): ParsedLockfile {
   }
   const rootWorkspace = parsed.workspaces[""];
   return {
-    lockfileVersion: 1,
+    lockfileVersion: parsed.lockfileVersion,
     root: {
       dependencies: optionalStringMap(
         rootWorkspace.dependencies,
@@ -336,6 +340,7 @@ function parseLockPackages(
     const identity = parseNpmIdentity(value[0]);
     const metadata = isRecord(value[2]) ? value[2] : {};
     parsed.set(key, {
+      key,
       name: identity.name,
       version: identity.version,
       purl: npmPackageUrl(identity.name, identity.version),
@@ -394,12 +399,12 @@ function resolveGraph(
   >();
 
   const visit = (
-    parentName: string | null,
+    parentKey: string | null,
     depName: string,
     relationship: DependencyRelationship,
     scope: WalkScope,
   ) => {
-    const resolved = lookupPackage(packages, parentName, depName);
+    const resolved = lookupPackage(packages, parentKey, depName);
     const existing = nodes.get(resolved.purl);
     if (existing) {
       if (relationship === "direct") existing.relationship = "direct";
@@ -409,9 +414,9 @@ function resolveGraph(
     const children = new Set<string>();
     nodes.set(resolved.purl, { relationship, scope, children });
     for (const childName of Object.keys(resolved.dependencies).sort()) {
-      const child = lookupPackage(packages, resolved.name, childName);
+      const child = lookupPackage(packages, resolved.key, childName);
       children.add(child.purl);
-      visit(resolved.name, childName, "indirect", scope);
+      visit(resolved.key, childName, "indirect", scope);
     }
   };
 
@@ -433,7 +438,7 @@ function resolveGraph(
       children: new Set(
         Object.keys(pkg.dependencies)
           .sort()
-          .map((childName) => lookupPackage(packages, pkg.name, childName).purl),
+          .map((childName) => lookupPackage(packages, pkg.key, childName).purl),
       ),
     });
   }
@@ -455,18 +460,37 @@ function resolveGraph(
   return resolved;
 }
 
+// Mirrors node_modules resolution over bun.lock keys: a dependency of
+// `a/@s/b` resolves to `a/@s/b/dep`, then `a/dep`, then the hoisted `dep`.
 function lookupPackage(
   packages: Map<string, LockPackage>,
-  parentName: string | null,
+  parentKey: string | null,
   depName: string,
 ): LockPackage {
-  const nested = parentName ? packages.get(`${parentName}/${depName}`) : undefined;
-  const resolved = nested ?? packages.get(depName);
-  if (!resolved) {
-    const parent = parentName ?? "workspace";
-    throw new Error(`bun.lock is missing ${depName} required by ${parent}.`);
+  const ancestors = parentKey ? lockKeySegments(parentKey) : [];
+  for (let depth = ancestors.length; depth >= 0; depth -= 1) {
+    const resolved = packages.get(
+      [...ancestors.slice(0, depth), depName].join("/"),
+    );
+    if (resolved) return resolved;
   }
-  return resolved;
+  const parent = parentKey ?? "workspace";
+  throw new Error(`bun.lock is missing ${depName} required by ${parent}.`);
+}
+
+function lockKeySegments(key: string): string[] {
+  const parts = key.split("/");
+  const segments: string[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]!;
+    if (part.startsWith("@") && index + 1 < parts.length) {
+      segments.push(`${part}/${parts[index + 1]}`);
+      index += 1;
+    } else {
+      segments.push(part);
+    }
+  }
+  return segments;
 }
 
 function optionalStringMap(value: unknown, label: string): StringMap {

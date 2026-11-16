@@ -115,3 +115,15 @@ The existing GitHub `verify`, `first-customer-browser-e2e`, and
 `container-runtime` jobs remain the required merge gates. Issue #161 does not
 change the dependency-audit workflow, Dependabot configuration, governance
 policy, or governance contract owned by PR #160.
+
+## Superseded: Workflow 5
+
+The Workflow 5 upgrade (`workflow@5.5.0`, `@workflow/world-postgres@5.2.0`)
+removes the three manifest patches above: `@workflow/core@5` no longer depends
+on `nanoid`, and `@workflow/world-local` / `@workflow/world-vercel` pin
+`undici@7.30.2`. The same change clears the remaining advisories at their
+source, with no ignores: `minimatch@^10` consumers move to `minimatch@11.0.8`,
+`zod` resolutions below `4.6.6` move to `4.6.7`, and the `shadcn` CLI package is
+dropped from runtime dependencies (its stylesheet is vendored as
+`src/app/shadcn.css`), which removes the unpatched `deepmerge` chain.
+`src/lib/dependency-security-contract.test.ts` pins the resulting graph.

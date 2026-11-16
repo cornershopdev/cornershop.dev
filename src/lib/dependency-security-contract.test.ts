@@ -5,94 +5,53 @@ const repoRoot = path.resolve(import.meta.dir, "../..");
 const packageJson = await Bun.file(path.join(repoRoot, "package.json")).json();
 const lockfile = await Bun.file(path.join(repoRoot, "bun.lock")).text();
 
-const patches = [
-  {
-    package: "@workflow/core@4.8.5",
-    file: "patches/@workflow%2Fcore@4.8.5.patch",
-    dependency: "nanoid",
-    from: "5.1.6",
-    to: "5.1.16",
-    sha256: "12195861744c6d63472781fd83379257830e8742cd9a5ba961d90f6845670d9c",
-  },
-  {
-    package: "@workflow/world-local@4.4.0",
-    file: "patches/@workflow%2Fworld-local@4.4.0.patch",
-    dependency: "undici",
-    from: "7.28.0",
-    to: "7.29.0",
-    sha256: "5b3ed8a7fa88ec829cf6cfed719524b7d173d2a9a21df9555c905529d72347e3",
-  },
-  {
-    package: "@workflow/world-vercel@4.7.1",
-    file: "patches/@workflow%2Fworld-vercel@4.7.1.patch",
-    dependency: "undici",
-    from: "7.28.0",
-    to: "7.29.0",
-    sha256: "96180ba987ae3b873631b66e5676a034a65e06aec2936996369b5dec2ea0935d",
-  },
-] as const;
-
 describe("dependency security migration", () => {
-  it("uses supported upgrades and narrowly scoped Workflow patches", () => {
+  it("uses supported upgrades without transitive manifest patches", () => {
     expect(packageJson.devDependencies["@lhci/cli"]).toBeUndefined();
-    expect(packageJson.devDependencies["chrome-launcher"]).toBe("1.2.1");
-    expect(packageJson.devDependencies.lighthouse).toBe("13.4.1");
-    expect(packageJson.devDependencies["puppeteer-core"]).toBe("25.9.0");
+    expect(packageJson.devDependencies["chrome-launcher"]).toBe("1.2.3");
+    expect(packageJson.devDependencies.lighthouse).toBe("13.6.0");
+    expect(packageJson.devDependencies["puppeteer-core"]).toBe("25.17.0");
+    expect(packageJson.dependencies.workflow).toBe("5.5.0");
+    expect(packageJson.dependencies["@workflow/world-postgres"]).toBe("5.2.0");
+    // shadcn is a CLI; only its stylesheet is used, vendored as src/app/shadcn.css.
+    expect(packageJson.dependencies.shadcn).toBeUndefined();
     expect(packageJson.overrides["deepmerge-ts"]).toBe("8.0.0");
+    expect(packageJson.overrides["minimatch@^10"]).toBe("11.0.8");
+    expect(packageJson.overrides["zod@<4.6.6"]).toBe("4.6.7");
     expect(packageJson.overrides.nanoid).toBeUndefined();
     expect(packageJson.overrides.undici).toBeUndefined();
-    expect(packageJson.patchedDependencies).toEqual(
-      Object.fromEntries(patches.map((patch) => [patch.package, patch.file])),
-    );
-  });
-
-  it("keeps every transitive patch manifest-only and checksum-pinned", async () => {
-    for (const patch of patches) {
-      const source = await Bun.file(path.join(repoRoot, patch.file)).text();
-      const changedLines = source.split("\n").filter(
-        (line) =>
-          (line.startsWith("+") && !line.startsWith("+++")) ||
-          (line.startsWith("-") && !line.startsWith("---")),
-      );
-
-      expect(source).toContain("diff --git a/package.json b/package.json");
-      expect(source.match(/^diff --git /gm)).toHaveLength(1);
-      expect(changedLines).toEqual([
-        `-    "${patch.dependency}": "${patch.from}",`,
-        `+    "${patch.dependency}": "${patch.to}",`,
-      ]);
-      expect(
-        new Bun.CryptoHasher("sha256").update(source).digest("hex"),
-      ).toBe(patch.sha256);
-    }
+    expect(packageJson.patchedDependencies).toBeUndefined();
   });
 
   it("locks only remediated versions while preserving intentional major splits", () => {
     for (const vulnerableResolution of [
       "@lhci/cli@",
+      "deepmerge@",
       "deepmerge-ts@7.1.5",
       "extract-zip@",
+      "minimatch@10.",
       "nanoid@5.1.6",
+      "shadcn@",
       "tmp@0.0.33",
       "tmp@0.1.0",
       "undici@7.28.0",
       "uuid@8.3.2",
+      "zod@3.",
+      "zod@4.1.",
     ]) {
       expect(lockfile).not.toContain(vulnerableResolution);
     }
 
     expect(lockfile).toContain('"deepmerge-ts@8.0.0"');
     expect(lockfile).toContain(
-      '"@workflow/core/nanoid": ["nanoid@5.1.16"',
+      '"@workflow/world-local/undici": ["undici@7.30.2"',
     );
     expect(lockfile).toContain(
-      '"@workflow/world-local/undici": ["undici@7.29.0"',
+      '"@workflow/world-vercel/undici": ["undici@7.30.2"',
     );
-    expect(lockfile).toContain(
-      '"@workflow/world-vercel/undici": ["undici@7.29.0"',
-    );
-    expect(lockfile).toContain('"nanoid": ["nanoid@3.3.18"');
-    expect(lockfile).toContain('"undici": ["undici@8.10.1"');
+    expect(lockfile).toContain('"nanoid": ["nanoid@3.3.20"');
+    expect(lockfile).toContain('"undici": ["undici@8.12.4"');
+    expect(lockfile).toContain('"zod": ["zod@4.6.7"');
   });
 
   it("loads Prisma and exercises the exact Workflow dependency APIs", () => {
@@ -121,16 +80,14 @@ describe("dependency security migration", () => {
 
     expect(result).toEqual({
       deepmerge: "8.0.0",
-      workflowNanoid: "5.1.16",
-      postcssNanoid: "3.3.18",
-      workflowLocalUndici: "7.29.0",
-      workflowVercelUndici: "7.29.0",
-      rootUndici: "8.10.1",
+      postcssNanoid: "3.3.20",
+      workflowLocalUndici: "7.30.2",
+      workflowVercelUndici: "7.30.2",
+      rootUndici: "8.12.4",
       prismaSchema: path.join(repoRoot, "prisma/schema.prisma"),
-      nanoidLength: 21,
-      fastUri: "3.1.7",
+      fastUri: "3.1.9",
       mysql2: "3.24.3",
-      qs: "6.16.0",
+      qs: "6.17.1",
     });
   });
 });
@@ -161,7 +118,6 @@ const runtimeProbe = String.raw`
   }
 
   const prismaDependency = resolveDependency("node_modules/@prisma/config", "deepmerge-ts");
-  const coreNanoid = resolveDependency("node_modules/@workflow/core", "nanoid");
   const postcssNanoid = resolveDependency("node_modules/postcss", "nanoid");
   const localUndici = resolveDependency("node_modules/@workflow/world-local", "undici");
   const vercelUndici = resolveDependency("node_modules/@workflow/world-vercel", "undici");
@@ -181,14 +137,6 @@ const runtimeProbe = String.raw`
   const merged = deepmerge.deepmerge({ nested: { left: true } }, { nested: { right: true } });
   if (!merged.nested.left || !merged.nested.right) throw new Error("deepmerge-ts API mismatch");
 
-  const nanoid = await import(pathToFileURL(coreNanoid.entry).href);
-  const generateNanoid = nanoid.customRandom(
-    nanoid.urlAlphabet,
-    21,
-    (size) => new Uint8Array(size).fill(1),
-  );
-  const nanoidValue = generateNanoid();
-
   for (const dependency of [localUndici, vercelUndici]) {
     const undici = await import(pathToFileURL(dependency.entry).href);
     if (typeof undici.fetch !== "function") throw new Error("undici fetch API mismatch");
@@ -207,13 +155,11 @@ const runtimeProbe = String.raw`
 
   process.stdout.write("DEPENDENCY_PROBE=" + JSON.stringify({
     deepmerge: prismaDependency.version,
-    workflowNanoid: coreNanoid.version,
     postcssNanoid: postcssNanoid.version,
     workflowLocalUndici: localUndici.version,
     workflowVercelUndici: vercelUndici.version,
     rootUndici: rootUndici.version,
     prismaSchema: prisma.config.schema,
-    nanoidLength: nanoidValue.length,
     fastUri: fastUri.version,
     mysql2: mysql2.version,
     qs: queryString.version,
