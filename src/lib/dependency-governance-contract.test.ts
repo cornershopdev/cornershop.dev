@@ -78,7 +78,8 @@ describe("dependency update governance", () => {
     for (const update of dependabot.updates) {
       expect(update.directory).toBe("/");
       expect(update.schedule.interval).toBe("weekly");
-      expect(update["open-pull-requests-limit"]).toBe(1);
+      // Standby pause; restore to 1 when the project resumes.
+      expect(update["open-pull-requests-limit"]).toBe(0);
       expect(update.allow).toEqual([
         {
           "dependency-name": "*",
