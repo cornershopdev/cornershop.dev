@@ -20,6 +20,8 @@ describe("dependency security migration", () => {
     expect(packageJson.overrides["zod@<4.6.6"]).toBe("4.6.7");
     expect(packageJson.overrides.nanoid).toBeUndefined();
     expect(packageJson.overrides.undici).toBeUndefined();
+    // Nothing in the Workflow 5 graph depends on qs; a stale override hides that.
+    expect(packageJson.overrides.qs).toBeUndefined();
     expect(packageJson.patchedDependencies).toBeUndefined();
   });
 
@@ -87,7 +89,6 @@ describe("dependency security migration", () => {
       prismaSchema: path.join(repoRoot, "prisma/schema.prisma"),
       fastUri: "3.1.9",
       mysql2: "3.24.3",
-      qs: "6.17.1",
     });
   });
 });
@@ -124,14 +125,11 @@ const runtimeProbe = String.raw`
   const rootUndici = resolveDependency(".", "undici");
   const fastUri = resolveDependency(".", "fast-uri");
   const mysql2 = resolveDependency("node_modules/prisma", "mysql2");
-  const queryString = resolveDependency(".", "qs");
   const require = createRequire(path.resolve("package.json"));
   const uri = require(fastUri.entry);
   if (uri.serialize(uri.parse("https://example.test/menu?q=1")) !== "https://example.test/menu?q=1") throw new Error("fast-uri API mismatch");
   const mysql = require(mysql2.entry);
   if (mysql.format("SELECT ?", [42]) !== "SELECT 42") throw new Error("mysql2 API mismatch");
-  const qs = require(queryString.entry);
-  if (qs.parse("filter[name]=menu").filter.name !== "menu") throw new Error("qs API mismatch");
 
   const deepmerge = await import(pathToFileURL(prismaDependency.entry).href);
   const merged = deepmerge.deepmerge({ nested: { left: true } }, { nested: { right: true } });
@@ -162,6 +160,5 @@ const runtimeProbe = String.raw`
     prismaSchema: prisma.config.schema,
     fastUri: fastUri.version,
     mysql2: mysql2.version,
-    qs: queryString.version,
   }) + "\n");
 `;

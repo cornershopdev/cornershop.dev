@@ -556,8 +556,9 @@ the production Next.js build and server.
 transport retries and writes `bun-audit.json` plus `bun-audit-verdict.json`.
 A registry outage is a failed, unavailable audit, never a clean result.
 
-The September 6 security refresh pins compatible transitive resolutions:
-`fast-uri` 3.1.7, `mysql2` 3.24.3, and `qs` 6.16.0. Prisma pins an older MySQL
-driver, so the override remains until upstream removes that vulnerable edge.
-The existing Workflow Nano ID and Undici manifest patches remain required;
-dependency updates must pass their runtime contract before merging.
+Overrides pin compatible transitive resolutions where upstream still lags:
+`fast-uri` 3.1.9, `mysql2` 3.24.3 (Prisma pins an older MySQL driver),
+`deepmerge-ts` 8.0.0, `devalue` 5.9.4, and range-scoped `minimatch@^10` and
+`zod@<4.6.6` lifts. Workflow 5 removed the Nano ID and Undici manifest patches.
+Dependency updates must pass the runtime contract in
+`src/lib/dependency-security-contract.test.ts` before merging.
