@@ -52,9 +52,9 @@ a weaker or contradictory policy.
 The repository uses GitHub-native controls without a custom CodeQL workflow:
 
 - dependency graph and Dependabot alerts;
-- Dependabot security updates;
+- Dependabot security updates (off while the project is on standby);
 - weekly Dependabot version checks for the Bun, Docker, and GitHub Actions
-  ecosystems from `.github/dependabot.yml`;
+  ecosystems from `.github/dependabot.yml` (paused while on standby);
 - secret scanning and push protection;
 - CodeQL default setup for Actions and JavaScript/TypeScript, using the default
   query suite on GitHub-hosted runners with a weekly schedule.
@@ -179,6 +179,22 @@ evidence in one ready pull request. A reviewed Actions major follows the same
 path. Do not add `version-update:semver-major` to the wildcard allow rule; if a
 temporary Dependabot exception is justified, it must name exactly one dependency
 and be removed when that scoped migration closes.
+
+### Standby
+
+While the project is on standby, Dependabot and the scheduled dependency jobs
+are paused:
+
+- `.github/dependabot.yml` sets `open-pull-requests-limit: 0` in every
+  ecosystem, which stops version-update pull requests;
+- Dependabot security updates are turned off in repository settings;
+- the `Dependency audit` and `Bun dependency snapshot` workflows are disabled
+  in GitHub Actions, which stops their schedule and their pull-request and push
+  runs. Neither is a required check.
+
+To resume, restore `open-pull-requests-limit: 1` here and in
+`src/lib/dependency-governance-contract.test.ts`, re-enable security updates,
+and re-enable both workflows.
 
 Dependabot version updates begin after `.github/dependabot.yml` reaches the
 default branch. Security alerts and security updates are repository settings and
